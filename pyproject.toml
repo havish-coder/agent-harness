@@ -16,3 +16,6 @@ dev = ["pytest>=8"]
 
 [tool.setuptools.packages.find]
 include = ["harness*"]
+
+[project.scripts]
+harness = "harness.cli:main"   # `harness` command inside the venv

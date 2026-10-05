@@ -48,7 +48,7 @@ git checkout lesson-04           # go back in time (git checkout main to return)
 - [ ] 04 · [Message model](04-message-model.md)
 - [ ] 05 · [Provider adapter](05-provider-adapter.md)
 - [ ] 06 · [The loop](06-the-loop.md)
-- [ ] 07 · First tools + REPL
+- [ ] 07 · [First tools + REPL](07-first-tools-and-repl.md)
 
 ### Module 2: The Tool System
 - [ ] 08 · Schemas from code (`@tool` decorator)
