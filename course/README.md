@@ -7,7 +7,7 @@ it into a secure web product, and extended it for a task of your choice.
 **Rules of the course**
 - Python 3.10. **No agent frameworks** (no LangChain, LlamaIndex, CrewAI...). If a
   harness does something, we write it, so you can see exactly how it works.
-- Local model first (Ollama + `qwen3:4b`). The design lets a cloud API plug in later.
+- Local model first (Ollama + `qwen3:4b-instruct`). The design lets a cloud API plug in later.
 - Security is a core module, not an afterthought.
 
 ---
@@ -40,7 +40,7 @@ git checkout lesson-04           # go back in time (git checkout main to return)
 
 ### Module 0: Foundations
 - [ ] 00 · [What is an agent harness](00-what-is-an-agent-harness.md)
-- [ ] 01 · LLMs as an API (tokens, context, roles), plus setup
+- [ ] 01 · [LLMs as an API](01-llms-as-an-api.md): tokens, context, roles, sampling, plus setup
 - [ ] 02 · Talking to the raw API
 - [ ] 03 · Tool calling on the wire
 

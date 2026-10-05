@@ -1,0 +1,12 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+
+# Secrets: API keys live in environment variables or .env, never in git
+.env
+
+# Harness runtime data (sessions, traces) - added in later lessons
+.harness/
