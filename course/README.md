@@ -42,7 +42,7 @@ git checkout lesson-04           # go back in time (git checkout main to return)
 - [ ] 00 · [What is an agent harness](00-what-is-an-agent-harness.md)
 - [ ] 01 · [LLMs as an API](01-llms-as-an-api.md): tokens, context, roles, sampling, plus setup
 - [ ] 02 · [Talking to the raw API](02-talking-to-the-raw-api.md)
-- [ ] 03 · Tool calling on the wire
+- [ ] 03 · [Tool calling on the wire](03-tool-calling-on-the-wire.md)
 
 ### Module 1: The Agent Loop
 - [ ] 04 · Message model

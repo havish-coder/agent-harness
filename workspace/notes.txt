@@ -1,0 +1,5 @@
+TODO: buy milk
+DONE: fix bike
+TODO: email Sam about the project
+TODO: study lesson 03
+DONE: install Ollama
