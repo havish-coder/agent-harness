@@ -47,7 +47,7 @@ git checkout lesson-04           # go back in time (git checkout main to return)
 ### Module 1: The Agent Loop
 - [ ] 04 · [Message model](04-message-model.md)
 - [ ] 05 · [Provider adapter](05-provider-adapter.md)
-- [ ] 06 · The loop
+- [ ] 06 · [The loop](06-the-loop.md)
 - [ ] 07 · First tools + REPL
 
 ### Module 2: The Tool System
