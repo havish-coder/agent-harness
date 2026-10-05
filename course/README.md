@@ -45,7 +45,7 @@ git checkout lesson-04           # go back in time (git checkout main to return)
 - [ ] 03 · [Tool calling on the wire](03-tool-calling-on-the-wire.md)
 
 ### Module 1: The Agent Loop
-- [ ] 04 · Message model
+- [ ] 04 · [Message model](04-message-model.md)
 - [ ] 05 · Provider adapter
 - [ ] 06 · The loop
 - [ ] 07 · First tools + REPL
