@@ -5,9 +5,10 @@ written from scratch in Python, without agent frameworks. It talks to a local mo
 [Ollama](https://ollama.com) or to a cloud API, inspects and edits files, runs commands, and
 explains every step it takes.
 
-> **Status: v0.1, pre-release.** The agent loop, provider layer and read-only file tools work.
-> Editing, shell, streaming, security, memory, sub-agents and a web UI are on the
-> [roadmap](#roadmap). See the [changelog](CHANGELOG.md) for what changed in each release.
+> **Status: v0.2, pre-release.** The agent reads, searches and edits code and runs commands,
+> asking your approval (with a diff) before anything changes. Streaming, cloud providers,
+> security hardening, memory, sub-agents and a web UI are on the [roadmap](#roadmap).
+> See the [changelog](CHANGELOG.md) for what changed in each release.
 
 ---
 
@@ -24,6 +25,14 @@ plus [`httpx`](https://www.python-httpx.org/). Every design decision is written 
 | ✅ | Provider-neutral message model; Ollama adapter | v0.1 |
 | ✅ | Workspace file tools (`list_dir`, `read_file`) and a workspace snapshot in the prompt | v0.1 |
 | ✅ | Terminal chat with live tool-call display and token counts | v0.1 |
+| ✅ | Tools defined as plain Python functions; schemas generated from type hints | v0.2 |
+| ✅ | Argument validation with errors the model can act on; capped results | v0.2 |
+| ✅ | Paged `read_file`, `glob` and `grep` | v0.2 |
+| ✅ | `edit_file` / `write_file`: exact edits, only after reading, never on stale files | v0.2 |
+| ✅ | `run_shell`: bash (or PowerShell), timeouts, real exit codes | v0.2 |
+| ✅ | Approval before every change, with a diff; `a`lways per tool | v0.2 |
+| ✅ | Safe tool calls run in parallel | v0.2 |
+| ✅ | Recorded real runs replayed as regression tests | v0.2 |
 
 ## Quickstart
 Requirements: Python 3.10+, [Ollama](https://ollama.com/download), about 3 GB of disk.
@@ -54,7 +63,6 @@ Then ask something like *"How many TODOs are in my notes?"*. Full walkthrough:
 ## Roadmap
 | Release | Theme |
 |---|---|
-| v0.2 | Tool system: decorator-defined tools, validation, search, safe file editing, shell, parallel calls |
 | v0.3 | Streaming, OpenAI-compatible and Anthropic providers, retries, config, cost tracking |
 | v0.4 | A polished terminal app: rich rendering, input history, slash commands, status line |
 | v0.5 | Security: path jail, permission modes and rules, shell hardening, hooks, audit log |

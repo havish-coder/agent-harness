@@ -47,7 +47,30 @@ agent> There are 3 TODOs in your notes.
 The lines starting with `→` are **tool calls**: the model asked the harness to run
 `read_file`, the harness ran it and sent the result back, and the model answered from it.
 
-## 4. Point it at your own folder
+## 4. Let it fix a bug
+`workspace/project/` has a bug: the cart's subtotal ignores quantities. Ask:
+
+```text
+you> The cart subtotal in project/shop/cart.py ignores the quantity. Fix it.
+     Then run the project's tests with run_shell to check.
+```
+
+The agent finds and reads the file, then proposes an edit. **Nothing changes until you
+approve**, and you see exactly what would change:
+
+```text
+  ? edit_file wants to run
+    --- a/project/shop/cart.py
+    +++ b/project/shop/cart.py
+    -        return sum(price for _, price, qty in self.items)
+    +        return sum(price * qty for _, price, qty in self.items)
+    allow? [y]es / [n]o / [a]lways for edit_file: y
+```
+
+Running the tests asks for approval too. Afterwards, undo the change with
+`git checkout workspace/project`.
+
+## 5. Point it at your own folder
 ```bash
 harness --workspace C:\path\to\a\project
 ```

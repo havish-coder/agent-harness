@@ -8,6 +8,8 @@ is below 1.0, minor releases may contain breaking changes.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-06
+
 ### Added
 - Professional documentation set: README, getting started, user guide, reference,
   architecture, decision records (ADR 0001-0003), contributing and security policies.
@@ -52,6 +54,7 @@ is below 1.0, minor releases may contain breaking changes.
   replayed in the test suite. `scripts/record_cassette.py` re-records it.
 - `pytest -m live` for tests against a real model (skipped by default); coverage via pytest-cov.
 - When the model repeats an identical call with an identical result, the result says so.
+- `glob` forgives a pattern that repeats the folder being searched (`project/a.py` in `project`).
 - Message and reply serialization (`message_to_dict`, `reply_from_dict`, ...).
 - Several tool calls in one reply: consecutive concurrency-safe calls run in parallel (up to 8
   threads); others run alone, in order (ADR 0010).
@@ -69,5 +72,6 @@ is below 1.0, minor releases may contain breaking changes.
   the system prompt.
 - Terminal chat (`harness`) with tool-call display, `/reset`, `/bye` and per-turn token counts.
 
-[Unreleased]: https://github.com/havish-coder/agent-harness/compare/lesson-07...HEAD
+[Unreleased]: https://github.com/havish-coder/agent-harness/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/havish-coder/agent-harness/compare/lesson-07...v0.2.0
 [0.1.0]: https://github.com/havish-coder/agent-harness/releases/tag/lesson-07

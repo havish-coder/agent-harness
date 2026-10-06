@@ -21,7 +21,7 @@ folder, Python install, timings, path separators) replaced by placeholders. Repl
 by default.
 
 ## Consequences
-- The suite replays a real 9-call bug-fix run in about 2 seconds, without a model.
+- The suite replays a real bug-fix run (5 model calls) in about 2 seconds, without a model.
 - Intended changes to prompts or tool output break the replay; the cassette must then be
   re-recorded, and its diff reviewed. That friction is the point: behaviour changes are visible.
 - A cassette pins one model's behaviour at one moment. It says nothing about other models;

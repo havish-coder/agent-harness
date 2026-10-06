@@ -98,3 +98,8 @@ def test_grep_context_groups_are_merged_like_grep(ws, tools):
     out = tools["grep"](pattern="X", path="c.txt", context=1).splitlines()
     assert out == ["c.txt-1- a", "c.txt:2: X", "c.txt-3- b", "c.txt-4- c", "c.txt:5: X", "c.txt-6- d",
                    "--", "c.txt-9- g", "c.txt:10: X", "(3 matches in 1 file)"]
+
+
+def test_glob_forgives_a_repeated_folder(tools):
+    assert tools["glob"](pattern="src/app.py", path="src") == "src/app.py"
+    assert set(tools["glob"](pattern="src/*.py", path="src").splitlines()) == {"src/app.py", "src/util/helpers.py"}

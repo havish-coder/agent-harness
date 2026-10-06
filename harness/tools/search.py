@@ -58,6 +58,11 @@ def make_search_tools(ws: Workspace) -> list[Tool]:
         if not base.is_dir():
             raise NotADirectoryError(f"no folder named '{ws.display(base)}'.{ws.suggest(base)}")
         found = [p for p in walk_files(base) if _matches_glob(p.relative_to(base).as_posix(), pattern)]
+        prefix = ws.display(base) + "/"
+        if not found and base != ws.root and pattern.startswith(prefix):
+            # The model repeated the folder in the pattern: glob("project/a.py", path="project")
+            pattern = pattern[len(prefix):]
+            found = [p for p in walk_files(base) if _matches_glob(p.relative_to(base).as_posix(), pattern)]
         if not found:
             return f"No files match '{pattern}' in {ws.display(base)}/."
         found.sort(key=lambda p: p.stat().st_mtime, reverse=True)
