@@ -8,7 +8,7 @@ updates it.
 
 ```mermaid
 flowchart LR
-    U[User] -->|types| CLI["Terminal app<br/>harness/cli.py"]
+    U[User] -->|types| CLI["Terminal app<br/>harness/cli.py + tui/"]
     CLI -->|run| A["Agent loop<br/>harness/agent.py"]
     A -->|messages + tool schemas| P["Provider<br/>harness/providers/"]
     P -->|HTTP| M[(Model server<br/>Ollama)]
@@ -154,7 +154,8 @@ show. See the [events reference](reference/events.md).
 harness/
   agent.py          the agent loop
   messages.py       provider-neutral message types
-  cli.py            the terminal app (`harness` command)
+  cli.py            the `harness` command: settings, provider, agent, the input loop
+  tui/              terminal interfaces: rich (Markdown, diffs, spinner) and plain
   providers/
     base.py         the Provider interface and ProviderError
     ollama.py       Ollama adapter (/api/chat, NDJSON streaming)

@@ -89,6 +89,7 @@ class Agent:
 
     def call_model(self, schemas: list[dict]) -> Reply:
         """One model call. Streams text out as events when the provider can (Lesson 16)."""
+        self.on_event("model_call", len(self.messages))
         if not (self.stream and isinstance(self.provider, StreamingProvider)):
             return self.provider.chat(self.messages, schemas)
         reply = None

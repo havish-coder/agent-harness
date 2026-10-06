@@ -8,6 +8,14 @@ is below 1.0, minor releases may contain breaking changes.
 
 ## [Unreleased]
 
+### Added
+- Rich terminal interface (ADR 0019): answers rendered as Markdown while they stream, a spinner
+  while the model thinks, one-line tool calls with a short result preview (test summaries for
+  `run_shell`), highlighted diffs and commands in approval prompts. Plain mode with `--plain`,
+  `NO_COLOR`, or automatically when output isn't a terminal.
+- `model_call` event, emitted before each model call.
+- `scripts/render_demo.py` renders `docs/images/demo.svg` from the recorded bug-fix run.
+
 ## [0.3.0] - 2026-10-06
 
 ### Added

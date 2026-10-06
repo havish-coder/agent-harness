@@ -9,8 +9,14 @@ harness --model qwen3:4b                  # another Ollama model
 All flags: [CLI reference](../reference/cli.md).
 
 ## Ask
-Type a request and press Enter. While the agent works you see each tool call and a preview
-of its result:
+Type a request and press Enter. While the model thinks you see a spinner; its answer appears
+as it is written, rendered as Markdown (headings, lists, code). Each tool call is one line
+starting with `●`, with the start of its result underneath:
+
+![The agent fixing a bug](../images/demo.svg)
+
+In plain mode (`--plain`, or when the output is piped to a file) the same information is
+printed as simple text:
 
 ```text
 you> what's in the recipes folder?

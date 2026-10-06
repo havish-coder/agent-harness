@@ -1,7 +1,7 @@
 # CLI reference
 
 ```text
-harness [--provider NAME] [--model MODEL] [--base-url URL] [--fallback-model MODEL] [--workspace PATH] [--max-steps N] [--yes] [--no-stream] [--think] [--show-config]
+harness [--provider NAME] [--model MODEL] [--base-url URL] [--fallback-model MODEL] [--workspace PATH] [--max-steps N] [--yes] [--no-stream] [--think] [--plain] [--show-config]
 ```
 
 | Flag | Default | Description |
@@ -14,6 +14,7 @@ harness [--provider NAME] [--model MODEL] [--base-url URL] [--fallback-model MOD
 | `--max-steps` | `20` | Maximum model calls per request before the agent stops. |
 | `--yes` | off | Approve every tool call without asking. Only for throwaway folders. |
 | `--no-stream` | off | Wait for each complete reply instead of showing text as it is generated. |
+| `--plain` | off | Plain text: no colours, Markdown rendering or spinner. Automatic when output isn't a terminal, or when `NO_COLOR` is set. |
 | `--show-config` | | Print the effective settings and which layer each came from, then exit. |
 | `--think` | off | For thinking models (e.g. `qwen3:4b`): ask for reasoning in a separate field and show it dimmed. |
 

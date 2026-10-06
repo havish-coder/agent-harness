@@ -11,6 +11,11 @@ explains every step it takes.
 > tracking. Security hardening, memory, sub-agents and a web UI are on the [roadmap](#roadmap).
 > See the [changelog](CHANGELOG.md) for what changed in each release.
 
+![The agent fixing a bug: it reads the file, proposes a diff, runs the tests](docs/images/demo.svg)
+
+*A real recorded run of `qwen3:4b-instruct` fixing the sample project's bug, replayed by
+`scripts/render_demo.py`.*
+
 ---
 
 ## Why

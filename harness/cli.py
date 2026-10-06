@@ -1,10 +1,11 @@
-"""Lessons 07-21: a terminal chat app around the agent.
+"""The `harness` command: settings → provider → agent → an interactive terminal session.
 
-Run:  harness                               (after `pip install -e .`)
-      python -m harness.cli --model qwen3:4b --workspace C:\\some\\folder
+Run:  harness                               (after `pip install -e ".[tui]"`)
+      harness --workspace C:\\some\\folder --provider anthropic
+
+Lessons 07-22. The screen itself is drawn by harness/tui (rich when available, plain otherwise).
 """
 import argparse
-import os
 import sys
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from harness.providers.factory import PROVIDERS, make_provider
 from harness.providers.retry import RetryingProvider
 from harness.tools import default_tools
 from harness.tools.fs import workspace_snapshot
+from harness.tui import make_ui
 from harness.usage import CostTracker, format_cost
 from harness.workspace import Workspace
 
@@ -27,113 +29,30 @@ Paths are relative to the workspace root. Be concise.
 Workspace files (snapshot at session start; may have changed since):
 {snapshot}"""
 
-DIM, CYAN, BOLD, YELLOW, RESET = "\033[2m", "\033[36m", "\033[1m", "\033[33m", "\033[0m"
 
-
-class TerminalApprover:
-    """Asks before any tool call that can change things. 'a' = always allow this tool."""
-
-    def __init__(self, auto_approve: bool = False):
-        self.auto_approve = auto_approve
-        self.always: set[str] = set()   # tool names allowed for the rest of the session
-
-    def __call__(self, call, tool) -> bool:
-        if self.auto_approve or tool.name in self.always:
-            return True
-        warning = " (may destroy data)" if tool.is_destructive(call.arguments) else ""
-        print(f"{YELLOW}  ? {tool.name} wants to run{warning}{RESET}")
-        if tool.preview:
-            try:
-                print(DIM + "    " + tool.preview(**call.arguments).replace("\n", "\n    ") + RESET)
-            except Exception as e:
-                print(f"{DIM}    (no preview: {e}){RESET}")
-        while True:
-            answer = input(f"{YELLOW}    allow? [y]es / [n]o / [a]lways for {tool.name}: {RESET}").strip().lower()
-            if answer in ("y", "yes"):
-                return True
-            if answer in ("n", "no", ""):
-                return False
-            if answer in ("a", "always"):
-                self.always.add(tool.name)
-                return True
-
-
-class Printer:
-    """Prints the agent's events as they happen, including streamed text (Lesson 16)."""
-
-    def __init__(self):
-        self.mid_line = False      # inside a streamed line that hasn't ended yet
-        self.current = ""          # text streamed for the reply in progress
-        self.last_streamed = ""    # text streamed for the last complete reply
-
-    def end_line(self):
-        if self.mid_line:
-            print()
-            self.mid_line = False
-
-    def __call__(self, kind, data):
-        if kind == "thinking_delta":
-            if not self.mid_line:
-                print(f"{DIM}  (thinking) ", end="")
-            print(f"{DIM}{data}{RESET}", end="", flush=True)
-            self.mid_line = True
-        elif kind == "text_delta":
-            if not self.current:
-                self.end_line()
-                print(f"\n{BOLD}agent>{RESET} ", end="")
-            print(data, end="", flush=True)
-            self.current += data
-            self.mid_line = True
-        elif kind == "model_reply":
-            self.end_line()
-            self.last_streamed, self.current = self.current, ""
-        elif kind == "tool_call":
-            self.end_line()
-            args = ", ".join(f"{k}={v!r}" for k, v in data.arguments.items())
-            print(f"{CYAN}  → {data.name}({args}){RESET}")
-        elif kind == "tool_denied":
-            print(f"{DIM}    (denied){RESET}")
-        elif kind == "tool_result":
-            _, result = data
-            preview = result if len(result) <= 300 else result[:300] + " …"
-            print(DIM + "    " + preview.replace("\n", "\n    ") + RESET)
-
-    def retry(self, notice):
-        """Called by RetryingProvider before it waits and tries again."""
-        self.end_line()
-        if notice.fallback:
-            print(f"{YELLOW}  ! {notice.error} — switching to the fallback model{RESET}")
-        else:
-            print(f"{YELLOW}  ! {notice.error} — retrying in {notice.delay:.1f} s (retry {notice.attempt}){RESET}")
-
-    def answer(self, text: str):
-        """Print the final answer, unless it was already streamed to the screen."""
-        self.end_line()
-        if text.strip() != self.last_streamed.strip():
-            print(f"\n{BOLD}agent>{RESET} {text}")
-        self.last_streamed = ""
-
-
-def main():
-    p = argparse.ArgumentParser(description="Chat with a tool-using agent.")
+def parse_args(argv=None):
+    p = argparse.ArgumentParser(description="Chat with a coding agent in your terminal.")
     # Defaults live in harness/config.py; a flag left as None means "not given" (Lesson 20).
     p.add_argument("--provider", default=None, choices=PROVIDERS, help="where the model runs")
     p.add_argument("--model", default=None, help="model name (default for ollama: qwen3:4b-instruct)")
     p.add_argument("--base-url", default=None, help="override the provider's server address")
     p.add_argument("--fallback-model", default=None,
                    help="a model (same provider) to try when the main one keeps failing")
-    p.add_argument("--workspace", default="workspace", help="folder the agent can look at")
+    p.add_argument("--workspace", default="workspace", help="folder the agent works in")
     p.add_argument("--max-steps", type=int, default=None)
     p.add_argument("--yes", action="store_true",
                    help="approve every tool call without asking (only for throwaway folders)")
     p.add_argument("--no-stream", action="store_true", help="wait for whole replies instead of streaming")
     p.add_argument("--think", action="store_true", help="for thinking models: show their reasoning separately")
+    p.add_argument("--plain", action="store_true", help="plain text output (no colours, Markdown or spinners)")
     p.add_argument("--show-config", action="store_true", help="print the effective settings and where each came from")
-    args = p.parse_args()
+    return p.parse_args(argv)
 
-    if os.name == "nt":
-        os.system("")  # makes old Windows consoles understand the colour codes above
+
+def main(argv=None):
+    args = parse_args(argv)
     sys.stdout.reconfigure(encoding="utf-8")
+    ui, approver = make_ui(plain=args.plain, auto_approve=args.yes)
 
     workspace = Path(args.workspace).resolve()
     if not workspace.is_dir():
@@ -149,13 +68,11 @@ def main():
     except ConfigError as e:
         sys.exit(f"settings error: {e}")
     for warning in env_warnings + warnings:
-        print(f"{YELLOW}warning: {warning}{RESET}")
+        ui.warn(f"warning: {warning}")
     if args.show_config:
         print(describe(settings))
         return
 
-    system_prompt = SYSTEM_PROMPT.format(snapshot=workspace_snapshot(ws))
-    printer = Printer()
     options = {"temperature": settings.temperature, "think": True if settings.think else None,
                "context_window": settings.context_window}
     try:
@@ -164,26 +81,25 @@ def main():
                     if settings.fallback_model else None)
     except ProviderError as e:
         sys.exit(f"error: {e}")
-    provider = RetryingProvider(provider, max_retries=settings.max_retries, fallback=fallback,
-                                on_retry=printer.retry)
+    provider = RetryingProvider(provider, max_retries=settings.max_retries, fallback=fallback, on_retry=ui.retry)
     costs = CostTracker(settings.provider, provider.model, settings.prices)
 
     def on_event(kind, data):
         if kind == "model_reply":
             costs.add(data)
-        printer(kind, data)
+        ui(kind, data)
 
-    agent = Agent(provider, default_tools(ws, shell=settings.shell), system_prompt, max_steps=settings.max_steps,
-                  on_event=on_event, approve=TerminalApprover(auto_approve=args.yes), stream=settings.stream)
-    print(f"{BOLD}Agent harness{RESET} · {settings.provider} · model {provider.model} · workspace {workspace}")
-    print(f"{DIM}Commands: /reset (forget the conversation)  /cost (usage so far)  /bye (quit)  ·  "
-          f"Ctrl+C cancels a running task{RESET}")
+    agent = Agent(provider, default_tools(ws, shell=settings.shell),
+                  SYSTEM_PROMPT.format(snapshot=workspace_snapshot(ws)), max_steps=settings.max_steps,
+                  on_event=on_event, approve=approver, stream=settings.stream)
+    ui.banner("Agent harness", f"{settings.provider} · {provider.model} · {workspace}")
+    ui.info("/reset forget the conversation · /cost usage so far · /bye quit · Ctrl+C cancels a running task")
     if args.yes:
-        print(f"{YELLOW}--yes: every tool call runs without asking.{RESET}")
+        ui.warn("--yes: every tool call runs without asking.")
 
     while True:
         try:
-            user = input(f"\n{BOLD}you>{RESET} ").strip()
+            user = ui.read_input().strip()
         except (EOFError, KeyboardInterrupt):
             break
         if not user:
@@ -191,34 +107,32 @@ def main():
         if user == "/bye":
             break
         if user == "/cost":
-            print(f"{DIM}{costs.summary()}{RESET}")
+            ui.info(costs.summary())
             continue
         if user == "/reset":
             agent.reset()
             ws.forget_reads()   # the model no longer has earlier reads in its context
-            print(f"{DIM}(conversation cleared){RESET}")
+            ui.info("(conversation cleared)")
             continue
 
         before, cost_before = agent.usage.copy(), costs.cost()
         try:
             answer = agent.run(user)
         except KeyboardInterrupt:
-            printer.end_line()
-            print(f"\n{DIM}(cancelled){RESET}")
+            ui.error("cancelled")
             continue
         except ProviderError as e:
-            printer.end_line()
-            print(f"error: {e}")
+            ui.error(str(e))
             continue
-        printer.answer(answer)
+        ui.answer(answer)
         turn = agent.usage - before
         cached = f" ({turn.cache_read_tokens:,} cached)" if turn.cache_read_tokens else ""
         cost_after = costs.cost()
         money = "price unknown" if cost_after is None or cost_before is None else format_cost(cost_after - cost_before)
-        print(f"{DIM}  [{turn.input_tokens:,} input{cached} + {turn.output_tokens:,} output tokens · {money}]{RESET}")
+        ui.usage_line(f"{turn.input_tokens:,} input{cached} + {turn.output_tokens:,} output tokens · {money}")
 
     if costs.models:
-        print(f"{DIM}session: {costs.summary()}{RESET}")
+        ui.info(f"session: {costs.summary()}")
 
 
 if __name__ == "__main__":
