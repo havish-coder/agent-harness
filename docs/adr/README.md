@@ -30,3 +30,4 @@ Copy [the template](template.md) to `NNNN-short-title.md` with the next number.
 | [0021](0021-markdown-prompt-commands.md) | Slash commands: local code, or Markdown prompt templates | Accepted |
 | [0022](0022-output-styles-and-status-line.md) | Output styles as system-prompt additions; status line computed per prompt | Accepted |
 | [0023](0023-latex-math-and-export.md) | Our own LaTeX-to-Unicode converter for the terminal; pandoc and Tectonic for documents | Accepted |
+| [0024](0024-deterministic-security-decisions.md) | Make security decisions in deterministic code; treat tool calls as untrusted input | Accepted |
