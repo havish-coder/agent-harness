@@ -7,4 +7,5 @@ def default_tools(ws: Workspace) -> list[Tool]:
     from harness.tools.edit import make_edit_tools
     from harness.tools.fs import make_fs_tools
     from harness.tools.search import make_search_tools
-    return make_fs_tools(ws) + make_search_tools(ws) + make_edit_tools(ws)
+    from harness.tools.shell import make_shell_tools
+    return make_fs_tools(ws) + make_search_tools(ws) + make_edit_tools(ws) + make_shell_tools(ws)

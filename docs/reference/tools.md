@@ -10,6 +10,7 @@ Tools the model can call. Paths are relative to the workspace root.
 | `grep` | yes | yes | Search inside files with a regular expression. |
 | `edit_file` | no | no | Replace exact text in a file the model has read. |
 | `write_file` | no | no | Create a file, or replace a whole file the model has read. |
+| `run_shell` | no | no | Run a shell command; returns the exit code and output. |
 
 Results longer than a tool's limit (8,000 characters by default) are shortened: the agent
 keeps the first 80% and the last 20% and says how much was cut in the middle.
@@ -114,3 +115,26 @@ most 60 lines). The approval prompt shows the same diff.
 Creating a file needs no prior read. Overwriting an existing file requires that it was read
 and hasn't changed since, and is marked **destructive** in the approval prompt. Result:
 `Created <path> (N lines).` or `Overwrote <path> (N lines, was M).` plus a diff.
+
+## `run_shell`
+| Argument | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `command` | string | yes | | The command. |
+| `cwd` | string | no | `.` | Folder to run it in, relative to the workspace (use this instead of `cd`). |
+| `timeout` | integer | no | `60` | Seconds before the command is stopped; at most 600. |
+
+The shell is **PowerShell** on Windows (PowerShell 7 if installed, otherwise Windows
+PowerShell 5.1, where `&&` doesn't work) and **bash** elsewhere. The tool description tells
+the model which one it has.
+
+Behaviour:
+- Standard input is closed: commands that wait for input fail immediately instead of hanging.
+- On timeout the command **and every process it started** are stopped.
+- Output is UTF-8 (including on Windows); Python programs run with `PYTHONUTF8=1`.
+- The Python running the agent is first on `PATH`, so `python` means that interpreter.
+- The command inherits your environment variables. See [security](../security.md).
+
+Result: a status line (`exit code 0 (success) · 1.2 s · in project`, or `TIMED OUT after 60 s`),
+then `--- stdout ---` and `--- stderr ---` sections, or `(no output)`. Long output keeps the
+first 30% and the last 70% of about 7,000 characters, because summaries (test results,
+errors) are usually at the end.

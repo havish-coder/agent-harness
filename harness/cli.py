@@ -72,7 +72,7 @@ def main():
     p = argparse.ArgumentParser(description="Chat with a tool-using agent.")
     p.add_argument("--model", default="qwen3:4b-instruct")
     p.add_argument("--workspace", default="workspace", help="folder the agent can look at")
-    p.add_argument("--max-steps", type=int, default=10)
+    p.add_argument("--max-steps", type=int, default=20)
     p.add_argument("--yes", action="store_true",
                    help="approve every tool call without asking (only for throwaway folders)")
     args = p.parse_args()

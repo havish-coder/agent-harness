@@ -39,9 +39,13 @@ is below 1.0, minor releases may contain breaking changes.
   results and approval prompts; CRLF files and copied line numbers handled.
 - Tool hooks: `check` (runs before approval) and `preview` (shown when approving).
 - `harness.tools.default_tools(ws)`: the standard tool set.
+- `run_shell` tool (ADR 0009): PowerShell on Windows or bash elsewhere, `cwd` argument,
+  timeout that stops the whole process tree, closed stdin, UTF-8 output, real exit codes from
+  PowerShell, output that keeps the end.
 
 ### Changed
 - Tool results longer than 8,000 characters are shortened, keeping the start and the end.
+- Default `--max-steps` raised from 10 to 20: fix-and-test tasks need more steps.
 - The workspace snapshot in the system prompt skips folders like `.git`, `.venv` and
   `node_modules`.
 

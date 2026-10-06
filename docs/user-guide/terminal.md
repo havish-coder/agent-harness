@@ -57,6 +57,20 @@ Overwriting an existing file with `write_file` is flagged `(may destroy data)`.
 
 `--yes` skips every question. Use it only in a folder you can afford to lose.
 
+## Ask for verification
+The agent can run commands (`run_shell`), such as your tests, but small models rarely check
+their own work unless asked. **Say it in the request**:
+
+```text
+you> Add a test that adding an item with quantity 0 raises ValueError.
+     Then run the tests and fix any problem in your new test.
+```
+
+In our measurements with `qwen3:4b-instruct`, the same request without the second sentence
+produced a broken test 3 times out of 3; with it, the agent ran the tests, saw the error,
+fixed it and re-ran them, 3 times out of 3. Putting the rule in the system prompt instead did
+not help (0 of 3).
+
 ## Cancel
 Press **Ctrl+C** while the agent is working. The turn is discarded as if you never asked, and
 you can continue the conversation normally.

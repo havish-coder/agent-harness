@@ -15,3 +15,4 @@ Copy [the template](template.md) to `NNNN-short-title.md` with the next number.
 | [0006](0006-paged-numbered-file-reads.md) | Read files in numbered, bounded pages | Accepted |
 | [0007](0007-pure-python-search.md) | Implement search in pure Python | Accepted |
 | [0008](0008-exact-string-edits.md) | Edit files by exact string replacement, only after reading them | Accepted |
+| [0009](0009-shell-tool.md) | A single shell tool, PowerShell on Windows | Accepted |

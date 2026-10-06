@@ -7,9 +7,9 @@ that can read your files and, from v0.2, change them and run commands.
 - Tools are bound to a **workspace folder**, but paths are **not yet confined** to it: a path
   such as `../other` or an absolute path can reach files outside it. A path jail arrives in
   v0.5.
-- All v0.1 tools are read-only.
-- Starting with v0.2, every tool that can change something asks for your approval in the
-  terminal before it runs.
+- From v0.2 the agent can edit files and run shell commands. Every such call asks for your
+  approval in the terminal first, showing a diff for file changes. Shell commands run with
+  your full rights and environment variables: read them before approving.
 
 Use a dedicated workspace folder and don't point the agent at folders containing secrets.
 

@@ -113,6 +113,7 @@ harness/
     fs.py           list_dir, read_file, workspace_snapshot
     search.py       glob, grep
     edit.py         edit_file, write_file
+    shell.py        run_shell
   workspace.py      path resolution and read tracking for all file tools
 scripts/            setup check and teaching scripts
 workspace/          a sample folder to try the agent on
