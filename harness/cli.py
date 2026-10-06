@@ -1,4 +1,4 @@
-"""Lessons 07-09: a terminal chat app around the agent.
+"""Lessons 07-16: a terminal chat app around the agent.
 
 Run:  harness                               (after `pip install -e .`)
       python -m harness.cli --model qwen3:4b --workspace C:\\some\\folder
@@ -55,17 +55,52 @@ class TerminalApprover:
                 return True
 
 
-def show_event(kind, data):
-    """Print the agent's actions as they happen."""
-    if kind == "tool_call":
-        args = ", ".join(f"{k}={v!r}" for k, v in data.arguments.items())
-        print(f"{CYAN}  → {data.name}({args}){RESET}")
-    elif kind == "tool_denied":
-        print(f"{DIM}    (denied){RESET}")
-    elif kind == "tool_result":
-        _, result = data
-        preview = result if len(result) <= 300 else result[:300] + " …"
-        print(DIM + "    " + preview.replace("\n", "\n    ") + RESET)
+class Printer:
+    """Prints the agent's events as they happen, including streamed text (Lesson 16)."""
+
+    def __init__(self):
+        self.mid_line = False      # inside a streamed line that hasn't ended yet
+        self.current = ""          # text streamed for the reply in progress
+        self.last_streamed = ""    # text streamed for the last complete reply
+
+    def end_line(self):
+        if self.mid_line:
+            print()
+            self.mid_line = False
+
+    def __call__(self, kind, data):
+        if kind == "thinking_delta":
+            if not self.mid_line:
+                print(f"{DIM}  (thinking) ", end="")
+            print(f"{DIM}{data}{RESET}", end="", flush=True)
+            self.mid_line = True
+        elif kind == "text_delta":
+            if not self.current:
+                self.end_line()
+                print(f"\n{BOLD}agent>{RESET} ", end="")
+            print(data, end="", flush=True)
+            self.current += data
+            self.mid_line = True
+        elif kind == "model_reply":
+            self.end_line()
+            self.last_streamed, self.current = self.current, ""
+        elif kind == "tool_call":
+            self.end_line()
+            args = ", ".join(f"{k}={v!r}" for k, v in data.arguments.items())
+            print(f"{CYAN}  → {data.name}({args}){RESET}")
+        elif kind == "tool_denied":
+            print(f"{DIM}    (denied){RESET}")
+        elif kind == "tool_result":
+            _, result = data
+            preview = result if len(result) <= 300 else result[:300] + " …"
+            print(DIM + "    " + preview.replace("\n", "\n    ") + RESET)
+
+    def answer(self, text: str):
+        """Print the final answer, unless it was already streamed to the screen."""
+        self.end_line()
+        if text.strip() != self.last_streamed.strip():
+            print(f"\n{BOLD}agent>{RESET} {text}")
+        self.last_streamed = ""
 
 
 def main():
@@ -75,6 +110,8 @@ def main():
     p.add_argument("--max-steps", type=int, default=20)
     p.add_argument("--yes", action="store_true",
                    help="approve every tool call without asking (only for throwaway folders)")
+    p.add_argument("--no-stream", action="store_true", help="wait for whole replies instead of streaming")
+    p.add_argument("--think", action="store_true", help="for thinking models: show their reasoning separately")
     args = p.parse_args()
 
     if os.name == "nt":
@@ -87,9 +124,10 @@ def main():
     ws = Workspace(workspace)
 
     system_prompt = SYSTEM_PROMPT.format(snapshot=workspace_snapshot(ws))
-    agent = Agent(OllamaProvider(model=args.model), default_tools(ws), system_prompt,
-                  max_steps=args.max_steps, on_event=show_event,
-                  approve=TerminalApprover(auto_approve=args.yes))
+    printer = Printer()
+    provider = OllamaProvider(model=args.model, think=True if args.think else None)
+    agent = Agent(provider, default_tools(ws), system_prompt, max_steps=args.max_steps, on_event=printer,
+                  approve=TerminalApprover(auto_approve=args.yes), stream=not args.no_stream)
     print(f"{BOLD}Agent harness{RESET} · model {args.model} · workspace {workspace}")
     print(f"{DIM}Commands: /reset (forget the conversation)  /bye (quit)  ·  Ctrl+C cancels a running task{RESET}")
     if args.yes:
@@ -114,12 +152,14 @@ def main():
         try:
             answer = agent.run(user)
         except KeyboardInterrupt:
+            printer.end_line()
             print(f"\n{DIM}(cancelled){RESET}")
             continue
         except ProviderError as e:
+            printer.end_line()
             print(f"error: {e}")
             continue
-        print(f"\n{BOLD}agent>{RESET} {answer}")
+        printer.answer(answer)
         used_in = agent.usage.input_tokens - before[0]
         used_out = agent.usage.output_tokens - before[1]
         print(f"{DIM}  [{used_in} input + {used_out} output tokens]{RESET}")

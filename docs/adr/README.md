@@ -19,3 +19,4 @@ Copy [the template](template.md) to `NNNN-short-title.md` with the next number.
 | [0010](0010-parallel-safe-tool-calls.md) | Run consecutive concurrency-safe calls on threads | Accepted |
 | [0011](0011-prefer-bash-no-cwd.md) | Prefer bash on Windows too, and drop the `cwd` argument | Accepted |
 | [0012](0012-record-replay-tests.md) | Test agent behaviour with recorded model runs | Accepted |
+| [0013](0013-streaming-generators.md) | Stream with a generator per model call, reported through events | Accepted |

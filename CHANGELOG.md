@@ -8,6 +8,14 @@ is below 1.0, minor releases may contain breaking changes.
 
 ## [Unreleased]
 
+### Added
+- Streaming: answers appear as they are generated (ADR 0013). Providers may implement
+  `stream()`; the agent emits `text_delta` and `thinking_delta` events; `--no-stream` turns it
+  off. Ctrl+C closes the connection so the model stops generating.
+- `--think` for thinking models: reasoning arrives separately and is shown dimmed.
+- `ProviderError` carries `status`, `retryable` and `retry_after`.
+- Wire-format tests for the Ollama adapter against a fake HTTP server (`httpx.MockTransport`).
+
 ## [0.2.0] - 2026-10-06
 
 ### Added

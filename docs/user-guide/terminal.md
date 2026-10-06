@@ -72,8 +72,9 @@ fixed it and re-ran them, 3 times out of 3. Putting the rule in the system promp
 not help (0 of 3).
 
 ## Cancel
-Press **Ctrl+C** while the agent is working. The turn is discarded as if you never asked, and
-you can continue the conversation normally.
+Answers appear as the model writes them. Press **Ctrl+C** while the agent is working, even
+mid-sentence: the connection to the model is closed, so it stops generating immediately, and the turn is
+discarded as if you never asked. You can continue the conversation normally.
 
 ## Commands
 | Command | Does |

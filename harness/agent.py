@@ -1,4 +1,4 @@
-"""Lessons 06-14: the agent loop. Model → tool calls → results → model ... until it answers.
+"""Lessons 06-16: the agent loop. Model → tool calls → results → model ... until it answers.
 
 This file is the heart of the harness. Everything else (tools, policy, context, UI) plugs in
 around these few lines.
@@ -8,8 +8,8 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
-from harness.messages import Message, ToolCall, Usage
-from harness.providers.base import Provider
+from harness.messages import Message, Reply, ToolCall, Usage
+from harness.providers.base import Provider, ProviderError, StreamingProvider, TextDelta, ThinkingDelta
 from harness.tools.base import Tool
 from harness.tools.registry import ToolRegistry
 
@@ -30,13 +30,14 @@ NO_APPROVER = ("Error: this tool call can change things and needs the user's app
 class Agent:
     def __init__(self, provider: Provider, tools: list[Tool] | ToolRegistry, system_prompt: str,
                  max_steps: int = 10, on_event: EventHandler | None = None,
-                 approve: Approver | None = None):
+                 approve: Approver | None = None, stream: bool = True):
         self.provider = provider
         self.tools = tools if isinstance(tools, ToolRegistry) else ToolRegistry(tools)
         self.system_prompt = system_prompt
         self.max_steps = max_steps
         self.on_event = on_event or (lambda kind, data: None)
         self.approve = approve      # None = deny everything that isn't read-only (fail-closed)
+        self.stream = stream        # use the provider's stream() when it has one (Lesson 16)
         self.usage = Usage()
         # Why the last run() ended: "completed", "max_steps", "max_tokens", "cancelled", "error"
         self.stop_reason: str | None = None
@@ -56,7 +57,7 @@ class Agent:
 
         try:
             for _ in range(self.max_steps):  # stop condition #2: never loop forever
-                reply = self.provider.chat(self.messages, schemas)
+                reply = self.call_model(schemas)
                 self.usage.input_tokens += reply.usage.input_tokens
                 self.usage.output_tokens += reply.usage.output_tokens
                 self.messages.append(reply.message)
@@ -86,6 +87,22 @@ class Agent:
             del self.messages[turn_start:]
             self.stop_reason = "cancelled" if isinstance(e, KeyboardInterrupt) else "error"
             raise
+
+    def call_model(self, schemas: list[dict]) -> Reply:
+        """One model call. Streams text out as events when the provider can (Lesson 16)."""
+        if not (self.stream and isinstance(self.provider, StreamingProvider)):
+            return self.provider.chat(self.messages, schemas)
+        reply = None
+        for item in self.provider.stream(self.messages, schemas):
+            if isinstance(item, TextDelta):
+                self.on_event("text_delta", item.text)
+            elif isinstance(item, ThinkingDelta):
+                self.on_event("thinking_delta", item.text)
+            else:
+                reply = item
+        if reply is None:
+            raise ProviderError("the model's stream ended without a complete reply", retryable=True)
+        return reply
 
     @staticmethod
     def note_repeats(seen: dict, call: ToolCall, result: str) -> str:

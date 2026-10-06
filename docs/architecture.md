@@ -49,6 +49,28 @@ sequenceDiagram
 The loop repeats *call the model → run the requested tools → append the results* until the
 model answers without asking for tools, or until the step limit (default 10) is reached.
 
+## Streaming
+
+A provider may implement `stream()` in addition to `chat()`: a generator that yields pieces of
+text (`TextDelta`, `ThinkingDelta`) as the model produces them, and the complete `Reply` last.
+The agent forwards each piece as an event, so interfaces can show the answer as it's written.
+Closing the generator (on Ctrl+C or any error) closes the HTTP connection, which makes the
+model server stop generating. See [ADR 0013](adr/0013-streaming-generators.md).
+
+```mermaid
+sequenceDiagram
+    participant A as Agent
+    participant P as Provider.stream()
+    participant UI as Interface
+    A->>P: iterate
+    P-->>A: TextDelta("Hel")
+    A-->>UI: text_delta "Hel"
+    P-->>A: TextDelta("lo")
+    A-->>UI: text_delta "lo"
+    P-->>A: Reply(complete message, usage)
+    A-->>UI: model_reply
+```
+
 ## Running one tool call
 
 Every call the model makes goes through the same checks, in this order. Each "no" becomes a
