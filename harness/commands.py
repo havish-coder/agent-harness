@@ -191,12 +191,14 @@ def _tools(session, args):
 
 # Measured (Lesson 24): without the first sentence the model ran a test file directly, got an
 # import error, and "fixed" the package structure instead of the bug.
-FIX_TESTS = """First find out how this project runs its tests: look at its README and config files
-(for a Python project it is usually `python -m pytest`, run in the folder that contains the tests'
-conftest.py or pyproject.toml). Run the tests that way with run_shell and read the result.
-If a test fails, the bug is in the code being tested, not in the tests or the project setup
-(unless the error clearly says otherwise): read that code, fix it with edit_file, and run the tests again.
-Repeat until every test passes (at most 3 rounds), then say in a few lines what you changed.
+FIX_TESTS = """Fix the failing tests. Follow these steps exactly:
+1. Find the project's root: use glob to find conftest.py, pyproject.toml, pytest.ini or setup.cfg.
+   The folder that holds it is the project root (not its tests/ folder).
+2. Run the tests from that folder with run_shell: `cd <project root> && python -m pytest -q`
+   (or the command its README gives). Read the result.
+3. If a test fails, the bug is in the code being tested, not in the tests, imports or project setup:
+   read that code, fix it with edit_file, and run the tests again the same way as in step 2.
+4. Repeat until every test passes (at most 3 rounds), then say in a few lines what you changed.
 $ARGUMENTS"""
 
 EXPLAIN = """Explain $ARGUMENTS: what it does, how the main parts fit together, and anything surprising.

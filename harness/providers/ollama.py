@@ -20,10 +20,14 @@ LEAKED_THINKING = re.compile(r"^.*?</think>\s*", re.DOTALL)
 class OllamaProvider:
     def __init__(self, model="qwen3:4b-instruct", url="http://localhost:11434",
                  num_ctx=8192, temperature=None, timeout=300, think: bool | None = None,
-                 transport: httpx.BaseTransport | None = None):
+                 num_predict: int | None = None, transport: httpx.BaseTransport | None = None):
         self.model = model
         self.url = url
         self.options = {"num_ctx": num_ctx}
+        if num_predict:
+            # Without a limit Ollama never stops a model that repeats itself: when the context
+            # fills it shifts the window and keeps going (one such reply ran for 36 minutes).
+            self.options["num_predict"] = num_predict
         if temperature is not None:
             self.options["temperature"] = temperature
         self.think = think   # True: thinking models put their reasoning in a separate field

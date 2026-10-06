@@ -21,17 +21,20 @@ PROVIDERS = ["ollama", "anthropic", *OPENAI_COMPATIBLE]
 
 def make_provider(name: str = "ollama", model: str | None = None, base_url: str | None = None, *,
                   temperature: float | None = None, think: bool | None = None,
-                  context_window: int | None = None) -> Provider:
+                  context_window: int | None = None, max_output_tokens: int | None = None) -> Provider:
     """Create a provider. Options a backend doesn't support are ignored."""
     if name == "ollama":
         from harness.providers.ollama import OllamaProvider
         kwargs = {"url": base_url} if base_url else {}
         if context_window:
             kwargs["num_ctx"] = context_window
-        return OllamaProvider(model=model or "qwen3:4b-instruct", temperature=temperature, think=think, **kwargs)
+        return OllamaProvider(model=model or "qwen3:4b-instruct", temperature=temperature, think=think,
+                              num_predict=max_output_tokens, **kwargs)
     if name == "anthropic":
         from harness.providers.anthropic import AnthropicProvider
         kwargs = {"base_url": base_url} if base_url else {}
+        if max_output_tokens:
+            kwargs["max_tokens"] = max_output_tokens
         return AnthropicProvider(model=model or "claude-sonnet-5-5", api_key=os.environ.get("ANTHROPIC_API_KEY"),
                                  temperature=temperature, **kwargs)
     if name in OPENAI_COMPATIBLE:
@@ -42,5 +45,6 @@ def make_provider(name: str = "ollama", model: str | None = None, base_url: str 
             raise ProviderError(f"provider '{name}' needs an API key: set the {key_var} environment variable")
         if not model:
             raise ProviderError(f"provider '{name}' needs a model name (--model)")
-        return OpenAICompatProvider(model, base_url=base_url or default_url, api_key=api_key, temperature=temperature)
+        return OpenAICompatProvider(model, base_url=base_url or default_url, api_key=api_key, temperature=temperature,
+                                    max_tokens=max_output_tokens)
     raise ProviderError(f"unknown provider '{name}'. Known: {', '.join(PROVIDERS)}")

@@ -42,6 +42,8 @@ is below 1.0, minor releases may contain breaking changes.
   with `conftest.py` or `pyproject.toml`) and treats the code under test, not the tests, as broken.
 
 ### Fixed
+- Replies are limited to `max_output_tokens` (default 4096). Ollama had no limit: a model
+  stuck repeating itself kept generating for 36 minutes, blocking every other request.
 - The replay tests, `render_demo.py` and `record_cassette.py` copy the workspace as committed:
   files you added to `workspace/` while trying the agent no longer break them.
 

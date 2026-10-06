@@ -127,3 +127,14 @@ def test_stream_can_be_turned_off():
     provider, seen = server(lambda r: httpx.Response(200, json={"message": {"content": "ok"}, "done": True}))
     agent = Agent(provider, [], "s", stream=False)
     assert agent.run("go") == "ok" and seen[0]["stream"] is False
+
+
+def test_output_limit_reaches_every_provider(monkeypatch):
+    """A model stuck repeating itself must be stopped: Ollama alone would generate forever."""
+    from harness.providers.factory import make_provider
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    monkeypatch.setenv("OPENAI_API_KEY", "test")
+    assert make_provider("ollama", max_output_tokens=512).options["num_predict"] == 512
+    assert make_provider("anthropic", max_output_tokens=512).max_tokens == 512
+    assert make_provider("openai", "gpt-x", max_output_tokens=512).max_tokens == 512
+    assert "num_predict" not in OllamaProvider().options   # no limit unless asked

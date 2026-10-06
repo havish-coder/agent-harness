@@ -49,7 +49,8 @@ class Session:
     def make_provider(self, model: str | None):
         s = self.settings
         return make_provider(s.provider, model, s.base_url, temperature=s.temperature,
-                             think=True if s.think else None, context_window=s.context_window)
+                             think=True if s.think else None, context_window=s.context_window,
+                             max_output_tokens=s.max_output_tokens)
 
     def on_event(self, kind, data):
         if kind == "model_reply":

@@ -37,6 +37,7 @@ class Settings:
     fallback_model: str | None = None
     temperature: float | None = None
     context_window: int = 8192          # Ollama's num_ctx
+    max_output_tokens: int = 4096       # per reply; stops a model stuck repeating itself
     max_steps: int = 20
     stream: bool = True
     think: bool = False
@@ -65,7 +66,7 @@ def layer_files(workspace: Path) -> list[tuple[str, Path]]:
 TYPES: dict[str, tuple] = {
     "provider": (str,), "model": (str, type(None)), "base_url": (str, type(None)),
     "fallback_model": (str, type(None)), "temperature": (int, float, type(None)),
-    "context_window": (int,), "max_steps": (int,), "stream": (bool,), "think": (bool,),
+    "context_window": (int,), "max_output_tokens": (int,), "max_steps": (int,), "stream": (bool,), "think": (bool,),
     "shell": (str, type(None)), "max_retries": (int,), "prices": (dict,),
     "output_style": (str,), "status_line": (str, type(None)),
 }
