@@ -155,7 +155,9 @@ harness/
   agent.py          the agent loop
   messages.py       provider-neutral message types
   cli.py            the `harness` command: settings, provider, agent, the input loop
-  tui/              terminal interfaces: rich (Markdown, diffs, spinner) and plain
+  tui/              terminal interfaces: rich (Markdown, diffs, spinner) and plain;
+                    the line editor (prompt.py) and the Esc/type-ahead key watcher (keys.py)
+  mentions.py       @file mentions attached to messages
   providers/
     base.py         the Provider interface and ProviderError
     ollama.py       Ollama adapter (/api/chat, NDJSON streaming)

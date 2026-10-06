@@ -103,7 +103,7 @@ class CostTracker:
             money = "price unknown" if price is None else format_cost(price.cost(u))
             cached = f", {u.cache_read_tokens:,} read from cache" if u.cache_read_tokens else ""
             written = f", {u.cache_write_tokens:,} written to cache" if u.cache_write_tokens else ""
-            lines.append(f"{model}: {t.calls} calls, {u.input_tokens:,} input{cached}{written}, "
+            lines.append(f"{model}: {t.calls} call{'s' if t.calls != 1 else ''}, {u.input_tokens:,} input{cached}{written}, "
                          f"{u.output_tokens:,} output tokens · {money}")
         return "\n".join(lines) or "no model calls yet"
 

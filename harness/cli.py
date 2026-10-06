@@ -3,20 +3,23 @@
 Run:  harness                               (after `pip install -e ".[tui]"`)
       harness --workspace C:\\some\\folder --provider anthropic
 
-Lessons 07-22. The screen itself is drawn by harness/tui (rich when available, plain otherwise).
+Lessons 07-23. The screen itself is drawn by harness/tui (rich when available, plain otherwise).
 """
 import argparse
 import sys
 from pathlib import Path
 
 from harness.agent import Agent
-from harness.config import ConfigError, describe, load_dotenv, load_settings
+from harness.config import USER_DIR, ConfigError, describe, load_dotenv, load_settings
+from harness.mentions import expand_mentions
 from harness.providers.base import ProviderError
 from harness.providers.factory import PROVIDERS, make_provider
 from harness.providers.retry import RetryingProvider
 from harness.tools import default_tools
 from harness.tools.fs import workspace_snapshot
 from harness.tui import make_ui
+from harness.tui.keys import KeyWatcher
+from harness.tui.prompt import LineReader
 from harness.usage import CostTracker, format_cost
 from harness.workspace import Workspace
 
@@ -93,13 +96,17 @@ def main(argv=None):
                   SYSTEM_PROMPT.format(snapshot=workspace_snapshot(ws)), max_steps=settings.max_steps,
                   on_event=on_event, approve=approver, stream=settings.stream)
     ui.banner("Agent harness", f"{settings.provider} · {provider.model} · {workspace}")
-    ui.info("/reset forget the conversation · /cost usage so far · /bye quit · Ctrl+C cancels a running task")
+    reader = LineReader(ws, USER_DIR / "history", commands=["/reset", "/cost", "/bye"])
+    watcher = KeyWatcher()
+    approver.pause = watcher.paused
+    stop_keys = "Esc or Ctrl+C stops a running task" if watcher.available else "Ctrl+C stops a running task"
+    ui.info(f"/reset forget the conversation · /cost usage so far · /bye quit · @file attaches a file · {stop_keys}")
     if args.yes:
         ui.warn("--yes: every tool call runs without asking.")
 
     while True:
         try:
-            user = ui.read_input().strip()
+            user = reader.read(default=watcher.take_typeahead()).strip()
         except (EOFError, KeyboardInterrupt):
             break
         if not user:
@@ -115,9 +122,13 @@ def main(argv=None):
             ui.info("(conversation cleared)")
             continue
 
+        message, attached = expand_mentions(user, ws)
+        if attached:
+            ui.info("attached: " + ", ".join(attached))
         before, cost_before = agent.usage.copy(), costs.cost()
         try:
-            answer = agent.run(user)
+            with watcher.watching():
+                answer = agent.run(message)
         except KeyboardInterrupt:
             ui.error("cancelled")
             continue

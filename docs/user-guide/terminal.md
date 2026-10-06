@@ -32,6 +32,28 @@ of the input the model server reused from the previous request instead of proces
 The price is `free` for models on your computer, a dollar amount for models with a known
 price, and `price unknown` otherwise (add prices in [settings](configuration.md)).
 
+## Typing
+| Key | Does |
+|---|---|
+| Enter | send |
+| Esc then Enter, or Alt+Enter | new line (for longer messages) |
+| ↑ / ↓ | previous / next message from your history (kept in `~/.harness/history`) |
+| Ctrl+R | search your history |
+| → (at the end of the line) | accept the grey suggestion from history |
+| Tab | complete a `/command` or an `@file` |
+
+## Attach files with @
+Mention a file or folder with `@` and its content is sent with your message:
+
+```text
+you> Explain what @project/shop/cart.py does
+```
+
+The agent doesn't need to spend a step reading it (it can edit it right away), which is faster
+and cheaper: in one measurement a question about a file took 1,835 input tokens with `@`
+instead of about 5,100 without. Up to 5 mentions per message; a folder attaches its listing.
+Text like `me@example.com` is not a mention.
+
 ## Approve or deny actions
 Tools that only look at things (listing, reading, searching) run straight away. Any tool that
 can **change** something asks first:
@@ -94,9 +116,12 @@ wait (`Retry-After`), that wins. Permanent errors (a wrong API key, an unknown m
 immediately. With `--fallback-model`, a second model gets one try after the retries run out.
 
 ## Cancel
-Answers appear as the model writes them. Press **Ctrl+C** while the agent is working, even
-mid-sentence: the connection to the model is closed, so it stops generating immediately, and the turn is
+Answers appear as the model writes them. Press **Esc** or **Ctrl+C** while the agent is working,
+even mid-sentence: the connection to the model is closed, so it stops generating immediately, and the turn is
 discarded as if you never asked. You can continue the conversation normally.
+
+Anything you type while the agent is working isn't lost: it appears at the next prompt, ready
+to edit and send.
 
 ## Commands
 | Command | Does |

@@ -5,6 +5,7 @@ Used when output isn't a terminal (pipes, logs, tests), when `rich` isn't instal
 an approver and a few messages.
 """
 import os
+from contextlib import nullcontext
 
 DIM, CYAN, BOLD, YELLOW, RESET = "\033[2m", "\033[36m", "\033[1m", "\033[33m", "\033[0m"
 
@@ -98,6 +99,7 @@ class PlainApprover:
     def __init__(self, auto_approve: bool = False, ui: PlainUI | None = None):
         self.auto_approve = auto_approve
         self.always: set[str] = set()   # tool names allowed for the rest of the session
+        self.pause = nullcontext        # replaced by KeyWatcher.paused, so the prompt gets the keys
 
     def show(self, call, tool):
         warning = " (may destroy data)" if tool.is_destructive(call.arguments) else ""
@@ -114,13 +116,14 @@ class PlainApprover:
     def __call__(self, call, tool) -> bool:
         if self.auto_approve or tool.name in self.always:
             return True
-        self.show(call, tool)
-        while True:
-            answer = self.ask(tool.name).strip().lower()
-            if answer in ("y", "yes"):
-                return True
-            if answer in ("n", "no", ""):
-                return False
-            if answer in ("a", "always"):
-                self.always.add(tool.name)
-                return True
+        with self.pause():
+            self.show(call, tool)
+            while True:
+                answer = self.ask(tool.name).strip().lower()
+                if answer in ("y", "yes"):
+                    return True
+                if answer in ("n", "no", ""):
+                    return False
+                if answer in ("a", "always"):
+                    self.always.add(tool.name)
+                    return True
