@@ -16,6 +16,9 @@ is below 1.0, minor releases may contain breaking changes.
 - OpenAI-compatible provider (ADR 0014): OpenAI, Groq, OpenRouter, Gemini, LM Studio, Ollama's
   `/v1`, or any compatible server with `--base-url`; streaming with tool-call fragments joined
   by index. `--provider`, `--base-url`; API keys only from environment variables.
+- Anthropic provider (ADR 0015): Messages API with content blocks, grouped tool results,
+  streaming of text, thinking and partial tool input, and automatic prompt-cache markers on the
+  system prompt, tools and newest message. `--provider anthropic` with `ANTHROPIC_API_KEY`.
 - User guide: [choosing a model and provider](docs/user-guide/models.md); developer guide:
   [writing a provider](docs/developer-guide/writing-a-provider.md).
 - `ProviderError` carries `status`, `retryable` and `retry_after`.

@@ -16,7 +16,7 @@ OPENAI_COMPATIBLE = {
     "lmstudio": ("http://localhost:1234/v1", None),
     "ollama-openai": ("http://localhost:11434/v1", None),   # Ollama's compatibility endpoint
 }
-PROVIDERS = ["ollama", *OPENAI_COMPATIBLE]
+PROVIDERS = ["ollama", "anthropic", *OPENAI_COMPATIBLE]
 
 
 def make_provider(name: str = "ollama", model: str | None = None, base_url: str | None = None,
@@ -26,6 +26,12 @@ def make_provider(name: str = "ollama", model: str | None = None, base_url: str 
         from harness.providers.ollama import OllamaProvider
         kwargs = {"url": base_url} if base_url else {}
         return OllamaProvider(model=model or "qwen3:4b-instruct", **kwargs, **options)
+    if name == "anthropic":
+        from harness.providers.anthropic import AnthropicProvider
+        options.pop("think", None)
+        kwargs = {"base_url": base_url} if base_url else {}
+        return AnthropicProvider(model=model or "claude-sonnet-5-5", api_key=os.environ.get("ANTHROPIC_API_KEY"),
+                                 **kwargs, **options)
     if name in OPENAI_COMPATIBLE:
         from harness.providers.openai_compat import OpenAICompatProvider
         default_url, key_var = OPENAI_COMPATIBLE[name]

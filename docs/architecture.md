@@ -149,6 +149,7 @@ harness/
     base.py         the Provider interface and ProviderError
     ollama.py       Ollama adapter (/api/chat, NDJSON streaming)
     openai_compat.py  OpenAI Chat Completions adapter (SSE streaming)
+    anthropic.py    Anthropic Messages adapter (content blocks, named SSE events, prompt caching)
     factory.py      make_provider(name, model, ...) for interfaces
     fake.py         scripted, recording and replaying providers for tests
   tools/

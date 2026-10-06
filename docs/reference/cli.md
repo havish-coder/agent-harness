@@ -6,7 +6,7 @@ harness [--provider NAME] [--model MODEL] [--base-url URL] [--workspace PATH] [-
 
 | Flag | Default | Description |
 |---|---|---|
-| `--provider` | `ollama` | Where the model runs: `ollama`, `ollama-openai`, `lmstudio`, `openai`, `groq`, `openrouter`, `gemini`. See [models](../user-guide/models.md). |
+| `--provider` | `ollama` | Where the model runs: `ollama`, `anthropic`, `ollama-openai`, `lmstudio`, `openai`, `groq`, `openrouter`, `gemini`. See [models](../user-guide/models.md). |
 | `--model` | `qwen3:4b-instruct` for Ollama | Model name. Must support tool calling. Required for cloud providers. |
 | `--base-url` | the provider's | Another server address, e.g. any OpenAI-compatible server. |
 | `--workspace` | `workspace` | Folder the agent works in. Must exist. |
