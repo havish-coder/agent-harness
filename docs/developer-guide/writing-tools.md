@@ -54,6 +54,25 @@ def shell(command: str) -> str: ...
 ```
 If the function raises, the flag counts as `False`.
 
+## Checks and previews
+Two optional hooks make tools that change things safer and easier to approve:
+
+```python
+def check(path: str, text: str) -> str | None:
+    # Return an error message for the model, or None if the call can run.
+    ...
+
+def preview(path: str, text: str) -> str:
+    # Return what the call would do (e.g. a diff), shown in the approval prompt.
+    ...
+
+my_tool.check = check
+my_tool.preview = preview
+```
+
+The agent runs `check` **before** asking for approval, so the user never approves a call
+that would fail. Both receive the same (validated) arguments as the tool.
+
 ## Registering a tool
 Return it from a factory and pass it to the agent:
 ```python

@@ -60,7 +60,9 @@ flowchart TD
     K -- no --> E1["Error: unknown tool ... Available tools: ..."]
     K -- yes --> V{arguments valid?}
     V -- no --> E2["Error: invalid arguments ... Expected: signature"]
-    V -- yes --> R{read-only for<br/>these arguments?}
+    V -- yes --> TC{tool's own check<br/>passes?}
+    TC -- no --> E3["Error from the tool, e.g.<br/>read the file first"]
+    TC -- yes --> R{read-only for<br/>these arguments?}
     R -- yes --> RUN[run the tool]
     R -- no --> A{approved?}
     A -- no --> D[denial message]
@@ -69,8 +71,9 @@ flowchart TD
 ```
 
 The checks live in [`harness/tools/registry.py`](../harness/tools/registry.py) (lookup,
-validation, running, truncation) and [`harness/agent.py`](../harness/agent.py) (the approval
-decision, [ADR 0005](adr/0005-approve-every-non-read-only-call.md)).
+validation, running, truncation) and [`harness/agent.py`](../harness/agent.py) (the tool's
+own `check`, then the approval decision, [ADR 0005](adr/0005-approve-every-non-read-only-call.md)).
+A tool's check runs before approval so you are never asked to approve a call that would fail.
 
 ## Key design rules
 
@@ -109,6 +112,7 @@ harness/
     registry.py     lookup, argument validation, running, result caps
     fs.py           list_dir, read_file, workspace_snapshot
     search.py       glob, grep
+    edit.py         edit_file, write_file
   workspace.py      path resolution and read tracking for all file tools
 scripts/            setup check and teaching scripts
 workspace/          a sample folder to try the agent on

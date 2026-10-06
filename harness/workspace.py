@@ -7,6 +7,7 @@ The workspace also remembers which files the model has read (and their modificat
 Lesson 12's edit tools use that to refuse blind or stale edits.
 """
 import difflib
+import hashlib
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -22,6 +23,7 @@ class FileStamp:
     mtime_ns: int
     size: int
     ranges: set = field(default_factory=set)   # (offset, limit) pairs already returned
+    digest: str | None = None                  # sha256 of the content, to spot false "changed" alarms
 
 
 class Workspace:
@@ -42,11 +44,13 @@ class Workspace:
 
     # --- read tracking (used by read_file, checked by edit tools) ---
 
-    def record_read(self, p: Path, offset: int | None = None, limit: int | None = None) -> None:
+    def record_read(self, p: Path, offset: int | None = None, limit: int | None = None,
+                    data: bytes | None = None) -> None:
         st = p.stat()
         stamp = self.reads.get(p)
         if stamp is None or stamp.mtime_ns != st.st_mtime_ns:
-            stamp = self.reads[p] = FileStamp(st.st_mtime_ns, st.st_size)
+            digest = hashlib.sha256(data).hexdigest() if data is not None else None
+            stamp = self.reads[p] = FileStamp(st.st_mtime_ns, st.st_size, digest=digest)
         stamp.ranges.add((offset, limit))
 
     def unchanged_since_read(self, p: Path, offset=None, limit=None) -> bool:

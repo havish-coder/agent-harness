@@ -31,6 +31,9 @@ class Tool:
     destructive: Flag = False       # True = may destroy data (overwrite, delete)
     max_result_chars: int = DEFAULT_MAX_RESULT_CHARS  # longer results are cut (Lesson 09)
     preview: Callable[..., str] | None = None  # shows what a call would do, for approvals (Lesson 12)
+    # Tool-specific validation that runs BEFORE approval: returns an error for the model, or None.
+    # The user is never asked to approve a call that can't succeed (Lesson 12).
+    check: Callable[..., str | None] | None = None
 
     def schema(self) -> dict:
         """The provider-neutral description sent to the model."""

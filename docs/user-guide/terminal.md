@@ -39,6 +39,22 @@ can **change** something asks first:
 | `n` or Enter | don't run it; the model is told you declined and asked to check with you |
 | `a` | run it, and allow this tool without asking for the rest of the session |
 
+For file edits the prompt shows exactly what will change, as a diff:
+
+```text
+  ? edit_file wants to run
+    --- a/project/shop/cart.py
+    +++ b/project/shop/cart.py
+    @@ -13,5 +13,5 @@
+
+         def subtotal(self) -> float:
+    -        return sum(price for _, price, qty in self.items)
+    +        return sum(price * qty for _, price, qty in self.items)
+    allow? [y]es / [n]o / [a]lways for edit_file:
+```
+
+Overwriting an existing file with `write_file` is flagged `(may destroy data)`.
+
 `--yes` skips every question. Use it only in a folder you can afford to lose.
 
 ## Cancel

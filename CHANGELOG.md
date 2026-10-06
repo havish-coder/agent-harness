@@ -34,6 +34,11 @@ is below 1.0, minor releases may contain breaking changes.
   `files`/`count` modes, plain-text fallback for invalid patterns, capped output.
 - Sample code project in `workspace/project` (a small cart library with a failing test).
 - System prompt tells the model to grep for a likely word to find definitions.
+- `edit_file` (exact, unique string replacement) and `write_file` (create or overwrite), both
+  refusing files the model hasn't read or that changed since (ADR 0008); unified diffs in
+  results and approval prompts; CRLF files and copied line numbers handled.
+- Tool hooks: `check` (runs before approval) and `preview` (shown when approving).
+- `harness.tools.default_tools(ws)`: the standard tool set.
 
 ### Changed
 - Tool results longer than 8,000 characters are shortened, keeping the start and the end.

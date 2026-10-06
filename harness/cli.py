@@ -11,8 +11,8 @@ from pathlib import Path
 from harness.agent import Agent
 from harness.providers.base import ProviderError
 from harness.providers.ollama import OllamaProvider
-from harness.tools.fs import make_fs_tools, workspace_snapshot
-from harness.tools.search import make_search_tools
+from harness.tools import default_tools
+from harness.tools.fs import workspace_snapshot
 from harness.workspace import Workspace
 
 # Short and direct works best for small models (see course/07-first-tools-and-repl.md).
@@ -87,7 +87,7 @@ def main():
     ws = Workspace(workspace)
 
     system_prompt = SYSTEM_PROMPT.format(snapshot=workspace_snapshot(ws))
-    agent = Agent(OllamaProvider(model=args.model), make_fs_tools(ws) + make_search_tools(ws), system_prompt,
+    agent = Agent(OllamaProvider(model=args.model), default_tools(ws), system_prompt,
                   max_steps=args.max_steps, on_event=show_event,
                   approve=TerminalApprover(auto_approve=args.yes))
     print(f"{BOLD}Agent harness{RESET} · model {args.model} · workspace {workspace}")

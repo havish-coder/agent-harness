@@ -68,7 +68,7 @@ def read_lines(ws: Workspace, path: str, offset: int = 1, limit: int = READ_LIMI
         offset = max(1, len(lines) + offset + 1)   # -1 = the last line
     if ws.unchanged_since_read(p, offset, limit):
         return UNCHANGED
-    ws.record_read(p, offset, limit)
+    ws.record_read(p, offset, limit, data)
     if not lines:
         return f"({name} is empty)"
     if offset > len(lines):

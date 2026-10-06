@@ -14,3 +14,4 @@ Copy [the template](template.md) to `NNNN-short-title.md` with the next number.
 | [0005](0005-approve-every-non-read-only-call.md) | Ask before every tool call that isn't read-only | Accepted |
 | [0006](0006-paged-numbered-file-reads.md) | Read files in numbered, bounded pages | Accepted |
 | [0007](0007-pure-python-search.md) | Implement search in pure Python | Accepted |
+| [0008](0008-exact-string-edits.md) | Edit files by exact string replacement, only after reading them | Accepted |

@@ -85,6 +85,13 @@ class Agent:
         tool, error = self.tools.resolve(call)
         if error:
             return error
+        if tool.check:
+            try:
+                error = tool.check(**call.arguments)
+            except Exception as e:
+                error = f"Error: {type(e).__name__}: {e}"
+            if error:
+                return error
         if not tool.is_read_only(call.arguments):
             if self.approve is None:
                 return NO_APPROVER
