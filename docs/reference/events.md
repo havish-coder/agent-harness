@@ -25,4 +25,8 @@ After `run()` returns or raises, `agent.stop_reason` says why the turn ended:
 | `cancelled` | Ctrl+C (`KeyboardInterrupt`); the turn was rolled back |
 | `error` | an exception (e.g. the model server failed); the turn was rolled back |
 
+When one reply contains several calls, `tool_call` is emitted for every call in a batch
+before the batch runs, and `tool_result` for each afterwards, in the order the model asked.
+All events are emitted from the thread that called `run()`.
+
 Handlers must not raise: an exception in a handler aborts the turn (and rolls it back).

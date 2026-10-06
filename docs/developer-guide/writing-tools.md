@@ -44,8 +44,12 @@ Flags are **fail-closed**: leave one out and the agent assumes the risky value.
 | Flag | Default | Set it to `True` when... | Effect |
 |---|---|---|---|
 | `read_only` | `False` | the tool never changes anything | no approval needed |
-| `concurrency_safe` | `False` | the tool can run at the same time as others | may run in parallel |
+| `concurrency_safe` | `False` | the tool can run at the same time as others, **on another thread** | may run in parallel with neighbouring safe calls |
 | `destructive` | `False` | the tool may delete or overwrite data | shown as a warning when approving |
+
+`concurrency_safe=True` is a promise that the tool's code is thread-safe and that its result
+doesn't depend on another call in the same reply. Read-only tools usually qualify; tools that
+change things never should.
 
 A flag can be a function of the call's arguments:
 ```python

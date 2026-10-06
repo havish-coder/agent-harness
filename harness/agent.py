@@ -1,9 +1,10 @@
-"""Lessons 06-09: the agent loop. Model → tool calls → results → model ... until it answers.
+"""Lessons 06-14: the agent loop. Model → tool calls → results → model ... until it answers.
 
 This file is the heart of the harness. Everything else (tools, policy, context, UI) plugs in
 around these few lines.
 """
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from harness.messages import Message, ToolCall, Usage
@@ -20,6 +21,7 @@ Approver = Callable[[ToolCall, Tool], bool]
 
 DENIED = ("The user denied this tool call, so it did not run. Do not try it again. "
           "Ask the user what they want to do instead.")
+MAX_PARALLEL = 8   # concurrency-safe calls run on up to this many threads (Lesson 14)
 NO_APPROVER = ("Error: this tool call can change things and needs the user's approval, "
                "but approval isn't possible in this session. Use read-only tools only.")
 
@@ -65,11 +67,13 @@ class Agent:
                     self.stop_reason = "completed"
                     return reply.message.content
 
-                for call in reply.message.tool_calls:
-                    self.on_event("tool_call", call)
-                    result = self.execute(call)
-                    self.on_event("tool_result", (call, result))
-                    self.messages.append(Message.tool_result(call, result))
+                for batch in self.batches(reply.message.tool_calls):
+                    for call in batch:
+                        self.on_event("tool_call", call)
+                    results = self.execute_batch(batch)
+                    for call, result in zip(batch, results, strict=True):  # in the order the model asked
+                        self.on_event("tool_result", (call, result))
+                        self.messages.append(Message.tool_result(call, result))
 
             self.stop_reason = "max_steps"
             return f"(stopped: reached the limit of {self.max_steps} steps without a final answer)"
@@ -79,6 +83,29 @@ class Agent:
             del self.messages[turn_start:]
             self.stop_reason = "cancelled" if isinstance(e, KeyboardInterrupt) else "error"
             raise
+
+    def batches(self, calls: list[ToolCall]) -> list[list[ToolCall]]:
+        """Group calls: consecutive concurrency-safe calls share a batch; any other call runs alone.
+
+        Order is kept, so a write between two reads still happens after the first read and
+        before the second (the model may depend on that).
+        """
+        groups: list[tuple[bool, list[ToolCall]]] = []   # (all safe?, calls)
+        for call in calls:
+            tool = self.tools.get(call.name)
+            safe = tool is not None and tool.is_concurrency_safe(call.arguments)
+            if safe and groups and groups[-1][0]:
+                groups[-1][1].append(call)       # join the running batch of safe calls
+            else:
+                groups.append((safe, [call]))    # start a new batch (an unsafe call is always alone)
+        return [batch for _, batch in groups]
+
+    def execute_batch(self, batch: list[ToolCall]) -> list[str]:
+        """Run one batch: a single call directly, several safe calls on threads."""
+        if len(batch) == 1:
+            return [self.execute(batch[0])]
+        with ThreadPoolExecutor(max_workers=min(MAX_PARALLEL, len(batch))) as pool:
+            return list(pool.map(self.execute, batch))
 
     def execute(self, call: ToolCall) -> str:
         """Run one tool call. Every failure becomes text for the model, never a crash."""

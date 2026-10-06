@@ -23,5 +23,5 @@ def final(text: str) -> Reply:
     return Reply(Message("assistant", text), "end", Usage(10, 5))
 
 
-def call(name: str, id: str = "c1", **arguments) -> ToolCall:
-    return ToolCall(id, name, arguments)
+def call(tool_name: str, id: str = "c1", **arguments) -> ToolCall:
+    return ToolCall(id, tool_name, arguments)

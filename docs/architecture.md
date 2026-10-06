@@ -75,6 +75,25 @@ validation, running, truncation) and [`harness/agent.py`](../harness/agent.py) (
 own `check`, then the approval decision, [ADR 0005](adr/0005-approve-every-non-read-only-call.md)).
 A tool's check runs before approval so you are never asked to approve a call that would fail.
 
+## Several calls in one reply
+
+A model may ask for several tools at once (in our measurements, 4 of 7 tool-calling replies
+did). The agent splits them into **batches**, in order: consecutive calls whose tools are
+*concurrency-safe* share a batch and run on threads (up to 8 at a time); any other call is a
+batch of its own. Results always go back in the order the model asked, and events are
+emitted from the main thread.
+
+```mermaid
+flowchart LR
+    R["reply: read a, read b, edit c, read d"] --> B1["batch 1: read a + read b<br/>(parallel)"]
+    B1 --> B2["batch 2: edit c<br/>(alone, may ask approval)"]
+    B2 --> B3["batch 3: read d"]
+```
+
+Approval prompts therefore never overlap: only tools that aren't concurrency-safe can need
+approval, and they always run alone. See
+[ADR 0010](adr/0010-parallel-safe-tool-calls.md).
+
 ## Key design rules
 
 ### 1. One message format inside, many outside

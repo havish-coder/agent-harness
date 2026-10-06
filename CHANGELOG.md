@@ -46,6 +46,8 @@ is below 1.0, minor releases may contain breaking changes.
 ### Changed
 - Tool results longer than 8,000 characters are shortened, keeping the start and the end.
 - Default `--max-steps` raised from 10 to 20: fix-and-test tasks need more steps.
+- Several tool calls in one reply: consecutive concurrency-safe calls run in parallel (up to 8
+  threads); others run alone, in order (ADR 0010).
 - The workspace snapshot in the system prompt skips folders like `.git`, `.venv` and
   `node_modules`.
 
