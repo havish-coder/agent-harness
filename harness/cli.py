@@ -114,6 +114,8 @@ def main(argv=None):
     stop_keys = "Esc or Ctrl+C stops a running task" if watcher.available else "Ctrl+C stops a running task"
     ui.banner("Agent harness", f"{settings.provider} · {session.provider.model} · {workspace}")
     ui.info(f"/help commands · @file attaches a file · {stop_keys}")
+    if session.sandbox is not None:
+        ui.info(session.sandbox.describe(settings.sandbox_network))
     if settings.permission_mode != "default":
         ui.warn(f"permission mode {settings.permission_mode}: {MODE_HELP[settings.permission_mode]}")
     broad = settings.permission_mode in ("accept-edits", "bypass") or any(

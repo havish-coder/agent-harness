@@ -22,6 +22,8 @@ variable `HARNESS_<NAME>` (upper case) and most as a flag. How the layers combin
 | `status_line` | string or null | `null` | | A command whose first output line replaces the status line. Not accepted from project settings. |
 | `permission_mode` | string | `"default"` | `--mode`, `--yes` | `default`, `accept-edits`, `plan` or `bypass` ([permissions](../user-guide/permissions.md)). Not accepted from project settings. |
 | `permissions` | object | `{}` | | `{"allow": [...], "ask": [...], "deny": [...]}`, rules like `run_shell(git status*)`. Rules from all layers add up. Project settings may not add `allow` rules. In the environment: JSON. |
+| `sandbox` | string | `"auto"` | | `off`, `auto` or `on`: run commands in an OS sandbox ([the command sandbox](../user-guide/sandbox.md)). Not accepted from project settings. |
+| `sandbox_network` | boolean | `true` | | May sandboxed commands use the network? Not accepted from project settings. |
 | `audit_log` | boolean | `true` | | Keep the [audit log](../user-guide/audit-and-limits.md) in `~/.harness/audit/`. Not accepted from project settings. |
 | `redact_secrets` | boolean | `true` | | Hide secrets in tool results and exported chats. Not accepted from project settings. |
 | `limits` | object | `{"tool_calls": 500, "cost": 5.0, "tokens": null, "minutes": null}` | `HARNESS_LIMITS` (JSON) | Per-chat limits; `null` = none. Layers change only the keys they name. Not accepted from project settings. |

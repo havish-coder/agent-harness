@@ -78,6 +78,9 @@ def test_t1_read_outside_with_dotdot(lab):
     assert SECRET not in lab.attack(call("read_file", path="../outside/secret.txt"))
 ```
 
+`python scripts/attack_report.py` runs the lab and prints, per threat, how many attacks are stopped and which are
+known to get through. Tests that need an OS sandbox use it automatically when the machine has one.
+
 An attack the harness can't stop yet is marked `@fixed_in("28 (path jail)")`, an
 `xfail(strict=True)`: the suite stays green, and the moment the defense works the test
 "unexpectedly passes", which strict mode reports as a failure until you remove the marker.

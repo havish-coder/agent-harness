@@ -73,6 +73,12 @@ is below 1.0, minor releases may contain breaking changes.
   says which; `/limits`; `limits` setting; `limit` event and stop reason. A project can't change `audit_log`,
   `redact_secrets` or `limits`.
 - `tool_approved`, `redacted` and `limit` events.
+- OS sandbox for commands (ADR 0032): bubblewrap on Linux and `sandbox-exec` on macOS confine `run_shell` to writing
+  inside the workspace, with `.git`, `.harness`, `.github/workflows` and the other protected folders read-only, and
+  optionally no network. `sandbox` (`off`, `auto`, `on`; `on` refuses commands where none exists) and
+  `sandbox_network` settings, never from a project. None on Windows; the wrappers are unit-tested, and run for real
+  only where the tool exists.
+- `scripts/attack_report.py`: the attack lab's results by threat.
 - `permission` and `tool_refused` events; `model_call` is now documented.
 - User guide: [permissions](docs/user-guide/permissions.md).
 

@@ -22,6 +22,7 @@ from pathlib import Path
 
 from harness.hooks import HookError, check_hooks
 from harness.security.permissions import MODES, Rule, RuleError
+from harness.security.sandbox import MODES as SANDBOX_MODES
 from harness.security.secrets import SECRET_VALUES
 
 USER_DIR = Path(os.environ.get("HARNESS_HOME", Path.home() / ".harness"))
@@ -60,6 +61,8 @@ class Settings:
     # {"pre_tool_use": [{"command", "match", "timeout"}], ...} in files; after loading, every layer's hooks as
     # [{"event", "command", "match", "timeout", "source"}] (hooks add up across layers, like rules; Lesson 33)
     hooks: list = field(default_factory=list)
+    sandbox: str = "auto"                        # off, auto, on: run commands in an OS sandbox (Lesson 35)
+    sandbox_network: bool = True                 # may sandboxed commands use the network?
     audit_log: bool = True                       # keep the audit log in your settings folder (Lesson 34)
     redact_secrets: bool = True                  # hide secrets in tool results and exports (Lesson 34)
     limits: dict = field(default_factory=lambda: dict(DEFAULT_LIMITS))   # per chat: tool_calls, cost ($), tokens, minutes
@@ -90,7 +93,7 @@ TYPES: dict[str, tuple] = {
     "context_window": (int,), "max_output_tokens": (int,), "max_steps": (int,), "stream": (bool,), "think": (bool,),
     "shell": (str, type(None)), "max_retries": (int,), "prices": (dict,),
     "output_style": (str,), "status_line": (str, type(None)), "additional_directories": (list,),
-    "permission_mode": (str,), "permissions": (dict,), "shell_env_keep": (list,), "fence_untrusted": (bool,), "web_fetch": (bool,), "hooks": (dict,), "audit_log": (bool,), "redact_secrets": (bool,),
+    "permission_mode": (str,), "permissions": (dict,), "shell_env_keep": (list,), "fence_untrusted": (bool,), "web_fetch": (bool,), "hooks": (dict,), "audit_log": (bool,), "sandbox": (str,), "sandbox_network": (bool,), "redact_secrets": (bool,),
     "limits": (dict,), "web_allow_local": (list,),
 }
 # Settings a project file may not set, and why: a cloned repository could otherwise run its own
@@ -103,6 +106,8 @@ NOT_FROM_PROJECT = {
     "fence_untrusted": "it removes a protection against instructions hidden in files and web pages",
     "web_allow_local": "it lets web_fetch reach servers on your own machine and network",
     "audit_log": "it could switch off the record of what the agent did",
+    "sandbox": "it could switch off the sandbox that confines commands",
+    "sandbox_network": "it could give sandboxed commands the network",
     "redact_secrets": "it would let secrets reach the model and your exports",
     "limits": "it could raise the limits that stop a runaway session",
 }
@@ -139,6 +144,8 @@ def check_layer(data: dict, where: str) -> list[str]:
             check_rules(value, where)
         if key == "limits":
             check_limits(value, where)
+        if key == "sandbox" and value not in SANDBOX_MODES:
+            raise ConfigError(f"{where}: 'sandbox' must be one of {', '.join(SANDBOX_MODES)}")
         if key == "hooks":
             try:
                 check_hooks(value, where)

@@ -17,9 +17,11 @@ from harness.agent import Agent
 from harness.messages import ToolCall
 from harness.providers.fake import ScriptedProvider, text, tool_calls
 from harness.security.permissions import Permissions
+from harness.security.sandbox import detect as detect_sandbox
 from harness.tools import default_tools
 from harness.workspace import Workspace
 
+SANDBOX = detect_sandbox()   # None on Windows, or where bubblewrap / sandbox-exec isn't installed
 SECRET = "TOP-SECRET-outside-the-workspace"
 API_KEY = "sk-lab-0123456789abcdefghijklmnop"   # fake, but shaped like a real key
 
@@ -59,7 +61,7 @@ class Lab:
     def attack(self, *calls: ToolCall) -> str:
         """Run the calls as one model turn; return everything the model saw afterwards."""
         self.provider = ScriptedProvider([tool_calls(*calls), text("done")])
-        Agent(self.provider, default_tools(self.ws), "lab", approve=self.approve, stream=False,
+        Agent(self.provider, default_tools(self.ws, sandbox=SANDBOX), "lab", approve=self.approve, stream=False,
               permissions=self.permissions, fence_untrusted=True, redact_results=True).run("go")
         last_request = self.provider.requests[-1][0]
         return "\n".join(m.content or "" for m in last_request if m.role == "tool")

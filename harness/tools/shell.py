@@ -15,6 +15,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from harness.security.sandbox import Sandbox
 from harness.security.secrets import scrub_env
 from harness.tools.base import Tool, tool
 from harness.workspace import Workspace
@@ -112,10 +113,13 @@ def clip(text: str, budget: int) -> str:
             f"{text[len(text) - tail:]}")
 
 
-def run_command(shell: Shell, command: str, cwd: Path, timeout: int,
-                env_keep=()) -> tuple[int | None, str, str, float]:
-    """Run one command. Returns (exit code or None on timeout, stdout, stderr, seconds)."""
+def run_command(shell: Shell, command: str, cwd: Path, timeout: int, env_keep=(), sandbox: Sandbox | None = None,
+                network: bool = True) -> tuple[int | None, str, str, float]:
+    """Run one command. Returns (exit code or None on timeout, stdout, stderr, seconds). With a sandbox
+    (Lesson 35) the command runs inside it: writes only in the workspace, protected folders read-only."""
     argv = shell.command_line(command)
+    if sandbox is not None:
+        argv = sandbox.wrap(argv, cwd, cwd, network)
     kwargs: dict = {}
     if os.name == "nt":
         kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
@@ -135,7 +139,8 @@ def run_command(shell: Shell, command: str, cwd: Path, timeout: int,
             time.monotonic() - start)
 
 
-def make_shell_tools(ws: Workspace, shell: Shell | None = None, env_keep=()) -> list[Tool]:
+def make_shell_tools(ws: Workspace, shell: Shell | None = None, env_keep=(), sandbox: Sandbox | None = None,
+                     sandbox_network: bool = True, sandbox_required: bool = False) -> list[Tool]:
     shell = shell or detect_shell()
 
     @tool(read_only=False, concurrency_safe=False, max_result_chars=OUTPUT_BUDGET + 1_000, content_kind="command")
@@ -153,7 +158,10 @@ def make_shell_tools(ws: Workspace, shell: Shell | None = None, env_keep=()) -> 
         """
         folder = ws.root
         timeout = max(1, min(timeout, MAX_TIMEOUT))
-        code, out, err, seconds = run_command(shell, command, folder, timeout, env_keep)
+        if sandbox is None and sandbox_required:
+            return ("Error: commands are switched off: the settings require a sandbox and this machine has none "
+                    "(sandbox: \"on\"). Tell the user.")
+        code, out, err, seconds = run_command(shell, command, folder, timeout, env_keep, sandbox, sandbox_network)
 
         if code is None:
             status = f"TIMED OUT after {timeout} s; the command and its child processes were stopped"
@@ -170,5 +178,7 @@ def make_shell_tools(ws: Workspace, shell: Shell | None = None, env_keep=()) -> 
         return "\n".join(parts)
 
     run_shell.dialect = shell.dialect
-    run_shell.description +=f"\n\nShell: {shell.name}. {shell.hint}"
+    run_shell.description += f"\n\nShell: {shell.name}. {shell.hint}"
+    if sandbox is not None:
+        run_shell.description += "\n\n" + sandbox.describe(sandbox_network).capitalize() + "."
     return [run_shell]

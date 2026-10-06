@@ -17,6 +17,8 @@ from harness.limits import Limits
 from harness.providers.factory import make_provider
 from harness.providers.retry import RetryingProvider
 from harness.security.permissions import MODES, Permissions
+from harness.security.sandbox import detect as detect_sandbox
+from harness.security.sandbox import hint as sandbox_hint
 from harness.security.taint import SYSTEM_RULE
 from harness.security.trust import is_trusted
 from harness.styles import BUILTIN, Style, apply_style
@@ -54,8 +56,13 @@ class Session:
         self.costs = CostTracker(settings.provider, self.provider.model, settings.prices)
         self.permissions = Permissions.from_settings(ws, settings.permission_mode, settings.permissions)
         self.permissions.taint.trusted = is_trusted(ws.root, config.USER_DIR)
+        self.sandbox = detect_sandbox() if settings.sandbox != "off" else None
+        required = settings.sandbox == "on" and self.sandbox is None
+        if required:
+            ui.warn(f"warning: sandbox is \"on\" but this machine has none, so commands are refused ({sandbox_hint()})")
         tools = default_tools(ws, shell=settings.shell, env_keep=settings.shell_env_keep, web=settings.web_fetch,
-                              web_allow_local=settings.web_allow_local)
+                              web_allow_local=settings.web_allow_local, sandbox=self.sandbox,
+                              sandbox_network=settings.sandbox_network, sandbox_required=required)
         for warning in self.permissions.unknown_tools([t.name for t in tools]):
             ui.warn(f"warning: {warning}")
         self.hooks = Hooks([], ws.root, self.permissions, settings.shell_env_keep)
@@ -75,6 +82,7 @@ class Session:
         self._status_error_shown = False
         self.audit("session", workspace=str(ws.root), provider=settings.provider, model=self.provider.model,
                    mode=self.permissions.mode, trusted=self.permissions.taint.trusted, tools=[t.name for t in tools],
+                   sandbox=self.sandbox.name if self.sandbox else None,
                    hooks=len(self.hooks.hooks))
 
     def make_provider(self, model: str | None):

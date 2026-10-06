@@ -88,7 +88,7 @@ malicious copy of Agent Harness itself.
 | T12 | Approval fatigue | 40 prompts an hour, all answered `y` | permission modes and rules remove routine prompts; prompts show risk | v0.5 |
 | T13 | Runaway use | a loop of tool calls, a huge cloud bill | step limit; limits on calls, time and cost per session | v0.1, v0.5 |
 | T14 | Secrets in logs and transcripts | a key printed by a command, saved in an exported chat | redaction before the model, logs and exports see it | v0.5 |
-| T15 | Persistence | an approved command that installs a scheduled task | approval; OS-level sandboxing (where available) | v0.2, v0.5 |
+| T15 | Persistence | an approved command that installs a scheduled task | approval; OS-level sandbox (Linux, macOS) | v0.2, v0.5 |
 
 ## Defense layers
 A tool call passes these layers in order. The first layer that decides, decides; anything
@@ -107,6 +107,22 @@ flowchart TD
     RUN --> OUT[6. Results: secrets redacted, untrusted content marked]
     OUT --> LOG[(Audit log)]
 ```
+
+## The attack lab
+Every threat above that code can stop has a test in `tests/security/`, written as the safe outcome and run through
+the real agent loop with a hostile "model" and a user who never answers yes. `python scripts/attack_report.py` prints
+the results by threat.
+
+| | v0.4 (before the security work) | v0.5 |
+|---|---|---|
+| attacks stopped | 3 | **66** |
+| known to get through | 9 | **1** (on Windows; 0 where a sandbox exists) |
+
+Open at the time of writing: a command that builds a protected path while it runs
+(`python -c "open('.g'+'it/...')"`). Text analysis can't see it; only the
+[sandbox](user-guide/sandbox.md) closes it, so on a machine without one the test is an expected failure that names
+this reason. The v0.4 row is the lab as first written (12 tests), before any of the defenses in
+[ADR 0024](adr/0024-deterministic-security-decisions.md) to 0032 existed.
 
 ## Prompt injection
 Text the agent reads (files, command output, web pages) can contain instructions aimed at the model, and a
@@ -146,9 +162,9 @@ These remain even with every defense in place. Know them before you approve thin
   `ANTHROPIC_API_KEY`, and a key written in a file shown by `read_file(".env")`
   is hidden by redaction (below), which matches shapes: a secret with no recognisable shape isn't caught,
   and a fixture key in a test file is. Keys belong in environment variables.
-- **Windows has no simple sandbox** for commands. Where the OS offers one, v0.5 documents how
-  to use it; otherwise use a dedicated user account, a virtual machine or a container for
-  untrusted projects.
+- **Windows has no sandbox we can start** for commands (Linux has bubblewrap, macOS `sandbox-exec`: see
+  [the command sandbox](user-guide/sandbox.md)). On Windows use WSL 2, a container, a virtual machine or a
+  dedicated user account for untrusted projects. Those sandboxes are tested here as command lines only.
 - **Prompt injection can't be fully prevented**, only made visible and less effective. Be most
   careful right after the agent has read web pages or files you didn't write.
 - **Cloud providers see what the agent sees.** Use a local model for code that must not leave
@@ -169,6 +185,7 @@ These remain even with every defense in place. Know them before you approve thin
 | Prompt-injection fencing and taint-aware approvals; folder trust | v0.5 (done) |
 | Web fetch with a network guard against private addresses | v0.5 (done) |
 | Hooks (tighten decisions; project hooks only in trusted folders) | v0.5 (done) |
+| OS sandbox for commands (Linux bubblewrap, macOS sandbox-exec; none on Windows) | v0.5 (done, where available) |
 | Secret redaction (tool results, exports) | v0.5 (done) |
 | Audit log (hash-chained, in the user's folder) | v0.5 (done) |
 | Session limits (tool calls, cost, tokens, time) | v0.5 (done) |

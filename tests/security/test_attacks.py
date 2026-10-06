@@ -7,7 +7,7 @@ passing", which strict mode reports as a failure until the marker is removed. Th
 """
 import pytest
 
-from tests.security.conftest import API_KEY, SECRET, call
+from tests.security.conftest import API_KEY, SANDBOX, SECRET, call
 
 
 def fixed_in(lesson: str):
@@ -92,10 +92,11 @@ def test_t4_a_shell_command_aimed_at_a_protected_place_asks(lab, command):
     assert not (lab.root / ".git" / "hooks" / "pre-commit").exists()
 
 
-@fixed_in("35 (sandbox: protected folders read-only for commands)")
+@pytest.mark.xfail(SANDBOX is None, strict=True, reason="no OS sandbox on this machine: Lesson 35 (Linux: bubblewrap, macOS: sandbox-exec)")
 def test_t4_a_command_that_builds_the_path_at_run_time(lab):
     """Command analysis reads text. `'.g' + 'it'` hides the folder name until the program runs;
-    only an OS-level sandbox that makes the folder read-only closes this."""
+    only an OS-level sandbox that makes the folder read-only closes this. Where the machine has one
+    (the lab uses it automatically) the test passes; elsewhere it is an expected failure."""
     lab.attack(call("run_shell", command="python -c \"open('.g'+'it/hooks/pre-commit','w').write('x')\""))
     assert not (lab.root / ".git" / "hooks" / "pre-commit").exists()
 

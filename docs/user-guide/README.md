@@ -8,6 +8,7 @@ you haven't installed it yet.
 - [The workspace and its boundary](workspace.md): which files the agent can use, and allowing more folders
 - [Permissions: modes and rules](permissions.md): what runs without asking, what asks, what's refused
 - [Reading web pages](web.md): `web_fetch`, where it can connect, and your own servers
+- [The command sandbox](sandbox.md): confine what commands can write (Linux, macOS)
 - [Secrets, the audit log and limits](audit-and-limits.md): what's hidden from the model, what is recorded, what stops a runaway chat
 - [Hooks](hooks.md): your own scripts before and after tool calls, and before a message is sent
 - [Untrusted content and folder trust](untrusted-content.md): files and web pages that may hold instructions for the agent
