@@ -32,6 +32,9 @@ class ConfigError(Exception):
     """A settings file is invalid. The message names the file and the key."""
 
 
+DEFAULT_LIMITS = {"tool_calls": 500, "cost": 5.0, "tokens": None, "minutes": None}   # None: no limit
+
+
 @dataclass
 class Settings:
     provider: str = "ollama"
@@ -57,6 +60,9 @@ class Settings:
     # {"pre_tool_use": [{"command", "match", "timeout"}], ...} in files; after loading, every layer's hooks as
     # [{"event", "command", "match", "timeout", "source"}] (hooks add up across layers, like rules; Lesson 33)
     hooks: list = field(default_factory=list)
+    audit_log: bool = True                       # keep the audit log in your settings folder (Lesson 34)
+    redact_secrets: bool = True                  # hide secrets in tool results and exports (Lesson 34)
+    limits: dict = field(default_factory=lambda: dict(DEFAULT_LIMITS))   # per chat: tool_calls, cost ($), tokens, minutes
     web_fetch: bool = True                       # give the agent the web_fetch tool (Lesson 32)
     web_allow_local: list = field(default_factory=list)   # "host" or "host:port" entries web_fetch may reach on this machine
     fence_untrusted: bool = True                 # wrap file text, command output, web pages in <untrusted> tags (Lesson 31)
@@ -84,7 +90,8 @@ TYPES: dict[str, tuple] = {
     "context_window": (int,), "max_output_tokens": (int,), "max_steps": (int,), "stream": (bool,), "think": (bool,),
     "shell": (str, type(None)), "max_retries": (int,), "prices": (dict,),
     "output_style": (str,), "status_line": (str, type(None)), "additional_directories": (list,),
-    "permission_mode": (str,), "permissions": (dict,), "shell_env_keep": (list,), "fence_untrusted": (bool,), "web_fetch": (bool,), "hooks": (dict,), "web_allow_local": (list,),
+    "permission_mode": (str,), "permissions": (dict,), "shell_env_keep": (list,), "fence_untrusted": (bool,), "web_fetch": (bool,), "hooks": (dict,), "audit_log": (bool,), "redact_secrets": (bool,),
+    "limits": (dict,), "web_allow_local": (list,),
 }
 # Settings a project file may not set, and why: a cloned repository could otherwise run its own
 # code on your machine, or give the agent access to your other folders, just by being opened.
@@ -95,6 +102,9 @@ NOT_FROM_PROJECT = {
     "shell_env_keep": "it hands your secret environment variables to commands",
     "fence_untrusted": "it removes a protection against instructions hidden in files and web pages",
     "web_allow_local": "it lets web_fetch reach servers on your own machine and network",
+    "audit_log": "it could switch off the record of what the agent did",
+    "redact_secrets": "it would let secrets reach the model and your exports",
+    "limits": "it could raise the limits that stop a runaway session",
 }
 RULE_ACTIONS = ("allow", "ask", "deny")
 
@@ -127,6 +137,8 @@ def check_layer(data: dict, where: str) -> list[str]:
             raise ConfigError(f"{where}: 'permission_mode' must be one of {', '.join(MODES)}")
         if key == "permissions":
             check_rules(value, where)
+        if key == "limits":
+            check_limits(value, where)
         if key == "hooks":
             try:
                 check_hooks(value, where)
@@ -137,6 +149,15 @@ def check_layer(data: dict, where: str) -> list[str]:
         if isinstance(value, str) and SECRET_VALUES.search(value):
             raise ConfigError(f"{where}: '{key}' contains what looks like an API key. Use an environment variable")
     return warnings
+
+
+def check_limits(limits: dict, where: str) -> None:
+    unknown = set(limits) - set(DEFAULT_LIMITS)
+    if unknown:
+        raise ConfigError(f"{where}: unknown limit(s) {', '.join(sorted(unknown))}; choose from {', '.join(DEFAULT_LIMITS)}")
+    for name, value in limits.items():
+        if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0):
+            raise ConfigError(f"{where}: limits['{name}'] must be a positive number, or null for no limit")
 
 
 def check_rules(permissions: dict, where: str) -> None:
@@ -223,6 +244,8 @@ def load_settings(workspace: Path, flags: dict | None = None, environ=None) -> t
                 if key == "permissions":                 # so do rules, each keeping its source
                     value = settings.permissions + [{"action": action, "rule": rule, "source": label}
                                                     for action in RULE_ACTIONS for rule in value.get(action, [])]
+                if key == "limits":                      # a layer can change some limits and leave the rest
+                    value = {**settings.limits, **value}
                 if key == "hooks":                       # hooks add up too, each remembering its layer
                     value = settings.hooks + [{"event": event, "command": h["command"].strip(), "match": h.get("match"),
                                                "timeout": h.get("timeout", 10), "source": label}

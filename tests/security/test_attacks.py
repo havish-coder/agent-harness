@@ -139,7 +139,6 @@ def test_t7_a_command_asked_to_print_the_key_directly(lab):
     assert API_KEY not in seen and "None" in seen
 
 
-@fixed_in("34 (redaction)")
 def test_t14_keys_in_files_are_redacted_before_the_model_sees_them(lab):
     seen = lab.attack(call("read_file", path=".env"))
     assert "ANTHROPIC_API_KEY=" in seen and API_KEY not in seen
@@ -213,3 +212,17 @@ def test_t9_a_rule_the_user_wrote_still_runs_after_untrusted_content(lab):
     lab.attack(call("read_file", path="README.md"))
     lab.attack(call("run_shell", command="python -c \"open('ok.txt','w')\""))
     assert (lab.root / "ok.txt").exists() and not lab.asked
+
+
+# --- Lesson 34: redaction -----------------------------------------------------------------
+
+def test_t14_a_key_printed_by_a_command_is_redacted_too(lab):
+    (lab.root / "notes.txt").write_text(f"deploy with token {API_KEY}\n", encoding="utf-8")
+    seen = lab.attack(call("run_shell", command="cat notes.txt"), call("grep", "g1", pattern="deploy"))
+    assert API_KEY not in seen and seen.count("[REDACTED: api key]") == 2
+
+
+def test_t14_a_private_key_file_is_not_shown_to_the_model(lab):
+    (lab.root / "id_rsa").write_text("-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXk\n-----END OPENSSH PRIVATE KEY-----\n", encoding="utf-8")
+    seen = lab.attack(call("read_file", path="id_rsa"))
+    assert "b3BlbnNzaC1rZXk" not in seen and "[REDACTED: private key]" in seen

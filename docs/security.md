@@ -143,8 +143,9 @@ These remain even with every defense in place. Know them before you approve thin
   and can't be checked against deny rules beyond what is visible. `bypass` mode is for throwaway
   folders; an OS sandbox that makes protected folders read-only for commands would close the gap.
 - **Secrets in files are not secrets in the environment.** Commands no longer see
-  `ANTHROPIC_API_KEY`, but `read_file(".env")` still shows a key written in a file to the model
-  (redaction comes in a later lesson). Keys belong in environment variables.
+  `ANTHROPIC_API_KEY`, and a key written in a file shown by `read_file(".env")`
+  is hidden by redaction (below), which matches shapes: a secret with no recognisable shape isn't caught,
+  and a fixture key in a test file is. Keys belong in environment variables.
 - **Windows has no simple sandbox** for commands. Where the OS offers one, v0.5 documents how
   to use it; otherwise use a dedicated user account, a virtual machine or a container for
   untrusted projects.
@@ -168,4 +169,6 @@ These remain even with every defense in place. Know them before you approve thin
 | Prompt-injection fencing and taint-aware approvals; folder trust | v0.5 (done) |
 | Web fetch with a network guard against private addresses | v0.5 (done) |
 | Hooks (tighten decisions; project hooks only in trusted folders) | v0.5 (done) |
-| Audit log, secret redaction, session limits | v0.5 |
+| Secret redaction (tool results, exports) | v0.5 (done) |
+| Audit log (hash-chained, in the user's folder) | v0.5 (done) |
+| Session limits (tool calls, cost, tokens, time) | v0.5 (done) |

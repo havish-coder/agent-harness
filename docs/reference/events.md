@@ -16,6 +16,9 @@ agent = Agent(provider, tools, system_prompt, on_event=on_event)
 | `tool_call` | `ToolCall` | the model asked for this call (emitted before it is checked or run) |
 | `permission` | `(ToolCall, Decision)` | the permission decision for a call: `Decision.action` is `allow`, `ask` or `deny`, `Decision.reason` says why ([permissions](../user-guide/permissions.md)) |
 | `hook` | `(event, ToolCall or None, HookResult)` | a [hook](../user-guide/hooks.md) answered, added context or failed; `event` is `user_prompt_submit`, `pre_tool_use` or `post_tool_use` |
+| `tool_approved` | `(ToolCall, answer)` | the user said yes (`True`) or "always" to a question |
+| `redacted` | `(ToolCall, [kinds])` | secrets were found and hidden in a tool result |
+| `limit` | `str` | a session limit was reached; the string says which |
 | `tool_refused` | `(ToolCall, str)` | the permissions denied a call (a deny rule, plan mode, a path outside the workspace); the string is the reason |
 | `tool_denied` | `ToolCall` | the user answered no; the model receives a denial message instead of a result |
 | `tool_result` | `(ToolCall, str)` | after every call, run or not; the string is exactly what the model will read |
@@ -28,6 +31,7 @@ After `run()` returns or raises, `agent.stop_reason` says why the turn ended:
 | `completed` | the model gave a final answer |
 | `max_steps` | the step limit was reached first |
 | `max_tokens` | the final answer was cut off by the output-token limit |
+| `limit` | a session limit (tool calls, cost, tokens, minutes) was reached; the model wasn't called again |
 | `blocked` | a `user_prompt_submit` hook refused the message; the model was never called and nothing was added to the conversation |
 | `cancelled` | Ctrl+C (`KeyboardInterrupt`); the turn was rolled back |
 | `error` | an exception (e.g. the model server failed); the turn was rolled back |

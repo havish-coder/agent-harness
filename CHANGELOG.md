@@ -64,6 +64,15 @@ is below 1.0, minor releases may contain breaking changes.
   `allow` only settles a routine question, never a deny rule, protected path, ask rule, plan mode or the pause
   after untrusted content; a hook that fails, times out or answers badly never allows (it asks). Project hooks run
   only in a trusted folder; `/hooks` lists them. `hooks` setting; `hook` event; `blocked` stop reason.
+- Secret redaction (ADR 0031): tool results are scrubbed before the model, the screen or the log sees them
+  (provider API keys, GitHub, AWS, Slack, Stripe tokens, JWTs, bearer tokens, passwords in URLs, private key
+  blocks, and `NAME=value` where the name says secret); exported chats too. `redact_secrets` setting.
+- Audit log: a hash-chained JSON-lines file in `~/.harness/audit/` with every decision, answer, result size,
+  hook, hidden secret, model call and limit; values redacted and cut; `/audit [N|verify]`; `audit_log` setting.
+- Session limits: 500 tool calls and $5 per chat by default, optional tokens and minutes; the agent stops and
+  says which; `/limits`; `limits` setting; `limit` event and stop reason. A project can't change `audit_log`,
+  `redact_secrets` or `limits`.
+- `tool_approved`, `redacted` and `limit` events.
 - `permission` and `tool_refused` events; `model_call` is now documented.
 - User guide: [permissions](docs/user-guide/permissions.md).
 
@@ -79,6 +88,8 @@ is below 1.0, minor releases may contain breaking changes.
   routine, and don't offer `a` for protected paths.
 - Project settings can't set `permission_mode` or add `allow` rules (ignored with a warning).
 - Tool calls in a batch are all checked and decided before any of them runs.
+- Names like `MONKEY` are no longer treated as secrets (a glued ending counts only after a prefix such as `API` or `GITHUB`).
+- The test suite no longer touches the real `~/.harness`.
 - The system instruction about `<untrusted>` tags and the `web_fetch` description were reworded after a measurement:
   the first versions made `qwen3:4b-instruct` decline to call the tool in some runs.
 - `/tools` labels tools that aren't read-only "can change things" (they no longer all ask: see permissions).

@@ -146,6 +146,7 @@ def main(argv=None):
         else:
             run_turn(session, watcher, command.expand(rest))
 
+    session.close()
     if session.costs.models:
         ui.info(f"session: {session.costs.summary()}")
 

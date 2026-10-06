@@ -12,6 +12,7 @@ from pathlib import Path
 
 from harness.config import USER_DIR
 from harness.messages import Message
+from harness.security.redact import redacted
 from harness.tui.latex import tighten
 
 ATTACHED = re.compile(r"\n\nThe user attached these with @.*", re.DOTALL)
@@ -55,7 +56,7 @@ def chat_markdown(messages: list[Message], title: str, model: str, last_only: bo
             for c in m.tool_calls:
                 args = ", ".join(f"{k}={str(v)[:60]!r}" for k, v in c.arguments.items())
                 lines += [f"> *used* `{c.name}({args})`", ""]
-    return "\n".join(lines).rstrip() + "\n"
+    return redacted("\n".join(lines).rstrip() + "\n")    # an exported chat leaves the machine: no secrets in it (Lesson 34)
 
 
 def for_latex(markdown: str) -> str:

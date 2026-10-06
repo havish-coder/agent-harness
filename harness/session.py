@@ -3,13 +3,17 @@
 Interfaces (the terminal now, the web server later) build a Session and talk to it; commands
 receive it so they can act on the running app (switch the model, show costs, reset).
 """
+import datetime
 import json
 import subprocess
+import uuid
 
 from harness import config
 from harness.agent import Agent
+from harness.audit import AuditLog
 from harness.config import Settings
 from harness.hooks import Hooks, from_entries
+from harness.limits import Limits
 from harness.providers.factory import make_provider
 from harness.providers.retry import RetryingProvider
 from harness.security.permissions import MODES, Permissions
@@ -56,12 +60,22 @@ class Session:
             ui.warn(f"warning: {warning}")
         self.hooks = Hooks([], ws.root, self.permissions, settings.shell_env_keep)
         self.refresh_hooks(announce=True)
+        lim = settings.limits
+        self.limits = Limits(lim.get("tool_calls"), lim.get("cost"), lim.get("tokens"), lim.get("minutes"))
+        self.cost_base = 0.0                   # the money spent before this chat started (after /reset)
+        self.session_id = uuid.uuid4().hex[:8]
+        month = datetime.date.today().strftime("%Y-%m")
+        self.audit_log = AuditLog(config.USER_DIR / "audit" / f"{month}.jsonl", self.session_id) if settings.audit_log else None
+        self._audit_warned = False
         self.agent = Agent(self.provider, tools,
                            apply_style(self.base_prompt, self.style), max_steps=settings.max_steps,
                            on_event=self.on_event, approve=approver, stream=settings.stream,
                            permissions=self.permissions, fence_untrusted=settings.fence_untrusted,
-                           hooks=self.hooks)
+                           hooks=self.hooks, redact_results=settings.redact_secrets, limit_check=self.limit_reason)
         self._status_error_shown = False
+        self.audit("session", workspace=str(ws.root), provider=settings.provider, model=self.provider.model,
+                   mode=self.permissions.mode, trusted=self.permissions.taint.trusted, tools=[t.name for t in tools],
+                   hooks=len(self.hooks.hooks))
 
     def make_provider(self, model: str | None):
         s = self.settings
@@ -73,7 +87,61 @@ class Session:
         if kind == "model_reply":
             self.costs.add(data)
             self.context_tokens = data.usage.input_tokens + data.usage.output_tokens
+            self.limits.tokens += data.usage.input_tokens + data.usage.output_tokens
+        elif kind == "tool_call":
+            self.limits.tool_calls += 1        # every call the model asks for, run or refused
+        self.record(kind, data)
         self.ui(kind, data)
+
+    # --- limits and the audit log (Lesson 34) ---------------------------------------------------
+    def limit_reason(self) -> str | None:
+        cost = self.costs.cost()
+        return self.limits.exceeded(cost=None if cost is None else cost - self.cost_base)
+
+    def audit(self, kind: str, **fields) -> None:
+        """One line in the audit log (a no-op when it's off). A log that can't be written is reported once."""
+        if self.audit_log is None:
+            return
+        self.audit_log.write(kind, **fields)
+        if self.audit_log.failed and not self._audit_warned:
+            self._audit_warned = True
+            self.ui.warn(f"warning: the audit log can't be written ({self.audit_log.path}); the agent keeps working")
+
+    def record(self, kind: str, data) -> None:
+        """Turn agent events into audit entries: what was decided, approved, run, hidden, stopped."""
+        if self.audit_log is None:
+            return
+        if kind == "permission":
+            call, decision = data
+            tool = self.agent.tools.get(call.name)
+            subject = call.arguments.get(tool.subject) if tool is not None and tool.subject else call.arguments
+            self.audit("decision", tool=call.name, subject=subject, action=decision.action, reason=decision.reason,
+                       notes=decision.notes or None)
+        elif kind == "tool_approved":
+            self.audit("approved", tool=data[0].name, answer=data[1] if isinstance(data[1], str) else "yes")
+        elif kind == "tool_denied":
+            self.audit("user_denied", tool=data.name)
+        elif kind == "tool_result":
+            call, result = data
+            self.audit("result", tool=call.name, chars=len(result), error=result.startswith("Error") or None)
+        elif kind == "redacted":
+            self.audit("redacted", tool=data[0].name, kinds=data[1])
+        elif kind == "hook":
+            event, call, outcome = data
+            self.audit("hook", hook=event, tool=call.name if call else None,
+                       command=outcome.hook.command if outcome.hook else None, decision=outcome.decision,
+                       failed=outcome.failed)
+        elif kind == "model_reply":
+            self.audit("model", model=data.model or self.provider.model, input_tokens=data.usage.input_tokens,
+                       output_tokens=data.usage.output_tokens, stop=data.stop_reason)
+        elif kind == "limit":
+            self.audit("limit", why=data)
+
+    def close(self) -> None:
+        """The chat is over: record the totals."""
+        cost = self.costs.cost()
+        self.audit("end", tool_calls=self.limits.tool_calls, tokens=self.limits.tokens,
+                   cost=None if cost is None else round(cost, 6))
 
     def set_style(self, name: str) -> None:
         """Change how the agent writes, from the next model call on. The conversation is kept."""
@@ -98,6 +166,7 @@ class Session:
         """Switch the permission mode (Lesson 29); rules and the conversation are kept."""
         if mode not in MODES:
             raise ValueError(f"unknown mode '{mode}'; choose from {', '.join(MODES)}")
+        self.audit("mode", before=self.permissions.mode, after=mode)
         self.permissions.mode = self.settings.permission_mode = mode
         self.settings.sources["permission_mode"] = "command"
 
@@ -151,5 +220,7 @@ class Session:
 
     def reset(self) -> None:
         self.agent.reset()
+        self.limits.reset()
+        self.cost_base = self.costs.cost() or 0.0
         self.permissions.taint.clear()   # a new conversation has read nothing yet
         self.ws.forget_reads()   # the model no longer has earlier reads in its context

@@ -13,6 +13,7 @@ Two kinds:
     Explain $ARGUMENTS to a beginner, step by step, with an example.
 """
 import re
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -200,6 +201,7 @@ def _trust_command(trusting: bool):
         from harness import config
         from harness.security.trust import set_trusted
         set_trusted(session.ws.root, config.USER_DIR, trusting)
+        session.audit("trust", folder=str(session.ws.root), trusted=trusting)
         session.permissions.taint.trusted = trusting
         session.refresh_hooks()
         if trusting:
@@ -218,10 +220,42 @@ def _hooks(session, args):
     return "\n".join(f"{'runs    ' if h in session.hooks.hooks else 'not run '} {h}" for h in everything)
 
 
+def _audit(session, args):
+    """/audit [N] · /audit verify"""
+    from harness.audit import format_entry, verify
+    log = session.audit_log
+    if log is None:
+        return "the audit log is off (set \"audit_log\": true in your settings to keep one)"
+    if args == "verify":
+        ok, count, why = verify(log.path)
+        return f"{log.path}: {count} entries, chain intact" if ok else f"{log.path}: BROKEN after {count} entries: {why}"
+    n = int(args) if args.isdigit() else 15
+    rows = [format_entry(e) for e in log.tail(n)]
+    return "\n".join([f"audit log: {log.path} (this chat is session {log.session})", *rows]) if rows else "the audit log is empty"
+
+
+def _limits(session, args):
+    """/limits: what this chat has used, against each limit."""
+    limits, cost = session.limits, session.costs.cost()
+    spent = None if cost is None else cost - session.cost_base
+    minutes = (time.monotonic() - limits.started) / 60
+
+    def row(name, used, limit):
+        shown = "no limit" if limit is None else limit if isinstance(limit, str) else f"{limit:,}"
+        return f"{name:<11} {used} of {shown}"
+    return "\n".join([row("tool calls", limits.tool_calls, limits.max_tool_calls),
+                      row("tokens", f"{limits.tokens:,}", limits.max_tokens),
+                      row("cost", "price unknown" if spent is None else f"${spent:.2f}",
+                          None if limits.max_cost is None else f"${limits.max_cost:.2f}"),
+                      row("minutes", f"{minutes:.0f}", limits.max_minutes),
+                      "Limits are per chat (/reset starts again). Change them under \"limits\" in your user or local settings."])
+
+
 def _taint(session, args):
     """/taint · /taint clear"""
     taint = session.permissions.taint
     if args == "clear":
+        session.audit("taint_cleared", sources=list(taint.sources))
         taint.clear()
         return "cleared: broad approvals (modes, rules for a whole tool) apply again"
     where = "trusted" if taint.trusted else "NOT trusted (/trust to trust it)"
@@ -300,6 +334,8 @@ def builtin_commands() -> list[Command]:
         Command("mode", "show the permission mode, or switch to another one", run=_mode, argument_hint="[mode]"),
         Command("trust", "trust this folder: its files are yours, not untrusted content", run=_trust_command(True)),
         Command("untrust", "stop trusting this folder", run=_trust_command(False)),
+        Command("audit", "the audit log: recent entries, or `verify` to check it wasn't altered", run=_audit, argument_hint="[N|verify]"),
+        Command("limits", "what this chat has used against its limits", run=_limits),
         Command("hooks", "the hooks in your settings, and whether each runs", run=_hooks),
         Command("taint", "what untrusted content this chat has read; clear it", run=_taint, argument_hint="[clear]"),
         Command("permissions", "the permission rules; add or remove one for this session", run=_permissions,

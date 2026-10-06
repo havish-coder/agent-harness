@@ -13,6 +13,7 @@ from harness.hooks import Hooks
 from harness.messages import Message, Reply, ToolCall, Usage
 from harness.providers.base import Provider, ProviderError, StreamingProvider, TextDelta, ThinkingDelta
 from harness.security.permissions import CHANGES, AskForChanges, Decision, Permissions
+from harness.security.redact import redact
 from harness.security.taint import fence
 from harness.tools.base import Tool
 from harness.tools.registry import ToolRegistry
@@ -38,7 +39,8 @@ class Agent:
                  max_steps: int = 10, on_event: EventHandler | None = None,
                  approve: Approver | None = None, stream: bool = True,
                  permissions: Permissions | None = None, fence_untrusted: bool = False,
-                 hooks: Hooks | None = None):
+                 hooks: Hooks | None = None, redact_results: bool = False,
+                 limit_check: Callable[[], str | None] | None = None):
         self.provider = provider
         self.tools = tools if isinstance(tools, ToolRegistry) else ToolRegistry(tools)
         self.system_prompt = system_prompt
@@ -48,6 +50,8 @@ class Agent:
         self.permissions = permissions or AskForChanges()   # decides allow / ask / deny (Lesson 29)
         self._approve_takes_decision = approve is not None and _accepts(approve, "decision")
         self.stream = stream        # use the provider's stream() when it has one (Lesson 16)
+        self.redact_results = redact_results     # hide secrets in tool results (Lesson 34)
+        self.limit_check = limit_check           # returns why the session must stop, or None (Lesson 34)
         self.hooks = hooks          # the user's scripts at fixed points (Lesson 33)
         self.fence_untrusted = fence_untrusted   # wrap outside content in <untrusted> tags (Lesson 31)
         self.usage = Usage()
@@ -74,6 +78,12 @@ class Agent:
 
         try:
             for _ in range(self.max_steps):  # stop condition #2: never loop forever
+                why = self.limit_check() if self.limit_check else None
+                if why:                       # stop condition #3: a session-wide limit (Lesson 34)
+                    self.stop_reason = "limit"
+                    self.on_event("limit", why)
+                    return (f"(stopped: {why}. /limits shows the limits; raise one in your settings, "
+                            "or /reset to start a new chat)")
                 reply = self.call_model(schemas)
                 self.usage += reply.usage
                 self.messages.append(reply.message)
@@ -91,6 +101,7 @@ class Agent:
                         self.on_event("tool_call", call)
                     outcomes = self.execute_outcomes(batch)
                     for call, (result, ran) in zip(batch, outcomes, strict=True):  # in the order the model asked
+                        result = self.hide_secrets(call, result)
                         result = self.note_repeats(seen, call, result)
                         from_hooks = self.post_hooks(call, result) if ran else ""     # the user's own words: not fenced
                         self.on_event("tool_result", (call, result + from_hooks))
@@ -150,6 +161,15 @@ class Agent:
             else:
                 groups.append((safe, [call]))    # start a new batch (an unsafe call is always alone)
         return [batch for _, batch in groups]
+
+    def hide_secrets(self, call: ToolCall, result: str) -> str:
+        """Replace secrets in a tool result before anyone, the model included, reads it (Lesson 34)."""
+        if not self.redact_results:
+            return result
+        found = redact(result)
+        if found.count:
+            self.on_event("redacted", (call, found.found))
+        return found.text
 
     def mark_untrusted(self, call: ToolCall, result: str, ran: bool) -> str:
         """What the model reads for this result (Lesson 31). Text that carries content someone else
@@ -221,6 +241,7 @@ class Agent:
             if not answer:
                 self.on_event("tool_denied", call)
                 return None, DENIED
+            self.on_event("tool_approved", (call, answer))
             if answer == "always" and decision.remember:
                 self.permissions.remember(decision.remember)
         return tool, None

@@ -13,7 +13,11 @@ SECRET_VALUES = re.compile(r"\b(sk-[A-Za-z0-9_-]{16,}|sk-ant-[A-Za-z0-9_-]{16,}|
 
 SECRET_WORDS = {"KEY", "KEYS", "TOKEN", "TOKENS", "SECRET", "SECRETS", "PASSWORD", "PASSWD", "PASS", "AUTH",
                 "COOKIE", "COOKIES", "CREDENTIAL", "CREDENTIALS", "PAT", "DSN", "APIKEY", "AUTHORIZATION"}
-SECRET_ENDINGS = ("KEY", "TOKEN", "SECRET", "PASSWORD", "PASSWD", "CREDENTIALS")   # APIKEY, GITHUBTOKEN
+SECRET_ENDINGS = ("KEY", "TOKEN", "SECRET", "PASSWORD", "PASSWD", "CREDENTIALS")
+# Words glued together (APIKEY, GITHUBTOKEN): the ending counts only after a prefix that says what it is for,
+# so MONKEY and TURKEY aren't secrets.
+GLUED_PREFIXES = {"API", "ACCESS", "SECRET", "PRIVATE", "AUTH", "GITHUB", "GITLAB", "SLACK", "BOT", "SESSION", "REFRESH",
+                  "BEARER", "CLIENT", "DB", "APP", "SIGNING", "MASTER", "ENCRYPTION", "OPENAI", "ANTHROPIC", "STRIPE"}
 
 
 def words(name: str) -> list[str]:
@@ -24,7 +28,10 @@ def words(name: str) -> list[str]:
 
 def secret_name(name: str) -> bool:
     parts = words(name)
-    return any(p in SECRET_WORDS for p in parts) or (bool(parts) and parts[-1].endswith(SECRET_ENDINGS))
+    if any(p in SECRET_WORDS for p in parts):
+        return True
+    last = parts[-1] if parts else ""
+    return any(last.endswith(end) and last[:-len(end)] in GLUED_PREFIXES for end in SECRET_ENDINGS)
 
 
 def secret_value(value: str) -> bool:
