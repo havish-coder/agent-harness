@@ -1,4 +1,4 @@
-"""Lessons 07-19: a terminal chat app around the agent.
+"""Lessons 07-20: a terminal chat app around the agent.
 
 Run:  harness                               (after `pip install -e .`)
       python -m harness.cli --model qwen3:4b --workspace C:\\some\\folder
@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 from harness.agent import Agent
+from harness.config import ConfigError, describe, load_dotenv, load_settings
 from harness.providers.base import ProviderError
 from harness.providers.factory import PROVIDERS, make_provider
 from harness.providers.retry import RetryingProvider
@@ -114,17 +115,19 @@ class Printer:
 
 def main():
     p = argparse.ArgumentParser(description="Chat with a tool-using agent.")
-    p.add_argument("--provider", default="ollama", choices=PROVIDERS, help="where the model runs")
+    # Defaults live in harness/config.py; a flag left as None means "not given" (Lesson 20).
+    p.add_argument("--provider", default=None, choices=PROVIDERS, help="where the model runs")
     p.add_argument("--model", default=None, help="model name (default for ollama: qwen3:4b-instruct)")
     p.add_argument("--base-url", default=None, help="override the provider's server address")
     p.add_argument("--fallback-model", default=None,
                    help="a model (same provider) to try when the main one keeps failing")
     p.add_argument("--workspace", default="workspace", help="folder the agent can look at")
-    p.add_argument("--max-steps", type=int, default=20)
+    p.add_argument("--max-steps", type=int, default=None)
     p.add_argument("--yes", action="store_true",
                    help="approve every tool call without asking (only for throwaway folders)")
     p.add_argument("--no-stream", action="store_true", help="wait for whole replies instead of streaming")
     p.add_argument("--think", action="store_true", help="for thinking models: show their reasoning separately")
+    p.add_argument("--show-config", action="store_true", help="print the effective settings and where each came from")
     args = p.parse_args()
 
     if os.name == "nt":
@@ -136,18 +139,35 @@ def main():
         sys.exit(f"workspace folder not found: {workspace}")
     ws = Workspace(workspace)
 
+    flags = {"provider": args.provider, "model": args.model, "base_url": args.base_url,
+             "fallback_model": args.fallback_model, "max_steps": args.max_steps,
+             "stream": False if args.no_stream else None, "think": True if args.think else None}
+    try:
+        _, env_warnings = load_dotenv(workspace)
+        settings, warnings = load_settings(workspace, flags)
+    except ConfigError as e:
+        sys.exit(f"settings error: {e}")
+    for warning in env_warnings + warnings:
+        print(f"{YELLOW}warning: {warning}{RESET}")
+    if args.show_config:
+        print(describe(settings))
+        return
+
     system_prompt = SYSTEM_PROMPT.format(snapshot=workspace_snapshot(ws))
     printer = Printer()
+    options = {"temperature": settings.temperature, "think": True if settings.think else None,
+               "context_window": settings.context_window}
     try:
-        think = True if args.think else None
-        provider = make_provider(args.provider, args.model, args.base_url, think=think)
-        fallback = make_provider(args.provider, args.fallback_model, args.base_url) if args.fallback_model else None
+        provider = make_provider(settings.provider, settings.model, settings.base_url, **options)
+        fallback = (make_provider(settings.provider, settings.fallback_model, settings.base_url, **options)
+                    if settings.fallback_model else None)
     except ProviderError as e:
         sys.exit(f"error: {e}")
-    provider = RetryingProvider(provider, fallback=fallback, on_retry=printer.retry)
-    agent = Agent(provider, default_tools(ws), system_prompt, max_steps=args.max_steps, on_event=printer,
-                  approve=TerminalApprover(auto_approve=args.yes), stream=not args.no_stream)
-    print(f"{BOLD}Agent harness{RESET} · {args.provider} · model {provider.model} · workspace {workspace}")
+    provider = RetryingProvider(provider, max_retries=settings.max_retries, fallback=fallback,
+                                on_retry=printer.retry)
+    agent = Agent(provider, default_tools(ws, shell=settings.shell), system_prompt, max_steps=settings.max_steps,
+                  on_event=printer, approve=TerminalApprover(auto_approve=args.yes), stream=settings.stream)
+    print(f"{BOLD}Agent harness{RESET} · {settings.provider} · model {provider.model} · workspace {workspace}")
     print(f"{DIM}Commands: /reset (forget the conversation)  /bye (quit)  ·  Ctrl+C cancels a running task{RESET}")
     if args.yes:
         print(f"{YELLOW}--yes: every tool call runs without asking.{RESET}")

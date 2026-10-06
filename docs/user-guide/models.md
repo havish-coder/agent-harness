@@ -41,6 +41,9 @@ $env:GROQ_API_KEY = "gsk_..."       (PowerShell)
 export GROQ_API_KEY=gsk_...         (bash)
 ```
 
+To avoid setting them in every terminal, put them in a `.env` file (see
+[configuration](configuration.md#api-keys-never-in-settings-files)).
+
 Several providers have free tiers with rate limits. When a provider says you're sending too
 much, the error says `429 (rate limited)`.
 

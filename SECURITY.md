@@ -13,6 +13,10 @@ that can read your files and, from v0.2, change them and run commands.
 
 Use a dedicated workspace folder and don't point the agent at folders containing secrets.
 
+API keys belong in environment variables or a git-ignored `.env` file; settings files that
+contain something that looks like a key are refused. Project settings that change where
+prompts are sent (`provider`, `base_url`) are shown as a warning at startup.
+
 See [docs/security.md](docs/security.md) for the threat model and the planned defenses.
 
 ## Reporting a vulnerability

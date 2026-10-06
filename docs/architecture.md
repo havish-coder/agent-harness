@@ -171,6 +171,7 @@ harness/
     edit.py         edit_file, write_file
     shell.py        run_shell
   workspace.py      path resolution and read tracking for all file tools
+  config.py         settings layers, validation, .env loading
 scripts/            setup check and teaching scripts
 workspace/          a sample folder to try the agent on
 docs/               this documentation

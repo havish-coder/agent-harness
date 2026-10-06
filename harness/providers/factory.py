@@ -19,19 +19,21 @@ OPENAI_COMPATIBLE = {
 PROVIDERS = ["ollama", "anthropic", *OPENAI_COMPATIBLE]
 
 
-def make_provider(name: str = "ollama", model: str | None = None, base_url: str | None = None,
-                  **options) -> Provider:
-    """Create a provider. `options` go to the adapter (e.g. temperature, think)."""
+def make_provider(name: str = "ollama", model: str | None = None, base_url: str | None = None, *,
+                  temperature: float | None = None, think: bool | None = None,
+                  context_window: int | None = None) -> Provider:
+    """Create a provider. Options a backend doesn't support are ignored."""
     if name == "ollama":
         from harness.providers.ollama import OllamaProvider
         kwargs = {"url": base_url} if base_url else {}
-        return OllamaProvider(model=model or "qwen3:4b-instruct", **kwargs, **options)
+        if context_window:
+            kwargs["num_ctx"] = context_window
+        return OllamaProvider(model=model or "qwen3:4b-instruct", temperature=temperature, think=think, **kwargs)
     if name == "anthropic":
         from harness.providers.anthropic import AnthropicProvider
-        options.pop("think", None)
         kwargs = {"base_url": base_url} if base_url else {}
         return AnthropicProvider(model=model or "claude-sonnet-5-5", api_key=os.environ.get("ANTHROPIC_API_KEY"),
-                                 **kwargs, **options)
+                                 temperature=temperature, **kwargs)
     if name in OPENAI_COMPATIBLE:
         from harness.providers.openai_compat import OpenAICompatProvider
         default_url, key_var = OPENAI_COMPATIBLE[name]
@@ -40,6 +42,5 @@ def make_provider(name: str = "ollama", model: str | None = None, base_url: str 
             raise ProviderError(f"provider '{name}' needs an API key: set the {key_var} environment variable")
         if not model:
             raise ProviderError(f"provider '{name}' needs a model name (--model)")
-        options.pop("think", None)          # an Ollama-only option
-        return OpenAICompatProvider(model, base_url=base_url or default_url, api_key=api_key, **options)
+        return OpenAICompatProvider(model, base_url=base_url or default_url, api_key=api_key, temperature=temperature)
     raise ProviderError(f"unknown provider '{name}'. Known: {', '.join(PROVIDERS)}")

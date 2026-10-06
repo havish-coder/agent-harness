@@ -21,6 +21,11 @@ is below 1.0, minor releases may contain breaking changes.
   system prompt, tools and newest message. `--provider anthropic` with `ANTHROPIC_API_KEY`.
 - Automatic retries (ADR 0016): exponential backoff with jitter, `Retry-After`, a 90 s budget,
   streams retried only before their first text; `--fallback-model`; retry notices in the terminal.
+- Layered settings (ADR 0017): defaults, `~/.harness/settings.json`, project and local files,
+  `HARNESS_*` variables, flags; `--show-config` shows each value's source; unknown keys warn
+  with suggestions; secrets in settings files are refused; `.env` files for keys, with a
+  warning when the workspace's `.env` isn't git-ignored; project settings that redirect
+  prompts are flagged.
 - User guide: [choosing a model and provider](docs/user-guide/models.md); developer guide:
   [writing a provider](docs/developer-guide/writing-a-provider.md).
 - `ProviderError` carries `status`, `retryable` and `retry_after`.
