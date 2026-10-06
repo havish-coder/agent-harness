@@ -27,3 +27,4 @@ Copy [the template](template.md) to `NNNN-short-title.md` with the next number.
 | [0018](0018-cost-tracking.md) | Track cost from token counts with a small, dated price table | Accepted |
 | [0019](0019-rich-terminal-ui.md) | Render the terminal with rich, keep a plain fallback | Accepted |
 | [0020](0020-key-watcher-thread.md) | Watch the keyboard on a thread during agent turns | Accepted |
+| [0021](0021-markdown-prompt-commands.md) | Slash commands: local code, or Markdown prompt templates | Accepted |

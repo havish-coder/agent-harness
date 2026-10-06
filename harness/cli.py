@@ -1,36 +1,28 @@
-"""The `harness` command: settings → provider → agent → an interactive terminal session.
+"""The `harness` command: settings → session → an interactive terminal loop.
 
 Run:  harness                               (after `pip install -e ".[tui]"`)
       harness --workspace C:\\some\\folder --provider anthropic
 
-Lessons 07-23. The screen itself is drawn by harness/tui (rich when available, plain otherwise).
+Lessons 07-24. The screen is drawn by harness/tui (rich when available, plain otherwise); the
+running app is a harness.session.Session; slash commands live in harness/commands.py.
 """
 import argparse
 import sys
 from pathlib import Path
 
-from harness.agent import Agent
+from harness.commands import load_commands
 from harness.config import USER_DIR, ConfigError, describe, load_dotenv, load_settings
 from harness.mentions import expand_mentions
 from harness.providers.base import ProviderError
-from harness.providers.factory import PROVIDERS, make_provider
-from harness.providers.retry import RetryingProvider
-from harness.tools import default_tools
-from harness.tools.fs import workspace_snapshot
+from harness.providers.factory import PROVIDERS
+from harness.session import SYSTEM_PROMPT, Session
 from harness.tui import make_ui
 from harness.tui.keys import KeyWatcher
 from harness.tui.prompt import LineReader
-from harness.usage import CostTracker, format_cost
+from harness.usage import format_cost
 from harness.workspace import Workspace
 
-# Short and direct works best for small models (see course/07-first-tools-and-repl.md).
-SYSTEM_PROMPT = """You are a helpful agent. Use tools to inspect the workspace; never guess file contents.
-Find files with glob, search inside them with grep, explore folders with list_dir.
-To find where something is defined or used, grep for a likely word (e.g. grep 'timeout' to find a timeout setting).
-Paths are relative to the workspace root. Be concise.
-
-Workspace files (snapshot at session start; may have changed since):
-{snapshot}"""
+__all__ = ["SYSTEM_PROMPT", "main"]
 
 
 def parse_args(argv=None):
@@ -52,6 +44,30 @@ def parse_args(argv=None):
     return p.parse_args(argv)
 
 
+def run_turn(session: Session, watcher: KeyWatcher, message: str) -> None:
+    """Send one message to the agent and show the result and its cost."""
+    ui, agent, costs = session.ui, session.agent, session.costs
+    message, attached = expand_mentions(message, session.ws)
+    if attached:
+        ui.info("attached: " + ", ".join(attached))
+    before, cost_before = agent.usage.copy(), costs.cost()
+    try:
+        with watcher.watching():
+            answer = agent.run(message)
+    except KeyboardInterrupt:
+        ui.error("cancelled")
+        return
+    except ProviderError as e:
+        ui.error(str(e))
+        return
+    ui.answer(answer)
+    turn = agent.usage - before
+    cached = f" ({turn.cache_read_tokens:,} cached)" if turn.cache_read_tokens else ""
+    cost_after = costs.cost()
+    money = "price unknown" if cost_after is None or cost_before is None else format_cost(cost_after - cost_before)
+    ui.usage_line(f"{turn.input_tokens:,} input{cached} + {turn.output_tokens:,} output tokens · {money}")
+
+
 def main(argv=None):
     args = parse_args(argv)
     sys.stdout.reconfigure(encoding="utf-8")
@@ -70,80 +86,53 @@ def main(argv=None):
         settings, warnings = load_settings(workspace, flags)
     except ConfigError as e:
         sys.exit(f"settings error: {e}")
-    for warning in env_warnings + warnings:
+    commands = load_commands(workspace)
+    for warning in env_warnings + warnings + commands.warnings:
         ui.warn(f"warning: {warning}")
     if args.show_config:
         print(describe(settings))
         return
 
-    options = {"temperature": settings.temperature, "think": True if settings.think else None,
-               "context_window": settings.context_window}
     try:
-        provider = make_provider(settings.provider, settings.model, settings.base_url, **options)
-        fallback = (make_provider(settings.provider, settings.fallback_model, settings.base_url, **options)
-                    if settings.fallback_model else None)
+        session = Session(settings, ws, ui, approver)
     except ProviderError as e:
         sys.exit(f"error: {e}")
-    provider = RetryingProvider(provider, max_retries=settings.max_retries, fallback=fallback, on_retry=ui.retry)
-    costs = CostTracker(settings.provider, provider.model, settings.prices)
-
-    def on_event(kind, data):
-        if kind == "model_reply":
-            costs.add(data)
-        ui(kind, data)
-
-    agent = Agent(provider, default_tools(ws, shell=settings.shell),
-                  SYSTEM_PROMPT.format(snapshot=workspace_snapshot(ws)), max_steps=settings.max_steps,
-                  on_event=on_event, approve=approver, stream=settings.stream)
-    ui.banner("Agent harness", f"{settings.provider} · {provider.model} · {workspace}")
-    reader = LineReader(ws, USER_DIR / "history", commands=["/reset", "/cost", "/bye"])
+    session.commands = commands
+    reader = LineReader(ws, USER_DIR / "history", commands=commands.names())
     watcher = KeyWatcher()
     approver.pause = watcher.paused
+
     stop_keys = "Esc or Ctrl+C stops a running task" if watcher.available else "Ctrl+C stops a running task"
-    ui.info(f"/reset forget the conversation · /cost usage so far · /bye quit · @file attaches a file · {stop_keys}")
+    ui.banner("Agent harness", f"{settings.provider} · {session.provider.model} · {workspace}")
+    ui.info(f"/help commands · @file attaches a file · {stop_keys}")
     if args.yes:
         ui.warn("--yes: every tool call runs without asking.")
 
     while True:
         try:
-            user = reader.read(default=watcher.take_typeahead()).strip()
+            line = reader.read(default=watcher.take_typeahead()).strip()
         except (EOFError, KeyboardInterrupt):
             break
-        if not user:
+        if not line:
             continue
-        if user == "/bye":
+        parsed = commands.parse(line)
+        if parsed is None:
+            run_turn(session, watcher, line[1:] if line.startswith("//") else line)   # //x sends "/x"
+            continue
+        command, rest = parsed
+        if command is None:
+            ui.warn(f"unknown command /{rest}. /help lists them; start with // to send a message beginning with /")
+        elif command.name == "bye":
             break
-        if user == "/cost":
-            ui.info(costs.summary())
-            continue
-        if user == "/reset":
-            agent.reset()
-            ws.forget_reads()   # the model no longer has earlier reads in its context
-            ui.info("(conversation cleared)")
-            continue
+        elif command.kind == "local":
+            output = command.run(session, rest)
+            if output:
+                ui.info(output)
+        else:
+            run_turn(session, watcher, command.expand(rest))
 
-        message, attached = expand_mentions(user, ws)
-        if attached:
-            ui.info("attached: " + ", ".join(attached))
-        before, cost_before = agent.usage.copy(), costs.cost()
-        try:
-            with watcher.watching():
-                answer = agent.run(message)
-        except KeyboardInterrupt:
-            ui.error("cancelled")
-            continue
-        except ProviderError as e:
-            ui.error(str(e))
-            continue
-        ui.answer(answer)
-        turn = agent.usage - before
-        cached = f" ({turn.cache_read_tokens:,} cached)" if turn.cache_read_tokens else ""
-        cost_after = costs.cost()
-        money = "price unknown" if cost_after is None or cost_before is None else format_cost(cost_after - cost_before)
-        ui.usage_line(f"{turn.input_tokens:,} input{cached} + {turn.output_tokens:,} output tokens · {money}")
-
-    if costs.models:
-        ui.info(f"session: {costs.summary()}")
+    if session.costs.models:
+        ui.info(f"session: {session.costs.summary()}")
 
 
 if __name__ == "__main__":

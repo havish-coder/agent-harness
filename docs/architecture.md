@@ -154,7 +154,9 @@ show. See the [events reference](reference/events.md).
 harness/
   agent.py          the agent loop
   messages.py       provider-neutral message types
-  cli.py            the `harness` command: settings, provider, agent, the input loop
+  cli.py            the `harness` command: settings, the input loop, command dispatch
+  session.py        one running session: provider with retries, agent, costs, UI
+  commands.py       slash commands: built-in and Markdown-defined
   tui/              terminal interfaces: rich (Markdown, diffs, spinner) and plain;
                     the line editor (prompt.py) and the Esc/type-ahead key watcher (keys.py)
   mentions.py       @file mentions attached to messages

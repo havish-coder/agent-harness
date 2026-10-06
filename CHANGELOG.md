@@ -18,6 +18,11 @@ is below 1.0, minor releases may contain breaking changes.
   (Esc then Enter), Tab completion of `/commands` and `@files` (needs a terminal and the `tui` extra).
 - `@file` and `@folder` mentions attach content to a message and count as read.
 - Esc stops a running task; keys typed while the agent works are kept for the next prompt.
+- Slash commands (ADR 0021): `/help`, `/reset` (`/clear`), `/cost`, `/config`, `/model [name]`
+  (switch model, keep the conversation), `/tools`, `/fix-tests`, `/explain`, `/bye`; your own
+  commands as Markdown files in `~/.harness/commands/` or `<workspace>/.harness/commands/`, with
+  `$ARGUMENTS` and `$1`...; project commands can't replace built-ins; `//` escapes a leading slash.
+- `Session`: the running app (provider, agent, costs, UI) shared by interfaces and commands.
 - `scripts/render_demo.py` renders `docs/images/demo.svg` from the recorded bug-fix run.
 
 ## [0.3.0] - 2026-10-06

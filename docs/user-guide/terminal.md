@@ -124,8 +124,5 @@ Anything you type while the agent is working isn't lost: it appears at the next 
 to edit and send.
 
 ## Commands
-| Command | Does |
-|---|---|
-| `/reset` | forget the conversation and start fresh |
-| `/cost` | tokens and cost so far in this session, per model |
-| `/bye` | quit (Ctrl+D or Ctrl+C at the prompt also quit) |
+Lines starting with `/` are commands: `/help`, `/reset`, `/cost`, `/model`, `/fix-tests` and more,
+including your own. See [Slash commands](commands.md).
