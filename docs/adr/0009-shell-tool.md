@@ -1,6 +1,6 @@
 # 0009. A single shell tool, PowerShell on Windows
 
-- **Status:** Accepted
+- **Status:** Superseded by [0011](0011-prefer-bash-no-cwd.md)
 - **Date:** 2026-10-06
 
 ## Context

@@ -1,18 +1,8 @@
-"""Test helpers: a scripted fake model, so loop tests need no GPU and never vary."""
+"""Test helpers: scripted replies with fixed token counts, so loop tests never vary."""
 from harness.messages import Message, Reply, ToolCall, Usage
+from harness.providers.fake import ScriptedProvider
 
-
-class ScriptedProvider:
-    """Returns pre-written replies in order and records every request it received."""
-    model = "scripted"
-
-    def __init__(self, replies):
-        self.replies = list(replies)
-        self.requests = []          # (messages, tools) per call, for assertions
-
-    def chat(self, messages, tools):
-        self.requests.append((list(messages), tools))
-        return self.replies.pop(0)
+__all__ = ["ScriptedProvider", "call", "calls", "final"]
 
 
 def calls(*tool_calls: ToolCall) -> Reply:

@@ -119,22 +119,23 @@ and hasn't changed since, and is marked **destructive** in the approval prompt. 
 ## `run_shell`
 | Argument | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `command` | string | yes | | The command. |
-| `cwd` | string | no | `.` | Folder to run it in, relative to the workspace (use this instead of `cd`). |
+| `command` | string | yes | | The command, run in the workspace root (use `cd folder && ...` for another folder). |
 | `timeout` | integer | no | `60` | Seconds before the command is stopped; at most 600. |
 
-The shell is **PowerShell** on Windows (PowerShell 7 if installed, otherwise Windows
-PowerShell 5.1, where `&&` doesn't work) and **bash** elsewhere. The tool description tells
-the model which one it has.
+The shell is **bash** wherever possible: on Windows, Git for Windows' bash when installed,
+otherwise PowerShell 7, otherwise Windows PowerShell 5.1 (where `&&` doesn't work; use `;`).
+Set `HARNESS_SHELL` to `bash`, `pwsh` or `powershell` to choose. The tool description tells the
+model which shell it has ([ADR 0011](../adr/0011-prefer-bash-no-cwd.md)).
 
 Behaviour:
 - Standard input is closed: commands that wait for input fail immediately instead of hanging.
 - On timeout the command **and every process it started** are stopped.
 - Output is UTF-8 (including on Windows); Python programs run with `PYTHONUTF8=1`.
 - The Python running the agent is first on `PATH`, so `python` means that interpreter.
+- PowerShell's exit code is the real one of the last command (PowerShell itself only reports 0 or 1).
 - The command inherits your environment variables. See [security](../security.md).
 
-Result: a status line (`exit code 0 (success) · 1.2 s · in project`, or `TIMED OUT after 60 s`),
+Result: a status line (`exit code 0 (success) · 1.2 s · in .`, or `TIMED OUT after 60 s`),
 then `--- stdout ---` and `--- stderr ---` sections, or `(no output)`. Long output keeps the
 first 30% and the last 70% of about 7,000 characters, because summaries (test results,
 errors) are usually at the end.

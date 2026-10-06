@@ -42,10 +42,27 @@ PS_SUFFIX = "\n$__ok = $?; if ($__ok) { exit 0 } elseif ($LASTEXITCODE) { exit $
 PS_FLAGS = ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command"]
 
 
-def detect_shell() -> Shell:
+def find_git_bash() -> Path | None:
+    """Git for Windows' bash.exe (never System32's bash.exe, which starts WSL)."""
+    candidates = []
+    git = shutil.which("git")
+    if git:
+        candidates += [parent / "bin" / "bash.exe" for parent in Path(git).parents]
+    candidates.append(Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Git" / "bin" / "bash.exe")
+    return next((c for c in candidates if c.exists()), None)
+
+
+def detect_shell(preference: str | None = None) -> Shell:
+    """bash wherever possible (models know it best), else PowerShell. HARNESS_SHELL overrides."""
+    preference = (preference or os.environ.get("HARNESS_SHELL", "")).lower()
     if os.name == "nt":
-        pwsh = shutil.which("pwsh")
-        if pwsh:
+        bash = find_git_bash() if preference in ("", "bash") else None
+        if bash:
+            return Shell("bash (Git for Windows)", [str(bash), "-c"],
+                         "POSIX shell syntax; chain commands with '&&'. Windows paths also work with "
+                         "forward slashes (C:/Users/...).")
+        pwsh = shutil.which("pwsh") if preference in ("", "pwsh", "powershell") else None
+        if pwsh and preference != "powershell":
             return Shell("PowerShell 7", [pwsh, *PS_FLAGS], "PowerShell syntax; chain commands with ';' or '&&'.",
                          PS_PREFIX, PS_SUFFIX)
         return Shell("Windows PowerShell 5.1", ["powershell.exe", *PS_FLAGS],
@@ -113,21 +130,18 @@ def make_shell_tools(ws: Workspace, shell: Shell | None = None) -> list[Tool]:
     shell = shell or detect_shell()
 
     @tool(read_only=False, concurrency_safe=False, max_result_chars=OUTPUT_BUDGET + 1_000)
-    def run_shell(command: str, cwd: str = ".", timeout: int = DEFAULT_TIMEOUT) -> str:
-        """Run a shell command and return its exit code and output.
+    def run_shell(command: str, timeout: int = DEFAULT_TIMEOUT) -> str:
+        """Run a shell command in the workspace root folder and return its exit code and output.
 
         Use it to run tests, scripts, git, package managers and build tools. To read, search or
         edit files, use read_file, grep, glob and edit_file instead. Commands can't read input:
         anything that waits for a key press or a password fails immediately.
 
         Args:
-            command: The command to run.
-            cwd: Folder to run it in, relative to the workspace root (instead of using cd).
+            command: The command to run. Paths are relative to the workspace root.
             timeout: Seconds before the command is stopped (at most 600).
         """
-        folder = ws.path(cwd)
-        if not folder.is_dir():
-            raise NotADirectoryError(f"no folder named '{ws.display(folder)}'.{ws.suggest(folder)}")
+        folder = ws.root
         timeout = max(1, min(timeout, MAX_TIMEOUT))
         code, out, err, seconds = run_command(shell, command, folder, timeout)
 

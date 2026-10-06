@@ -40,11 +40,9 @@ def test_utf8_output(run):
     assert "café ✓" in run(command=py("print('caf\\u00e9 \\u2713')"))
 
 
-def test_cwd_instead_of_cd(run):
-    out = run(command=py("import os; print(sorted(os.listdir()))"), cwd="sub")
-    assert "['hello.txt']" in out and "in sub" in out
-    with pytest.raises(NotADirectoryError):
-        run(command="echo x", cwd="nope")
+def test_runs_in_the_workspace_root(run):
+    out = run(command=py("import os; print(sorted(os.listdir()))"))
+    assert "['sub']" in out and "in ." in out
 
 
 def test_no_stdin(run):

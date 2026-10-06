@@ -101,3 +101,17 @@ def test_rollback_on_error_and_cancel():
             agent.run("hi")
         assert [m.role for m in agent.messages] == ["system"]
         assert agent.stop_reason == reason
+
+
+def test_repeated_identical_calls_get_a_note():
+    @tool(read_only=True)
+    def fail() -> str:
+        """Always the same error."""
+        raise RuntimeError("nope")
+
+    provider = ScriptedProvider([calls(call("fail", id=str(i))) for i in range(3)] + [final("done")])
+    agent = Agent(provider, [fail], "s")
+    agent.run("go")
+    results = [m.content for m in agent.messages if m.role == "tool"]
+    assert "[note:" not in results[0]
+    assert "exactly this call 2 times" in results[1] and "exactly this call 3 times" in results[2]

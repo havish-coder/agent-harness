@@ -39,13 +39,20 @@ is below 1.0, minor releases may contain breaking changes.
   results and approval prompts; CRLF files and copied line numbers handled.
 - Tool hooks: `check` (runs before approval) and `preview` (shown when approving).
 - `harness.tools.default_tools(ws)`: the standard tool set.
-- `run_shell` tool (ADR 0009): PowerShell on Windows or bash elsewhere, `cwd` argument,
-  timeout that stops the whole process tree, closed stdin, UTF-8 output, real exit codes from
-  PowerShell, output that keeps the end.
+- `run_shell` tool (ADR 0011): bash wherever possible (Git for Windows' bash on Windows, then
+  PowerShell), `HARNESS_SHELL` to choose; runs in the workspace root; timeout that stops the
+  whole process tree, closed stdin, UTF-8 output, real exit codes from PowerShell, output that
+  keeps the end.
 
 ### Changed
 - Tool results longer than 8,000 characters are shortened, keeping the start and the end.
 - Default `--max-steps` raised from 10 to 20: fix-and-test tasks need more steps.
+- Test providers (ADR 0012): `ScriptedProvider`, and `RecordingProvider`/`ReplayProvider` for
+  cassettes of real runs, with machine-specific text normalized; a recorded bug-fix run is
+  replayed in the test suite. `scripts/record_cassette.py` re-records it.
+- `pytest -m live` for tests against a real model (skipped by default); coverage via pytest-cov.
+- When the model repeats an identical call with an identical result, the result says so.
+- Message and reply serialization (`message_to_dict`, `reply_from_dict`, ...).
 - Several tool calls in one reply: consecutive concurrency-safe calls run in parallel (up to 8
   threads); others run alone, in order (ADR 0010).
 - The workspace snapshot in the system prompt skips folders like `.git`, `.venv` and

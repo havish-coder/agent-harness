@@ -15,10 +15,13 @@ ollama pull qwen3:4b-instruct      # only needed for live runs; tests don't need
 Every change must pass the same checks a release does:
 
 ```bash
-pytest                       # all tests, no model or network needed
+pytest                       # unit and replay tests, no model or network needed
 ruff check .                 # lint
 python scripts/check_docs.py # no broken links in the docs
+pytest -m live               # optional: tests against a running Ollama
 ```
+
+See the [testing guide](docs/developer-guide/testing.md) for scripted providers and cassettes.
 
 ## Definition of done
 A change is finished when:

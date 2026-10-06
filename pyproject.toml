@@ -16,7 +16,7 @@ dependencies = [
 [project.optional-dependencies]
 tui = ["rich>=13", "prompt_toolkit>=3.0"]
 web = ["fastapi>=0.110", "uvicorn>=0.29"]
-dev = ["pytest>=8", "ruff>=0.5"]
+dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.5"]
 
 [tool.setuptools.packages.find]
 include = ["harness*"]
@@ -34,3 +34,5 @@ ignore = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-m 'not live'"
+markers = ["live: needs a running model server (run with: pytest -m live)"]

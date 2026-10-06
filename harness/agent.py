@@ -3,6 +3,7 @@
 This file is the heart of the harness. Everything else (tools, policy, context, UI) plugs in
 around these few lines.
 """
+import json
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
@@ -51,6 +52,7 @@ class Agent:
         self.messages.append(Message.user(user_input))
         schemas = self.tools.schemas()
         self.stop_reason = None
+        seen: dict[str, tuple[str, int]] = {}   # call → (result, times seen), for note_repeats
 
         try:
             for _ in range(self.max_steps):  # stop condition #2: never loop forever
@@ -72,6 +74,7 @@ class Agent:
                         self.on_event("tool_call", call)
                     results = self.execute_batch(batch)
                     for call, result in zip(batch, results, strict=True):  # in the order the model asked
+                        result = self.note_repeats(seen, call, result)
                         self.on_event("tool_result", (call, result))
                         self.messages.append(Message.tool_result(call, result))
 
@@ -83,6 +86,19 @@ class Agent:
             del self.messages[turn_start:]
             self.stop_reason = "cancelled" if isinstance(e, KeyboardInterrupt) else "error"
             raise
+
+    @staticmethod
+    def note_repeats(seen: dict, call: ToolCall, result: str) -> str:
+        """Small models can loop on a failing call. Tell them when a call repeats exactly (Lesson 15)."""
+        key = call.name + json.dumps(call.arguments, sort_keys=True, default=str)
+        previous, times = seen.get(key, (None, 0))
+        if previous == result:
+            seen[key] = (result, times + 1)
+            return (f"{result}\n\n[note: you have made exactly this call {times + 1} times in this task "
+                    "and got the same result each time. Repeating it will not help: change the "
+                    "arguments, check paths and folders, or try a different approach.]")
+        seen[key] = (result, 1)
+        return result
 
     def batches(self, calls: list[ToolCall]) -> list[list[ToolCall]]:
         """Group calls: consecutive concurrency-safe calls share a batch; any other call runs alone.
