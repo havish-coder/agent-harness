@@ -24,7 +24,7 @@ def fail(msg, fix):
 print("Checking your setup...\n")
 
 # 1. Python version
-if sys.version_info < (3, 10):
+if sys.version_info < (3, 10):  # noqa: UP036 (this script must run on old Pythons too)
     fail(f"Python {sys.version.split()[0]}", "install Python 3.10 or newer")
 ok(f"Python {sys.version.split()[0]}")
 

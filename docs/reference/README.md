@@ -1,0 +1,7 @@
+# Reference
+
+Exact, complete descriptions for looking things up.
+
+- [CLI](cli.md): the `harness` command and its flags
+- [Tools](tools.md): every tool the model can call
+- [Events](events.md): what the agent loop reports while it works

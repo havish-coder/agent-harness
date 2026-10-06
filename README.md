@@ -1,5 +1,76 @@
 # Agent Harness
 
-An AI agent harness built from scratch in Python, as a course.
+**A coding agent you can read end to end.** Agent Harness is a Claude Code-style AI agent
+written from scratch in Python, without agent frameworks. It talks to a local model through
+[Ollama](https://ollama.com) or to a cloud API, inspects and edits files, runs commands, and
+explains every step it takes.
 
-Start here → [course/README.md](course/README.md)
+> **Status: v0.1, pre-release.** The agent loop, provider layer and read-only file tools work.
+> Editing, shell, streaming, security, memory, sub-agents and a web UI are on the
+> [roadmap](#roadmap). See the [changelog](CHANGELOG.md) for what changed in each release.
+
+---
+
+## Why
+Most agent products are either closed or built on large frameworks that hide the loop. This
+project keeps the whole agent small enough to read: the core is the Python standard library
+plus [`httpx`](https://www.python-httpx.org/). Every design decision is written down as an
+[architecture decision record](docs/adr/).
+
+## Features
+| | Feature | Since |
+|---|---|---|
+| ✅ | Agent loop with step limit, errors fed back to the model, and rollback on failure | v0.1 |
+| ✅ | Provider-neutral message model; Ollama adapter | v0.1 |
+| ✅ | Workspace file tools (`list_dir`, `read_file`) and a workspace snapshot in the prompt | v0.1 |
+| ✅ | Terminal chat with live tool-call display and token counts | v0.1 |
+
+## Quickstart
+Requirements: Python 3.10+, [Ollama](https://ollama.com/download), about 3 GB of disk.
+
+```bash
+ollama pull qwen3:4b-instruct
+git clone https://github.com/havish-coder/agent-harness.git
+cd agent-harness
+python -m venv .venv
+.venv\Scripts\activate            # Windows; on macOS/Linux: source .venv/bin/activate
+pip install -e ".[tui,dev]"
+harness --workspace workspace
+```
+
+Then ask something like *"How many TODOs are in my notes?"*. Full walkthrough:
+[Getting started](docs/getting-started.md).
+
+## Documentation
+| | |
+|---|---|
+| [Getting started](docs/getting-started.md) | install, first run, first task |
+| [User guide](docs/user-guide/) | how to use each feature |
+| [Reference](docs/reference/) | CLI flags, tools, events |
+| [Architecture](docs/architecture.md) | how the agent works inside |
+| [Decision records](docs/adr/) | why it is built this way |
+| [Security](SECURITY.md) | the security model and how to report issues |
+
+## Roadmap
+| Release | Theme |
+|---|---|
+| v0.2 | Tool system: decorator-defined tools, validation, search, safe file editing, shell, parallel calls |
+| v0.3 | Streaming, OpenAI-compatible and Anthropic providers, retries, config, cost tracking |
+| v0.4 | A polished terminal app: rich rendering, input history, slash commands, status line |
+| v0.5 | Security: path jail, permission modes and rules, shell hardening, hooks, audit log |
+| v0.6 | Context: token budgets, compaction, sessions, project and auto memory, undo |
+| v0.7 | Workflows: todo list, plan mode, sub-agents, skills, background tasks, MCP |
+| v0.8 | Web UI with streaming, approvals and settings |
+| v1.0 | Evals, tracing, packaging, CI |
+
+## Development
+```bash
+pip install -e ".[tui,web,dev]"
+pytest            # tests
+ruff check .      # lint
+```
+See [CONTRIBUTING.md](CONTRIBUTING.md). The project started as a course; lessons 00-07 are in
+[`course/`](course/README.md).
+
+## License
+[MIT](LICENSE)

@@ -2,8 +2,8 @@
 
 Schemas are written by hand for now. Lesson 08 generates them from type hints.
 """
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 
 @dataclass

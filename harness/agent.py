@@ -3,7 +3,8 @@
 This file is the heart of the harness. Everything else (tools, policy, context, UI) plugs in
 around these few lines.
 """
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from harness.messages import Message, ToolCall, Usage
 from harness.providers.base import Provider

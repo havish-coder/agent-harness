@@ -50,44 +50,10 @@ git checkout lesson-04           # go back in time (git checkout main to return)
 - [ ] 06 · [The loop](06-the-loop.md)
 - [ ] 07 · [First tools + REPL](07-first-tools-and-repl.md)
 
-### Module 2: The Tool System
-- [ ] 08 · Schemas from code (`@tool` decorator)
-- [ ] 09 · Registry, validation & errors
-- [ ] 10 · File editing tools
-- [ ] 11 · Shell tool (naive, hardened later)
-- [ ] 12 · Streaming UX
-- [ ] 13 · Testing agents (FakeProvider)
+### Lessons 08 and later
+The course continues privately from Lesson 08. The **code keeps landing in this repo**, one
+commit per lesson, tagged `lesson-NN`, with a release per module (`v0.2` … `v1.0`), so you can
+still follow the product's history with `git tag` and `git diff`.
 
-### Module 3: Providers & Config
-- [ ] 14 · A second provider (OpenAI-compatible)
-- [ ] 15 · Config & secrets
-
-### Module 4: Security
-- [ ] 16 · Threat modeling
-- [ ] 17 · Attack lab (before): break our own agent
-- [ ] 18 · Sandbox: path jail
-- [ ] 19 · Permissions & human approval
-- [ ] 20 · Shell hardening
-- [ ] 21 · Prompt injection & taint tracking
-- [ ] 22 · Network & SSRF
-- [ ] 23 · Limits: loops, budgets, timeouts
-- [ ] 24 · Audit log & secret redaction
-- [ ] 25 · Attack lab (after): prove the defenses
-
-### Module 5: Context & Memory
-- [ ] 26 · Token accounting
-- [ ] 27 · Compaction
-- [ ] 28 · Sessions
-- [ ] 29 · Project memory (`AGENT.md`)
-- [ ] 30 · Slash commands
-
-### Module 6: The Web Product
-- [ ] 31 · Server & streaming
-- [ ] 32 · Chat UI
-- [ ] 33 · Approvals in the browser
-- [ ] 34 · Connect your LLM (Ollama or API)
-- [ ] 35 · Web security
-
-### Module 7: Capstone
-- [ ] 36 · Pick the domain
-- [ ] 37+ · Domain features (planning, sub-agents, specialized tools, evals)
+For what the product does today, see the [README](../README.md), the
+[documentation](../docs/index.md) and the [changelog](../CHANGELOG.md).
