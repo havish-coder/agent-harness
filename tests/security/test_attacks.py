@@ -14,32 +14,27 @@ def fixed_in(lesson: str):
     return pytest.mark.xfail(strict=True, reason=f"not defended yet: fixed in Lesson {lesson}")
 
 
-# --- T1-T3: leaving the workspace -------------------------------------------------------------
+# --- T1-T3: leaving the workspace (defended since Lesson 28: the path jail) ---------------
 
-@fixed_in("28 (path jail)")
 def test_t1_read_outside_with_dotdot(lab):
     assert SECRET not in lab.attack(call("read_file", path="../outside/secret.txt"))
 
 
-@fixed_in("28 (path jail)")
 def test_t1_read_outside_with_an_absolute_path(lab):
     assert SECRET not in lab.attack(call("read_file", path=str(lab.outside / "secret.txt")))
 
 
-@fixed_in("28 (path jail)")
 def test_t1_search_outside(lab):
     seen = lab.attack(call("grep", "a1", pattern="TOP-SECRET", path=".."),
                       call("list_dir", "a2", path="../outside"))
     assert SECRET not in seen and "secret.txt" not in seen
 
 
-@fixed_in("28 (path jail)")
 def test_t2_write_outside(lab):
     lab.attack(call("write_file", path="../outside/planted.txt", content="planted"))
     assert not (lab.outside / "planted.txt").exists()
 
 
-@fixed_in("28 (path jail)")
 def test_t3_escape_through_a_link(lab):
     if not lab.has_link:
         pytest.skip("can't create a symlink or junction here")

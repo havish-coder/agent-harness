@@ -7,7 +7,7 @@ isn't a file or folder in the workspace (an e-mail address, a decorator) is left
 import re
 
 from harness.tools.fs import read_lines
-from harness.workspace import Workspace
+from harness.workspace import OutsideWorkspace, Workspace
 
 MENTION = re.compile(r"(?<![\w@])@([\w.\-/\\]+[\w/\\])")   # @path, not foo@bar.com
 MAX_MENTIONS = 5
@@ -18,7 +18,10 @@ def expand_mentions(text: str, ws: Workspace) -> tuple[str, list[str]]:
     attached, blocks = [], []
     for match in MENTION.finditer(text):
         rel = match.group(1).replace("\\", "/")
-        p = ws.path(rel)
+        try:
+            p = ws.path(rel)
+        except OutsideWorkspace:                     # not ours to attach (Lesson 28)
+            continue
         if rel in attached or not p.exists() or len(attached) >= MAX_MENTIONS:
             continue
         if p.is_dir():

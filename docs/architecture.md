@@ -107,6 +107,12 @@ validation, running, truncation) and [`harness/agent.py`](../harness/agent.py) (
 own `check`, then the approval decision, [ADR 0005](adr/0005-approve-every-non-read-only-call.md)).
 A tool's check runs before approval so you are never asked to approve a call that would fail.
 
+Paths are confined before any of this matters: every file tool turns its path argument into a
+real location with `Workspace.path()` in [`harness/workspace.py`](../harness/workspace.py), which
+resolves `..`, absolute forms and links and refuses anything outside the workspace (the path jail,
+[ADR 0025](adr/0025-path-jail.md)). Since the tools' checks and bodies both call it, a call that
+leaves the workspace fails at the check, before you're asked.
+
 ## Several calls in one reply
 
 A model may ask for several tools at once (in our measurements, 4 of 7 tool-calling replies
@@ -178,7 +184,7 @@ harness/
     search.py       glob, grep
     edit.py         edit_file, write_file
     shell.py        run_shell
-  workspace.py      path resolution and read tracking for all file tools
+  workspace.py      the path jail and read tracking for all file tools
   config.py         settings layers, validation, .env loading
   usage.py          prices and per-session cost tracking
 scripts/            setup check and teaching scripts

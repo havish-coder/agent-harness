@@ -20,10 +20,12 @@ variable `HARNESS_<NAME>` (upper case) and most as a flag. How the layers combin
 | `max_retries` | integer | `4` | | Retries for temporary model-server failures. |
 | `output_style` | string | `"default"` | | The [output style](../user-guide/styles-and-status.md) to start with. |
 | `status_line` | string or null | `null` | | A command whose first output line replaces the status line. Not accepted from project settings. |
+| `additional_directories` | list of strings | `[]` | | Folders outside the workspace the file tools may also use ([workspace](../user-guide/workspace.md)). Relative to the workspace. Not accepted from project settings. |
 | `prices` | object | `{}` | | Extra prices: model-name prefix → `{"input", "output", "cache_read", "cache_write"}` in US dollars per million tokens. Merged across layers. |
 
 Environment values are converted to the setting's type: booleans accept `1`, `true`, `yes`,
-`on` (anything else is false); numbers must parse.
+`on` (anything else is false); numbers must parse; lists are separated like `PATH` (`;` on Windows,
+`:` elsewhere).
 
 ## Files
 | Layer | Path |
@@ -43,4 +45,4 @@ Environment values are converted to the setting's type: booleans accept `1`, `tr
 | a value that looks like an API key (`sk-...`, `sk-ant-...`, `gsk_...`, `AIza...`) | error |
 | project settings that set `provider` or `base_url` | warning showing the values |
 | a workspace `.env` not ignored by git | warning |
-| project settings that set `status_line` (it runs a program) | warning; the value is ignored |
+| project settings that set `status_line` (it runs a program) or `additional_directories` (it widens access) | warning; the value is ignored |

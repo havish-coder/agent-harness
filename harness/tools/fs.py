@@ -23,7 +23,8 @@ def as_workspace(ws: Path | Workspace) -> Workspace:
 
 def workspace_snapshot(workspace: Path | Workspace, depth: int = 2, limit: int = 50) -> str:
     """An indented file tree for the system prompt, so the model knows what exists up front."""
-    root = as_workspace(workspace).root
+    ws = as_workspace(workspace)
+    root = ws.root
     lines = []
 
     def walk(folder: Path, indent: str, level: int):
@@ -31,6 +32,9 @@ def workspace_snapshot(workspace: Path | Workspace, depth: int = 2, limit: int =
             if len(lines) >= limit:
                 return
             if p.is_dir() and p.name in IGNORED_DIRS:
+                continue
+            if ws.leads_outside(p):            # a link out of the workspace: name it, don't enter
+                lines.append(f"{indent}{p.name}  (link outside the workspace)")
                 continue
             lines.append(f"{indent}{p.name}/" if p.is_dir() else f"{indent}{p.name}")
             if p.is_dir() and level < depth:
@@ -109,7 +113,8 @@ def make_fs_tools(workspace: Path | Workspace) -> list[Tool]:
         if target.is_file():
             raise NotADirectoryError(f"'{ws.display(target)}' is a file; use read_file to read it")
         entries = sorted(target.iterdir(), key=lambda p: (p.is_file(), p.name.lower()))  # folders first
-        lines = [f"{p.name}/" if p.is_dir() else f"{p.name}  ({p.stat().st_size:,} bytes)" for p in entries]
+        lines = [f"{p.name}  (link outside the workspace)" if ws.leads_outside(p)
+                 else f"{p.name}/" if p.is_dir() else f"{p.name}  ({p.stat().st_size:,} bytes)" for p in entries]
         return "\n".join(lines) or "(empty folder)"
 
     @tool(read_only=True, concurrency_safe=True)

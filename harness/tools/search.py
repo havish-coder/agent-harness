@@ -17,12 +17,21 @@ GREP_MAX_FILE_BYTES = 2_000_000   # bigger files are skipped (logs, dumps, bundl
 MAX_LINE_CHARS = 300
 
 
-def walk_files(root: Path):
-    """Every file under root, skipping ignored folders, in a stable order."""
+def walk_files(root: Path, ws: Workspace | None = None):
+    """Every file under root, skipping ignored folders, in a stable order.
+
+    With a workspace, links that lead out of it are skipped (Lesson 28): os.walk doesn't follow
+    symlinked folders, but on Windows it does walk into junctions, and a file symlink can point
+    anywhere.
+    """
     for folder, dirs, files in os.walk(root):
-        dirs[:] = sorted(d for d in dirs if d not in IGNORED_DIRS)
+        dirs[:] = sorted(d for d in dirs if d not in IGNORED_DIRS
+                         and not (ws and ws.leads_outside(Path(folder) / d)))
         for name in sorted(files):
-            yield Path(folder) / name
+            p = Path(folder) / name
+            if ws and p.is_symlink() and ws.leads_outside(p):
+                continue
+            yield p
 
 
 def _is_binary(p: Path) -> bool:
@@ -57,12 +66,12 @@ def make_search_tools(ws: Workspace) -> list[Tool]:
         base = ws.path(path)
         if not base.is_dir():
             raise NotADirectoryError(f"no folder named '{ws.display(base)}'.{ws.suggest(base)}")
-        found = [p for p in walk_files(base) if _matches_glob(p.relative_to(base).as_posix(), pattern)]
+        found = [p for p in walk_files(base, ws) if _matches_glob(p.relative_to(base).as_posix(), pattern)]
         prefix = ws.display(base) + "/"
         if not found and base != ws.root and pattern.startswith(prefix):
             # The model repeated the folder in the pattern: glob("project/a.py", path="project")
             pattern = pattern[len(prefix):]
-            found = [p for p in walk_files(base) if _matches_glob(p.relative_to(base).as_posix(), pattern)]
+            found = [p for p in walk_files(base, ws) if _matches_glob(p.relative_to(base).as_posix(), pattern)]
         if not found:
             return f"No files match '{pattern}' in {ws.display(base)}/."
         found.sort(key=lambda p: p.stat().st_mtime, reverse=True)
@@ -101,7 +110,7 @@ def make_search_tools(ws: Workspace) -> list[Tool]:
         base = ws.path(path)
         if not base.exists():
             raise FileNotFoundError(f"no file or folder named '{ws.display(base)}'.{ws.suggest(base)}")
-        candidates = [base] if base.is_file() else walk_files(base)
+        candidates = [base] if base.is_file() else walk_files(base, ws)
 
         out: list[str] = []
         files_matched = total_matches = 0

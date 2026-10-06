@@ -79,7 +79,6 @@ def main(argv=None):
     workspace = Path(args.workspace).resolve()
     if not workspace.is_dir():
         sys.exit(f"workspace folder not found: {workspace}")
-    ws = Workspace(workspace)
 
     flags = {"provider": args.provider, "model": args.model, "base_url": args.base_url,
              "fallback_model": args.fallback_model, "max_steps": args.max_steps,
@@ -89,6 +88,8 @@ def main(argv=None):
         settings, warnings = load_settings(workspace, flags)
     except ConfigError as e:
         sys.exit(f"settings error: {e}")
+    # Relative folders are relative to the workspace, like every other path the agent uses.
+    ws = Workspace(workspace, extra_dirs=[workspace / Path(d).expanduser() for d in settings.additional_directories])
     commands = load_commands(workspace)
     styles, style_warnings = load_styles(workspace)
     for warning in env_warnings + warnings + commands.warnings + style_warnings:

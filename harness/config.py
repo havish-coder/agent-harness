@@ -46,6 +46,7 @@ class Settings:
     prices: dict = field(default_factory=dict)   # model prefix → {"input", "output", ...} $/M tokens
     output_style: str = "default"                # see harness/styles.py (Lesson 25)
     status_line: str | None = None               # a shell command whose output is the status line
+    additional_directories: list = field(default_factory=list)   # folders outside the workspace tools may use
     sources: dict = field(default_factory=dict, repr=False, compare=False)   # key → where it came from
 
 
@@ -68,11 +69,14 @@ TYPES: dict[str, tuple] = {
     "fallback_model": (str, type(None)), "temperature": (int, float, type(None)),
     "context_window": (int,), "max_output_tokens": (int,), "max_steps": (int,), "stream": (bool,), "think": (bool,),
     "shell": (str, type(None)), "max_retries": (int,), "prices": (dict,),
-    "output_style": (str,), "status_line": (str, type(None)),
+    "output_style": (str,), "status_line": (str, type(None)), "additional_directories": (list,),
 }
-# Settings that run a program. A project file may not set them: a cloned repository would run
-# its own code on your machine just by being opened.
-RUNS_CODE = {"status_line"}
+# Settings a project file may not set, and why: a cloned repository could otherwise run its own
+# code on your machine, or give the agent access to your other folders, just by being opened.
+NOT_FROM_PROJECT = {
+    "status_line": "it runs a program",
+    "additional_directories": "it gives the agent access to folders outside the workspace",
+}
 
 
 def _type_ok(name: str, value) -> bool:
@@ -99,6 +103,8 @@ def check_layer(data: dict, where: str) -> list[str]:
             raise ConfigError(f"{where}: '{key}' has the wrong type ({type(value).__name__})")
         if key == "prices":
             check_prices(value, where)
+        if key == "additional_directories" and not all(isinstance(d, str) for d in value):
+            raise ConfigError(f"{where}: 'additional_directories' must be a list of folder paths")
         if isinstance(value, str) and SECRET_VALUES.search(value):
             raise ConfigError(f"{where}: '{key}' contains what looks like an API key. Use an environment variable")
     return warnings
@@ -134,6 +140,8 @@ def env_layer(environ) -> dict:
                 out[name] = float(raw)
             elif int in kinds:
                 out[name] = int(raw)
+            elif list in kinds:          # folders, separated like PATH (';' on Windows, ':' elsewhere)
+                out[name] = [part for part in raw.split(os.pathsep) if part]
             else:
                 out[name] = raw
         except ValueError:
@@ -150,11 +158,11 @@ def load_settings(workspace: Path, flags: dict | None = None, environ=None) -> t
     layers += [("environment", env_layer(environ)), ("flag", {k: v for k, v in (flags or {}).items() if v is not None})]
     for label, data in layers:
         warnings += check_layer(data, label)
-        if label == "project" and RUNS_CODE & data.keys():
-            for key in sorted(RUNS_CODE & data.keys()):
-                warnings.append(f"project settings can't set '{key}' (it runs a program); ignored. "
+        if label == "project" and NOT_FROM_PROJECT.keys() & data.keys():
+            for key in sorted(NOT_FROM_PROJECT.keys() & data.keys()):
+                warnings.append(f"project settings can't set '{key}' ({NOT_FROM_PROJECT[key]}); ignored. "
                                 "Put it in your user or local settings")
-            data = {k: v for k, v in data.items() if k not in RUNS_CODE}
+            data = {k: v for k, v in data.items() if k not in NOT_FROM_PROJECT}
         if label == "project" and SENSITIVE & data.keys():
             warnings.append("project settings choose where your prompts are sent: "
                             + ", ".join(f"{k}={data[k]!r}" for k in sorted(SENSITIVE & data.keys())))

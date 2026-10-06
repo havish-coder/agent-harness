@@ -8,6 +8,16 @@ is below 1.0, minor releases may contain breaking changes.
 
 ## [Unreleased]
 
+### Added
+- Path jail (ADR 0025): file tools only reach the workspace. Paths are resolved first (`..`,
+  absolute paths, drive letters, UNC and `\\?\` forms, symlinks and Windows junctions) and refused
+  outside it; names Windows reinterprets (`a:stream`, trailing dots and spaces, device names
+  like `NUL`) are refused everywhere. Links leading out are listed but never entered by
+  `list_dir`, `glob`, `grep` or the workspace overview; `@mentions` outside aren't attached.
+- `additional_directories` setting for folders outside the workspace the tools may use; not
+  accepted from project settings.
+- User guide: [the workspace and its boundary](docs/user-guide/workspace.md).
+
 ## [0.4.0] - 2026-10-06
 
 ### Added

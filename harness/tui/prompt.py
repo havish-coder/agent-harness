@@ -24,7 +24,7 @@ def make_completer(ws: Workspace, commands: list[str]):
                         yield Completion(name, start_position=-len(word))
             elif word.startswith("@"):
                 prefix = word[1:].replace("\\", "/")
-                for i, p in enumerate(walk_files(ws.root)):
+                for i, p in enumerate(walk_files(ws.root, ws)):
                     rel = ws.display(p)
                     if rel.startswith(prefix) or ("/" not in prefix and p.name.startswith(prefix)):
                         yield Completion("@" + rel, start_position=-len(word))
