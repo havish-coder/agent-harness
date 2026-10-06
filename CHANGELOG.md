@@ -30,8 +30,7 @@ is below 1.0, minor releases may contain breaking changes.
 - User guide: [permissions](docs/user-guide/permissions.md).
 
 ### Fixed
-- Math written with spaces inside the dollars (`$ a 
-eq 0 $`, which `qwen3:4b-instruct` did in
+- Math written with spaces inside the dollars (`$ a \neq 0 $`, which `qwen3:4b-instruct` did in
   every answer of a live check) now renders in the terminal and in `/export` as real math instead of
   showing the dollar signs and LaTeX source. `\boxed{...}` is understood by the terminal renderer.
 
