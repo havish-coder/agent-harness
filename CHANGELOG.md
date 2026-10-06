@@ -29,6 +29,12 @@ is below 1.0, minor releases may contain breaking changes.
 - `permission` and `tool_refused` events; `model_call` is now documented.
 - User guide: [permissions](docs/user-guide/permissions.md).
 
+### Fixed
+- Math written with spaces inside the dollars (`$ a 
+eq 0 $`, which `qwen3:4b-instruct` did in
+  every answer of a live check) now renders in the terminal and in `/export` as real math instead of
+  showing the dollar signs and LaTeX source. `oxed{...}` is understood by the terminal renderer.
+
 ### Changed
 - `--yes` is now `--mode bypass`: deny rules and protected paths still apply.
 - Answering `a` (always) to a command now allows that exact command for the session, not every

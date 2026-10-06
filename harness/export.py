@@ -12,6 +12,7 @@ from pathlib import Path
 
 from harness.config import USER_DIR
 from harness.messages import Message
+from harness.tui.latex import tighten
 
 ATTACHED = re.compile(r"\n\nThe user attached these with @.*", re.DOTALL)
 # Characters our PDF fonts lack, written the LaTeX way instead.
@@ -50,7 +51,7 @@ def chat_markdown(messages: list[Message], title: str, model: str, last_only: bo
             lines += ["## You", "", ATTACHED.sub("", m.content).strip(), ""]
         elif m.role == "assistant":
             if m.content.strip():
-                lines += ["## Agent", "", m.content.strip(), ""]
+                lines += ["## Agent", "", tighten(m.content.strip()), ""]
             for c in m.tool_calls:
                 args = ", ".join(f"{k}={str(v)[:60]!r}" for k, v in c.arguments.items())
                 lines += [f"> *used* `{c.name}({args})`", ""]

@@ -132,6 +132,8 @@ class _Parser:
             return self.raw_group(), ""
         if name in MATH_WRAPPERS:
             return self.group(), ""
+        if name == "boxed":                                # a boxed final answer: brackets stand in for the box
+            return f"[{self.group()}]", ""
         if name in ("frac", "dfrac", "tfrac"):
             top, bottom = self.group(), self.group()
             if (top, bottom) in FRACTIONS:
@@ -246,8 +248,29 @@ DISPLAY = re.compile(r"\$\$(.+?)\$\$|\\\[(.+?)\\\]", re.DOTALL)
 INLINE = re.compile(r"\\\((.+?)\\\)|(?<![\\$\w])\$(?=\S)([^$\n]*?\S)\$(?![\d$])")
 
 
+# Models often pad inline math: `$ a \neq 0 $`. Markdown and pandoc don't accept that as math (no
+# space may follow the opening or precede the closing dollar), so it is tightened first. Measured
+# (Lesson 25b): qwen3:4b-instruct wrote padded math in 3 of 3 answers. To keep money out ("costs
+# $ 5 and $ 10"), the padded text must look like math: a command, ^, _, =, brackets, or one letter.
+PADDED = re.compile(r"(?<![\\$\w])\$ ([^$\n]*?) \$(?![\d$])")
+LOOKS_LIKE_MATH = re.compile(r"\\[A-Za-z]|[\^_=<>{}]|^\s*[A-Za-z]\s*$")
+
+
+def tighten(markdown: str) -> str:
+    """`$ x^2 $` → `$x^2$` outside code, so every renderer treats it as math."""
+    def fix(text: str) -> str:
+        return PADDED.sub(lambda m: f"${m.group(1).strip()}$" if LOOKS_LIKE_MATH.search(m.group(1)) else m.group(0), text)
+    pieces, last = [], 0
+    for m in CODE.finditer(markdown):
+        pieces += [fix(markdown[last:m.start()]), m.group(0)]
+        last = m.end()
+    pieces.append(fix(markdown[last:]))
+    return "".join(pieces)
+
+
 def render_math(markdown: str) -> str:
     """Replace math in Markdown with Unicode; display formulas become their own quoted paragraph."""
+    markdown = tighten(markdown)
     pieces, last = [], 0
     for m in CODE.finditer(markdown):                     # never touch code
         pieces.append(_render_text(markdown[last:m.start()]))

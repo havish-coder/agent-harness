@@ -1,7 +1,7 @@
 """Lesson 25b: LaTeX math shown as Unicode in the terminal."""
 import pytest
 
-from harness.tui.latex import render_math, to_super, to_unicode
+from harness.tui.latex import render_math, tighten, to_super, to_unicode
 
 
 @pytest.mark.parametrize("latex,expected", [
@@ -58,3 +58,25 @@ def test_money_and_code_are_left_alone():
 
 def test_other_delimiters():
     assert render_math(r"so \(a^2\) and \[b_0\]") == "so a² and \n\n> b₀\n\n"
+
+
+def test_padded_inline_math_is_math():
+    r"""qwen3:4b-instruct writes `$ a \neq 0 $` with spaces inside the dollars (Lesson 25b)."""
+    out = render_math(r"where $ a \neq 0 $ and $ x $, with $ x^2 = 4 $.")
+    assert out == "where a ≠ 0 and x, with x² = 4."
+
+
+def test_padded_dollars_around_money_stay_money():
+    text = "It cost $ 5 and then $ 10 more."
+    assert render_math(text) == text
+    assert tighten(text) == text
+
+
+def test_tighten_rewrites_math_but_not_code():
+    assert tighten(r"set $ x^2 $ now") == r"set $x^2$ now"
+    code = "run `a $ x^2 $ b` and\n```\n$ y = 1 $\n```"
+    assert tighten(code) == code
+
+
+def test_boxed_answers():
+    assert to_unicode(r"\boxed{\frac{1}{\sigma\sqrt{2\pi}}}") == "[1/(σ√2π)]"

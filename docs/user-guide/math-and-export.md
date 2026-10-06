@@ -16,6 +16,10 @@ terminal can't typeset, so the rich interface shows them with Unicode symbols in
 Formulas on their own line (`$$...$$` or `\[...\]`) appear as a separate, indented block.
 Anything the converter doesn't know stays visible as LaTeX rather than being guessed, prices
 like `$5 and $10` are left alone, and code (in backticks or code blocks) is never changed.
+Models often write padded math (`$ x^2 $` with spaces inside the dollars), which Markdown and
+pandoc don't treat as math; the harness closes those spaces first, in the terminal and in exports,
+when the text looks like math (a command, `^`, `_`, `=`, brackets, or a single letter), so `$ 5 and $ 10`
+is still money. A `oxed{...}` answer is shown in square brackets.
 In plain mode (`--plain`, pipes) answers are shown exactly as the model wrote them.
 
 To make the model use LaTeX for math consistently, switch to the `latex` style:
