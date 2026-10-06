@@ -26,8 +26,15 @@ is below 1.0, minor releases may contain breaking changes.
 - `agent.stop_reason`: `completed`, `max_steps`, `max_tokens`, `cancelled` or `error`.
 - `tool_denied` event.
 
+- `read_file` reads in pages: `offset` (negative = from the end) and `limit`, numbered lines,
+  a header saying which lines were returned and where to continue, and clear handling of
+  empty, binary, non-UTF-8 and missing files (ADR 0006).
+- `Workspace`: one object resolves every tool path and remembers what the model has read.
+
 ### Changed
 - Tool results longer than 8,000 characters are shortened, keeping the start and the end.
+- The workspace snapshot in the system prompt skips folders like `.git`, `.venv` and
+  `node_modules`.
 
 ## [0.1.0] - 2026-10-05
 

@@ -12,6 +12,7 @@ from harness.agent import Agent
 from harness.providers.base import ProviderError
 from harness.providers.ollama import OllamaProvider
 from harness.tools.fs import make_fs_tools, workspace_snapshot
+from harness.workspace import Workspace
 
 # Short and direct works best for small models (see course/07-first-tools-and-repl.md).
 SYSTEM_PROMPT = """You are a helpful agent. Use tools to inspect the workspace; never guess file contents.
@@ -81,9 +82,10 @@ def main():
     workspace = Path(args.workspace).resolve()
     if not workspace.is_dir():
         sys.exit(f"workspace folder not found: {workspace}")
+    ws = Workspace(workspace)
 
-    system_prompt = SYSTEM_PROMPT.format(snapshot=workspace_snapshot(workspace))
-    agent = Agent(OllamaProvider(model=args.model), make_fs_tools(workspace), system_prompt,
+    system_prompt = SYSTEM_PROMPT.format(snapshot=workspace_snapshot(ws))
+    agent = Agent(OllamaProvider(model=args.model), make_fs_tools(ws), system_prompt,
                   max_steps=args.max_steps, on_event=show_event,
                   approve=TerminalApprover(auto_approve=args.yes))
     print(f"{BOLD}Agent harness{RESET} · model {args.model} · workspace {workspace}")
@@ -102,6 +104,7 @@ def main():
             break
         if user == "/reset":
             agent.reset()
+            ws.forget_reads()   # the model no longer has earlier reads in its context
             print(f"{DIM}(conversation cleared){RESET}")
             continue
 
