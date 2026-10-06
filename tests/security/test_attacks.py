@@ -71,10 +71,32 @@ def test_t4_protected_names_can_be_spelled_differently(lab):
     assert not (lab.root / ".husky").exists() and not (lab.root / "sub").exists()
 
 
+@pytest.mark.parametrize("command", [
+    "echo evil > .git/hooks/pre-commit",
+    "echo evil >> .git/hooks/pre-commit",
+    "tee .git/hooks/pre-commit",
+    "cp src/app.py .git/hooks/pre-commit",
+    "mv src/app.py .husky/pre-commit",
+    "sed -i s/a/b/ .git/hooks/pre-commit",
+    "touch .github/workflows/ci.yml",
+    "git config core.hooksPath /tmp/evil",
+    "git -c core.fsmonitor=evil status",
+    "python -c \"open('.git/hooks/pre-commit', 'w').write('x')\"",
+    "cd .git && echo evil > hooks/pre-commit",
+])
+def test_t4_a_shell_command_aimed_at_a_protected_place_asks(lab, command):
+    """Lesson 30: in bypass mode a command that writes to, or names, a protected place still asks."""
+    lab.attack(call("run_shell", command=command))
+    assert len(lab.asked) == 1, lab.asked
+    assert "protected" in lab.asked[0][1] or "run programs" in lab.asked[0][1], lab.asked
+    assert not (lab.root / ".git" / "hooks" / "pre-commit").exists()
+
+
 @fixed_in("35 (sandbox: protected folders read-only for commands)")
-def test_t4_a_shell_command_writing_a_git_hook(lab):
-    """Bypass lets commands run, and a command can write anywhere the user can."""
-    lab.attack(call("run_shell", command="echo evil > .git/hooks/pre-commit"))
+def test_t4_a_command_that_builds_the_path_at_run_time(lab):
+    """Command analysis reads text. `'.g' + 'it'` hides the folder name until the program runs;
+    only an OS-level sandbox that makes the folder read-only closes this."""
+    lab.attack(call("run_shell", command="python -c \"open('.g'+'it/hooks/pre-commit','w').write('x')\""))
     assert not (lab.root / ".git" / "hooks" / "pre-commit").exists()
 
 
@@ -90,7 +112,7 @@ def test_a_deny_rule_wins_even_in_bypass_mode(lab):
 def test_plan_mode_refuses_every_change(lab):
     lab.permissions.mode = "plan"
     seen = lab.attack(call("write_file", "a1", path="src/new.py", content="x"),
-                      call("run_shell", "a2", command="echo hi"),
+                      call("run_shell", "a2", command="touch note.txt"),
                       call("read_file", "a3", path="src/app.py"))
     assert not (lab.root / "src" / "new.py").exists()
     assert seen.count("plan mode is on") == 2 and "print('hello')" in seen
@@ -99,16 +121,22 @@ def test_plan_mode_refuses_every_change(lab):
 def test_accept_edits_still_asks_for_commands(lab):
     lab.permissions.mode = "accept-edits"
     lab.attack(call("write_file", "a1", path="src/new.py", content="x"),
-               call("run_shell", "a2", command="echo hi"))
+               call("run_shell", "a2", command="touch note.txt"))
     assert (lab.root / "src" / "new.py").exists()
     assert [name for name, _ in lab.asked] == ["run_shell"]
 
 
 # --- T7 and T14: secrets ------------------------------------------------------------------
 
-@fixed_in("30 (environment scrubbing)")
 def test_t7_secret_environment_variables_dont_reach_commands(lab):
-    assert API_KEY not in lab.attack(call("run_shell", command="echo $LAB_API_KEY; env"))
+    """Lesson 30: the command's environment has no variable that looks like a secret."""
+    seen = lab.attack(call("run_shell", command="echo $LAB_API_KEY; env"))
+    assert API_KEY not in seen and "LAB_API_KEY" not in seen
+
+
+def test_t7_a_command_asked_to_print_the_key_directly(lab):
+    seen = lab.attack(call("run_shell", command="python -c \"import os; print(os.environ.get('LAB_API_KEY'))\""))
+    assert API_KEY not in seen and "None" in seen
 
 
 @fixed_in("34 (redaction)")

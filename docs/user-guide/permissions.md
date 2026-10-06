@@ -77,11 +77,44 @@ system does.
 
 Deny rules apply to reading too: `read_file(secrets/**)` keeps a folder out of the model's sight.
 
-> **Rules about commands are matched against the whole command text.** In this version an allow
-> rule like `run_shell(python -m pytest*)` would also match `python -m pytest; rm -rf src`. Keep
-> allow rules for commands narrow, and prefer deny rules with `*` on both sides
-> (`run_shell(*curl *)`). Matching each part of a compound command separately is in progress
-> for v0.5.
+### How commands are read
+A command line is a small program, so rules don't match its text as one string. The harness first
+splits it into the **commands it would run**: `a && b | c; d`, the inside of `$(...)`, backticks and
+`bash -c '...'`, with wrappers such as `env`, `sudo` and `timeout 60` taken off so the rule sees
+the real program (`/usr/bin/git`, `GIT.EXE` and `git` are all `git`).
+
+| Rule | What it needs |
+|---|---|
+| **deny** and **ask** | matches *any one* command in the line (or the whole text): `deny run_shell(git push*)` stops `echo hi && git push`, `sudo git push`, `bash -c 'git push'` and `echo $(git push)` |
+| **allow** | matches *every* command in the line: `allow run_shell(python -m pytest*)` runs `cd project && python -m pytest -q`, but not `python -m pytest; rm -rf src` or `python -m pytest | sh` |
+
+More rules for **allow**, because it grants something:
+- A command run with a changed environment or a wrapper (`PYTHONPATH=x python ...`,
+  `env LD_PRELOAD=x ...`, `sudo ...`, `timeout 5 ...`) is *not* the command you allowed.
+- The program must be spelled as in the rule: `/tmp/evil/python -m pytest` is not `python -m pytest`.
+- Redirections count: `python -m pytest > results.txt` is fine (inside the workspace), but
+  `> ../x`, `> ~/.bashrc` or `> /etc/...` are not covered.
+- A command the reader **can't fully follow** (a here-document, `eval $x`, a program name held in a
+  variable, an unbalanced quote, most PowerShell syntax) is never covered by a pattern: it asks, and
+  the question says so. `allow run_shell` (the whole tool) and an "always" answer still apply.
+
+A few commands **need no rule at all** when nothing in them reaches outside the workspace:
+`cd` into a folder inside it, `pwd`, `echo`, `printf`, `true`, `false` and `sleep`. They count as
+reading, so `cd project && pwd` runs even in `default` and `plan` mode. `echo x > file`, `cd ..`
+and `cd ~` don't qualify.
+
+The question for a command also lists what the reader noticed, in plain words:
+
+```text
+  ? run_shell wants to run
+    rm -rf build && git push --force
+    ! deletes files (rm -r)
+    ! rewrites history on a remote (git push --force)
+    allow? [y]es / [n]o / [a]lways allow this exact command (this session):
+```
+
+It's a reader of text, not a sandbox: `python script.py` runs whatever the script contains, and
+a path assembled at run time (`'.g' + 'it'`) can't be seen. See [Security](../security.md).
 
 ### Where rules come from
 Rules can be set in every [settings layer](configuration.md). They **add up** instead of
@@ -133,9 +166,33 @@ later, often without you noticing:
 
 They're matched at any depth (`sub/.git/config` too) and without case. Reading them is fine.
 
-Protected paths cover the **file tools**. A shell command can still write to them; in this
-version only an approval (or a deny rule) stops that, so don't use `bypass` in a repository you
-care about. See [Security](../security.md).
+**Commands too.** A shell command asks (in every mode) when it writes to a protected place with
+`>`, `>>` or `&>`, or when any word in it names one, so `cp x .git/hooks/pre-commit`,
+`sed -i ... .vscode/tasks.json` and `python -c "open('.git/hooks/x', 'w')"` all ask. So do
+`git config key value` and `git -c key=value ...`, which can make git run a program (`core.hooksPath`,
+`core.fsmonitor`, aliases). Reading with `cat`, `ls`, `grep` and the like, and `git config --get`,
+don't. This closes the obvious ways, not all of them: a command that builds the path while it runs
+can't be seen by reading its text. An OS sandbox (a later lesson) would close that; until then, don't
+use `bypass` in a repository you care about. See [Security](../security.md).
+
+## Secrets and commands
+Commands run with a copy of your environment **without secrets**. A variable is removed when its
+name contains a word like `KEY`, `TOKEN`, `SECRET`, `PASSWORD`, `AUTH`, `COOKIE` or `CREDENTIALS`
+(`ANTHROPIC_API_KEY`, `GITHUB_TOKEN`, `AWS_SECRET_ACCESS_KEY`, `sessionCookie`), or when its value
+looks like an API key (`sk-...`, `gsk_...`). `PATH`, `HOME`, `KEYBOARD_LAYOUT` and the like stay.
+So `env`, `echo $ANTHROPIC_API_KEY` and `python -c "import os; print(os.environ)"` can't hand your
+keys to the model (and through it, to a cloud provider's logs).
+
+Some tools need a secret-looking variable: `git push` over ssh needs `SSH_AUTH_SOCK`, a deploy script
+may need a token. Allow specific names in your user or local settings (a project can't):
+
+```json
+{ "shell_env_keep": ["SSH_AUTH_SOCK", "NPM_TOKEN"] }
+```
+
+A secret written in a *file* is a different matter: `read_file(".env")` still shows it to the model
+(redaction is a later lesson). Keep keys in environment variables, as the
+[configuration guide](configuration.md) suggests.
 
 ## Refused calls
 When a call is denied the model gets a short explanation (`not allowed: plan mode is on ...`)

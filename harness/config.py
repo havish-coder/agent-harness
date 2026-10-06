@@ -21,10 +21,10 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 
 from harness.security.permissions import MODES, Rule, RuleError
+from harness.security.secrets import SECRET_VALUES
 
 USER_DIR = Path(os.environ.get("HARNESS_HOME", Path.home() / ".harness"))
 SECRET_KEY_NAMES = re.compile(r"(api[_-]?key|secret|token|password)", re.IGNORECASE)
-SECRET_VALUES = re.compile(r"\b(sk-[A-Za-z0-9_-]{16,}|sk-ant-[A-Za-z0-9_-]{16,}|gsk_[A-Za-z0-9]{16,}|AIza[A-Za-z0-9_-]{30,})")
 
 
 class ConfigError(Exception):
@@ -53,6 +53,7 @@ class Settings:
     # {"allow": [...], "ask": [...], "deny": [...]} in files; after loading, every layer's rules
     # as [{"action", "rule", "source"}] (rules add up across layers, each remembering its file)
     permissions: list = field(default_factory=list)
+    shell_env_keep: list = field(default_factory=list)   # environment variables commands may see despite looking secret
     sources: dict = field(default_factory=dict, repr=False, compare=False)   # key → where it came from
 
 
@@ -76,7 +77,7 @@ TYPES: dict[str, tuple] = {
     "context_window": (int,), "max_output_tokens": (int,), "max_steps": (int,), "stream": (bool,), "think": (bool,),
     "shell": (str, type(None)), "max_retries": (int,), "prices": (dict,),
     "output_style": (str,), "status_line": (str, type(None)), "additional_directories": (list,),
-    "permission_mode": (str,), "permissions": (dict,),
+    "permission_mode": (str,), "permissions": (dict,), "shell_env_keep": (list,),
 }
 # Settings a project file may not set, and why: a cloned repository could otherwise run its own
 # code on your machine, or give the agent access to your other folders, just by being opened.
@@ -84,6 +85,7 @@ NOT_FROM_PROJECT = {
     "status_line": "it runs a program",
     "additional_directories": "it gives the agent access to folders outside the workspace",
     "permission_mode": "it decides what runs without asking",
+    "shell_env_keep": "it hands your secret environment variables to commands",
 }
 RULE_ACTIONS = ("allow", "ask", "deny")
 

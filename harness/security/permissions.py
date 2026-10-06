@@ -20,6 +20,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Literal
 
+from harness.security.shell import Analysis, Part, analyze, part_writes
 from harness.workspace import OutsideWorkspace, Workspace
 
 Action = Literal["allow", "ask", "deny"]
@@ -92,6 +93,7 @@ class Decision:
     action: Action
     reason: str                   # shown to the user (and, for denials, to the model)
     remember: Rule | None = None  # the rule "always" would add; None when "always" can't help
+    notes: list[str] = field(default_factory=list)   # risks in a shell command, shown with the question (Lesson 30)
 
 
 def glob_regex(pattern: str, separator: str | None) -> str:
@@ -128,9 +130,11 @@ def match_path(pattern: str, rel: str) -> bool:
     return bool(re.fullmatch(glob_regex(pattern, "/"), rel, flags))
 
 
-def match_command(pattern: str, command: str) -> bool:
-    """`*` matches anything, spaces included: `git status*`, `python -m pytest*`."""
-    return bool(re.fullmatch(glob_regex(pattern.strip(), None), command.strip(), re.DOTALL))
+def match_command(pattern: str, command: str, ignore_case: bool = False) -> bool:
+    """`*` matches anything, spaces included: `git status*`, `python -m pytest*`. Deny and ask rules
+    ignore case (PowerShell commands and Windows file names do; matching more is the safe side)."""
+    flags = re.DOTALL | (re.IGNORECASE if ignore_case else 0)
+    return bool(re.fullmatch(glob_regex(pattern.strip(), None), command.strip(), flags))
 
 
 def protected_reason(rel: str) -> str | None:
@@ -143,6 +147,46 @@ def protected_reason(rel: str) -> str | None:
                 return f"{name}/ is protected: {why}"
     if parts and parts[-1] in PROTECTED_FILES:
         return f"{parts[-1]} is protected: {PROTECTED_FILES[parts[-1]]}"
+    return None
+
+
+# Lesson 30. Commands that need no rule: they only move around or print what they're given. With a
+# redirection (`echo x > f`) or a path outside the workspace they are no longer "safe".
+SAFE_PROGRAMS = {"cd", "pushd", "popd", "pwd", "echo", "printf", "true", "false", "sleep", "set-location",
+                 "get-location", "write-output"}
+# Programs that read the files named in their arguments; naming a protected folder is fine for them.
+VIEWERS = {"cat", "head", "tail", "less", "more", "ls", "dir", "wc", "grep", "rg", "type", "stat", "file",
+           "diff", "tree", "get-content", "get-childitem", "select-string"}
+
+
+def mentions_protected(text: str) -> str | None:
+    """Why a command that names this text (a path, or code containing one) always asks, or None.
+    Unlike protected_reason this looks inside any word, because `python -c "open('.git/x', 'w')"`
+    hides the path in a string. Over-asking is the safe direction."""
+    flat = text.replace("\\", "/").casefold()
+    for name, why in PROTECTED_DIRS.items():
+        if re.search(rf"(?:^|[/=:'\"\s]){re.escape(name)}(?:$|[/'\"\s])", flat):
+            return f"{name}/ is protected: {why} (the command mentions it)"
+    for name, why in PROTECTED_FILES.items():
+        if re.search(rf"(?:^|[/=:'\"\s]){re.escape(name)}(?:$|['\"\s])", flat):
+            return f"{name} is protected: {why} (the command mentions it)"
+    return None
+
+
+GIT_CONFIG_READS = {"--get", "--get-all", "--get-regexp", "--get-urlmatch", "--list", "-l", "--show-origin",
+                    "--show-scope", "--help", "-h"}
+
+
+def git_config_risk(part: Part) -> str | None:
+    """`git config key value` and `git -c key=value ...` can make git run programs (core.hooksPath,
+    core.fsmonitor, core.sshCommand, aliases starting with `!`), without naming a protected path."""
+    if part.program != "git" or len(part.words) < 2:
+        return None
+    second = part.words[1]
+    if second == "-c" or (second.startswith("-c") and "=" in second):
+        return "git -c sets configuration that can make git run programs"
+    if second == "config" and not GIT_CONFIG_READS & set(part.words[2:]):
+        return "git config can set options that make git run programs (hooks, aliases, core.fsmonitor)"
     return None
 
 
@@ -175,19 +219,27 @@ class Permissions:
             subject, kind = self.subject(call, tool)
         except OutsideWorkspace as e:
             return Decision("deny", str(e))
-        read_only = tool.is_read_only(call.arguments)
-        matching = [r for r in self.rules if r.matches(tool.name, subject, kind)]
+        analysis = analyze(subject, getattr(tool, "dialect", None) or "posix") if kind == "command" and subject else None
+        notes = self.notes(analysis)
+        read_only = tool.is_read_only(call.arguments) or (analysis is not None and self.is_safe(analysis))
+        matching = [r for r in self.rules if r.action != "allow" and self.applies(r, tool.name, subject, kind, analysis)]
+
+        def ask(reason: str, remember: Rule | None = None) -> Decision:
+            return Decision("ask", reason, remember, notes)
 
         for rule in matching:                                                   # 1
             if rule.action == "deny":
                 return Decision("deny", f"denied by the rule {rule} ({rule.source})")
-        if kind == "path" and not read_only:                                    # 2
+        why = None                                                              # 2
+        if kind == "path" and not read_only:
             why = protected_reason(subject)
-            if why:
-                return Decision("ask", why)
+        elif analysis is not None:
+            why = self.command_protected(analysis)
+        if why:
+            return ask(why)
         for rule in matching:
             if rule.action == "ask":
-                return Decision("ask", f"the rule {rule} ({rule.source}) asks first")
+                return ask(f"the rule {rule} ({rule.source}) asks first")
         if self.mode == "plan" and not read_only:                               # 3
             return Decision("deny", "plan mode is on: only tools that read are allowed. "
                                     "Describe the change instead of making it")
@@ -195,12 +247,102 @@ class Permissions:
             return Decision("allow", "bypass mode")
         if self.mode == "accept-edits" and kind == "path" and not read_only:
             return Decision("allow", "accept-edits mode")
-        for rule in matching:                                                   # 4
-            if rule.action == "allow":
-                return Decision("allow", f"allowed by the rule {rule} ({rule.source})")
+        rule = self.allowing_rule(tool.name, subject, kind, analysis)           # 4
+        if rule:
+            return Decision("allow", f"allowed by the rule {rule} ({rule.source})")
         if read_only:                                                           # 5
             return Decision("allow", "reads only")
-        return Decision("ask", CHANGES, self.suggest(tool, subject, kind))      # 6
+        return ask(CHANGES, self.suggest(tool, subject, kind))                  # 6
+
+    # --- shell commands (Lesson 30) ------------------------------------------------------------
+    @staticmethod
+    def notes(analysis: Analysis | None) -> list[str]:
+        if analysis is None:
+            return []
+        notes = list(analysis.notes)
+        if not analysis.understood:
+            notes.append("can't be fully checked: " + "; ".join(analysis.opaque))
+        return notes
+
+    def inside(self, word: str) -> bool:
+        """Is this command-line word a path inside the workspace? `~`, `$VAR` and `-` are not."""
+        if not word or word == "-" or word.startswith("~") or "$" in word or "`" in word:
+            return False
+        try:
+            self.ws.path(word)
+        except OutsideWorkspace:
+            return False
+        return True
+
+    def safe_part(self, part: Part) -> bool:
+        """A command that only moves around or prints: no rule needed."""
+        if part.wrappers or part.program not in SAFE_PROGRAMS:
+            return False
+        if part.program in ("cd", "pushd", "set-location"):
+            return len(part.words) == 2 and not part.dynamic[1] and self.inside(part.words[1])
+        return part.program != "popd" or len(part.words) == 1
+
+    def is_safe(self, analysis: Analysis) -> bool:
+        return (analysis.understood and bool(analysis.parts) and not analysis.writes
+                and all(self.safe_part(p) for p in analysis.parts))
+
+    def command_protected(self, analysis: Analysis) -> str | None:
+        """Why this command always asks: it writes to, or names, a protected place."""
+        for target in analysis.writes:
+            try:
+                why = protected_reason(self.ws.display(self.ws.path(target)))
+            except OutsideWorkspace:
+                why = None
+            why = why or mentions_protected(target)
+            if why:
+                return why
+        for part in analysis.parts:
+            why = git_config_risk(part)
+            if why:
+                return why
+            if part.program in VIEWERS and not part.redirects:
+                continue                                  # reading `.git/config` is fine
+            for word in part.words[1:]:
+                why = mentions_protected(word)
+                if why:
+                    return why
+        return None
+
+    def applies(self, rule: Rule, tool_name: str, subject: str | None, kind: str | None,
+                analysis: Analysis | None) -> bool:
+        """Does a deny or ask rule match? For commands, if it matches the whole text or any single
+        command inside it, with wrappers and the program's directory removed."""
+        if analysis is None or kind != "command" or rule.pattern is None or rule.exact:
+            return rule.matches(tool_name, subject, kind)
+        if rule.tool not in ("*", tool_name):
+            return False
+        texts = [subject.strip()] + [t for p in analysis.parts for t in (p.text, p.plain_text)]
+        return any(match_command(rule.pattern, t, ignore_case=True) for t in texts)
+
+    def allowing_rule(self, tool_name: str, subject: str | None, kind: str | None,
+                      analysis: Analysis | None) -> Rule | None:
+        """The allow rule that lets this call run, or None. A command is allowed by patterns only
+        when it was fully understood and *every* command in it is covered: `pytest && curl x`
+        is not allowed by `pytest*`. Commands run with a changed environment or through a wrapper
+        (`env`, `sudo`, `NAME=value`) are never covered by a pattern: it isn't the command the
+        user allowed."""
+        allows = [r for r in self.rules if r.action == "allow" and r.tool in ("*", tool_name)]
+        for rule in allows:
+            if rule.pattern is None or (rule.exact and subject is not None and subject.strip() == rule.pattern):
+                return rule
+        if analysis is None or kind != "command":
+            return next((r for r in allows if r.matches(tool_name, subject, kind)), None)
+        patterns = [r for r in allows if not r.exact]
+        if not (analysis.understood and analysis.parts and patterns and all(self.inside(t) for t in analysis.writes)):
+            return None
+        used = None
+        for part in analysis.parts:
+            if self.safe_part(part) and not part_writes(part):
+                continue
+            used = None if part.wrappers else next((r for r in patterns if match_command(r.pattern, part.text)), None)
+            if used is None:
+                return None
+        return used
 
     def suggest(self, tool, subject: str | None, kind: str | None) -> Rule:
         """The session rule an "always" answer adds. For commands it's this exact command, matched

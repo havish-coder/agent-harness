@@ -168,7 +168,7 @@ class RichApprover(PlainApprover):
         super().__init__()
         self.console = ui.console if ui else Console()
 
-    def show(self, call, tool, reason: str | None = None):
+    def show(self, call, tool, reason: str | None = None, notes=()):
         destructive = tool.is_destructive(call.arguments)
         title = Text("? ", style="yellow")
         title.append(f"{tool.name}", style="bold yellow")
@@ -178,6 +178,9 @@ class RichApprover(PlainApprover):
         self.console.print(title)
         if reason and reason != CHANGES:
             self.console.print(Text(f"  asking because {reason}", style="yellow"))
+        for note in notes:
+            risky = note.startswith(("deletes", "rewrites", "overwrites", "runs as administrator"))
+            self.console.print(Text(f"  ! {note}", style="bold red" if risky else "yellow"))
         if call.name == "run_shell":
             self.console.print(Padding(Syntax(call.arguments.get("command", ""), "bash", theme="ansi_dark",
                                               word_wrap=True), (0, 0, 0, 2)))

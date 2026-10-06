@@ -26,6 +26,21 @@ is below 1.0, minor releases may contain breaking changes.
 - Protected paths: writes to `.git/`, `.harness/`, `.vscode/`, `.idea/`, `.husky/`,
   `.github/workflows/`, `.pre-commit-config.yaml`, `.envrc` and `.gitattributes` always ask,
   bypass mode included.
+- Shell commands are read before rules are applied (ADR 0027): split into the commands they run,
+  including `$(...)`, backticks, `bash -c '...'` and `eval`, with `env`, `sudo`, `timeout` and
+  `NAME=value` prefixes seen through. Deny and ask rules match any command in the line; allow
+  rules must cover every one, so `run_shell(python -m pytest*)` no longer allows
+  `python -m pytest; rm -rf src`. Commands run with a changed environment or a wrapper, redirections
+  outside the workspace, and commands that can't be fully read (here-documents, `eval $x`, most
+  PowerShell syntax) are not covered by pattern rules.
+- `cd` into the workspace, `pwd`, `echo`, `printf`, `true`, `false` and `sleep` need no rule or question.
+- Approval questions list the risks found in a command (deletes files, rewrites remote history, uses
+  the network, installs packages, runs as administrator ...).
+- Commands that write to a protected path (`>`, `cp`, `sed -i`, `tee` ...) or name one, and
+  `git config` / `git -c`, ask in every mode.
+- Secret environment variables (`*_KEY`, `*_TOKEN`, `*_SECRET`, `*_PASSWORD`, `AUTH`, `COOKIE`, values
+  shaped like API keys) are removed from the environment of `run_shell` commands. `shell_env_keep`
+  setting to allow specific names; not accepted from project settings.
 - `permission` and `tool_refused` events; `model_call` is now documented.
 - User guide: [permissions](docs/user-guide/permissions.md).
 
@@ -41,6 +56,7 @@ is below 1.0, minor releases may contain breaking changes.
   routine, and don't offer `a` for protected paths.
 - Project settings can't set `permission_mode` or add `allow` rules (ignored with a warning).
 - Tool calls in a batch are all checked and decided before any of them runs.
+- `/tools` labels tools that aren't read-only "can change things" (they no longer all ask: see permissions).
 
 ## [0.4.0] - 2026-10-06
 

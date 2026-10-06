@@ -1,8 +1,9 @@
 """Lesson 13: running commands. The most powerful tool, and the most dangerous one.
 
-Naive on purpose: any command the user approves runs with the user's full rights. Module 5
-hardens it (command analysis, permissions, environment scrubbing). What it does get right
-already: a timeout that kills the whole process tree, no stdin (so nothing waits for input),
+Any command the user approves runs with the user's full rights. Module 5 hardens what
+surrounds it: permissions read the command before it runs (harness/security/shell.py, Lesson 30),
+and secret environment variables are removed from the environment it runs in (Lesson 30). What
+it got right from the start: a timeout that kills the whole process tree, no stdin (so nothing waits for input),
 UTF-8 output on Windows, output caps that keep the end, and an exit code the model can't miss.
 """
 import os
@@ -14,6 +15,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from harness.security.secrets import scrub_env
 from harness.tools.base import Tool, tool
 from harness.workspace import Workspace
 
@@ -33,6 +35,11 @@ class Shell:
 
     def command_line(self, command: str) -> list[str]:
         return self.argv + [self.prefix + command + self.suffix]
+
+    @property
+    def dialect(self) -> str:
+        """How permission rules should read commands for this shell: "posix" or "powershell"."""
+        return "powershell" if self.prefix else "posix"
 
 
 # PowerShell: UTF-8 in and out (otherwise symbols come back as '?'), and a real exit code.
@@ -73,9 +80,10 @@ def detect_shell(preference: str | None = None) -> Shell:
     return Shell(Path(bash).name, [bash, "-c"], "POSIX shell syntax; chain commands with '&&'.")
 
 
-def child_env() -> dict:
-    """The environment for commands: ours, plus UTF-8 Python and our Python first on PATH."""
-    env = dict(os.environ)
+def child_env(keep=()) -> dict:
+    """The environment for commands: ours without secrets (API keys, tokens, passwords: Lesson 30),
+    plus UTF-8 Python and our Python first on PATH. `keep` names variables to leave in."""
+    env, _ = scrub_env(dict(os.environ), keep)
     env["PYTHONUTF8"] = "1"
     env["PYTHONIOENCODING"] = "utf-8"
     env["PATH"] = str(Path(sys.executable).parent) + os.pathsep + env.get("PATH", "")
@@ -104,7 +112,8 @@ def clip(text: str, budget: int) -> str:
             f"{text[len(text) - tail:]}")
 
 
-def run_command(shell: Shell, command: str, cwd: Path, timeout: int) -> tuple[int | None, str, str, float]:
+def run_command(shell: Shell, command: str, cwd: Path, timeout: int,
+                env_keep=()) -> tuple[int | None, str, str, float]:
     """Run one command. Returns (exit code or None on timeout, stdout, stderr, seconds)."""
     argv = shell.command_line(command)
     kwargs: dict = {}
@@ -113,7 +122,7 @@ def run_command(shell: Shell, command: str, cwd: Path, timeout: int) -> tuple[in
     else:
         kwargs["start_new_session"] = True
     start = time.monotonic()
-    proc = subprocess.Popen(argv, cwd=cwd, env=child_env(), stdin=subprocess.DEVNULL,
+    proc = subprocess.Popen(argv, cwd=cwd, env=child_env(env_keep), stdin=subprocess.DEVNULL,
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, **kwargs)
     try:
         out, err = proc.communicate(timeout=timeout)
@@ -126,7 +135,7 @@ def run_command(shell: Shell, command: str, cwd: Path, timeout: int) -> tuple[in
             time.monotonic() - start)
 
 
-def make_shell_tools(ws: Workspace, shell: Shell | None = None) -> list[Tool]:
+def make_shell_tools(ws: Workspace, shell: Shell | None = None, env_keep=()) -> list[Tool]:
     shell = shell or detect_shell()
 
     @tool(read_only=False, concurrency_safe=False, max_result_chars=OUTPUT_BUDGET + 1_000)
@@ -135,7 +144,8 @@ def make_shell_tools(ws: Workspace, shell: Shell | None = None) -> list[Tool]:
 
         Use it to run tests, scripts, git, package managers and build tools. To read, search or
         edit files, use read_file, grep, glob and edit_file instead. Commands can't read input:
-        anything that waits for a key press or a password fails immediately.
+        anything that waits for a key press or a password fails immediately. Environment variables
+        that hold secrets (names with KEY, TOKEN, SECRET, PASSWORD) are not available to commands.
 
         Args:
             command: The command to run. Paths are relative to the workspace root.
@@ -143,7 +153,7 @@ def make_shell_tools(ws: Workspace, shell: Shell | None = None) -> list[Tool]:
         """
         folder = ws.root
         timeout = max(1, min(timeout, MAX_TIMEOUT))
-        code, out, err, seconds = run_command(shell, command, folder, timeout)
+        code, out, err, seconds = run_command(shell, command, folder, timeout, env_keep)
 
         if code is None:
             status = f"TIMED OUT after {timeout} s; the command and its child processes were stopped"
@@ -159,5 +169,6 @@ def make_shell_tools(ws: Workspace, shell: Shell | None = None) -> list[Tool]:
             parts.append("(no output)")
         return "\n".join(parts)
 
-    run_shell.description += f"\n\nShell: {shell.name}. {shell.hint}"
+    run_shell.dialect = shell.dialect
+    run_shell.description +=f"\n\nShell: {shell.name}. {shell.hint}"
     return [run_shell]

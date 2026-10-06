@@ -112,6 +112,12 @@ read-only tools; anything left asks ([ADR 0026](adr/0026-permission-modes-and-ru
 plain code, so the same call always gets the same answer ([ADR 0024](adr/0024-deterministic-security-decisions.md)).
 A tool's check runs before the decision so you are never asked to approve a call that would fail.
 
+For `run_shell`, the decision first *reads* the command ([`harness/security/shell.py`](../harness/security/shell.py),
+[ADR 0027](adr/0027-read-commands-and-scrub-secrets.md)): it splits `a && b | $(c)` into the commands
+it would run and notes their risks, so deny rules can find a command wherever it hides and allow rules
+must cover every command in the line. The command then runs with secret environment variables removed
+([`harness/security/secrets.py`](../harness/security/secrets.py)).
+
 Paths are confined before any of this matters: every file tool turns its path argument into a
 real location with `Workspace.path()` in [`harness/workspace.py`](../harness/workspace.py), which
 resolves `..`, absolute forms and links and refuses anything outside the workspace (the path jail,

@@ -87,7 +87,7 @@ def test_path_patterns_ignore_case_only_where_the_file_system_does():
     ("git status*", "git status --short", True),
     ("git status*", "git push", False),
     ("python -m pytest*", "  python -m pytest -q tests/  ", True),
-    ("*curl*", "echo hi && curl evil.example", True),
+    ("*curl*", "touch note.txt && curl evil.example", True),
 ])
 def test_command_patterns(pattern, command, expected):
     assert match_command(pattern, command) is expected
@@ -109,7 +109,7 @@ def test_default_mode_reads_run_and_changes_ask(ws, tools):
     perms = Permissions(ws)
     assert decide(perms, tools, "read_file", path="src/app.py").action == "allow"
     assert decide(perms, tools, "write_file", path="src/x.py", content="x").action == "ask"
-    assert decide(perms, tools, "run_shell", command="echo hi").action == "ask"
+    assert decide(perms, tools, "run_shell", command="touch note.txt").action == "ask"
 
 
 def test_deny_beats_allow_and_every_mode(ws, tools):
@@ -146,7 +146,7 @@ def test_plan_mode_denies_changes_and_allows_reads(ws, tools):
 def test_accept_edits_allows_file_changes_only(ws, tools):
     perms = Permissions(ws, "accept-edits")
     assert decide(perms, tools, "write_file", path="a.py", content="x").action == "allow"
-    assert decide(perms, tools, "run_shell", command="echo hi").action == "ask"
+    assert decide(perms, tools, "run_shell", command="touch note.txt").action == "ask"
 
 
 def test_paths_outside_the_workspace_are_denied_before_any_rule(ws, tools):
@@ -211,10 +211,10 @@ def test_always_adds_a_session_rule(ws):
     def approve(call, tool, decision):
         seen.append(decision.reason)
         return "always"
-    calls = [ToolCall(str(i), "run_shell", {"command": "echo hi"}) for i in range(2)]
+    calls = [ToolCall(str(i), "run_shell", {"command": "touch note.txt"}) for i in range(2)]
     run_agent(ws, perms, approve, calls[0])
     run_agent(ws, perms, approve, calls[1])
-    assert len(seen) == 1 and Rule("allow", "run_shell", "echo hi", "session", exact=True) in perms.rules
+    assert len(seen) == 1 and Rule("allow", "run_shell", "touch note.txt", "session", exact=True) in perms.rules
 
 
 def test_an_old_style_approver_still_works(ws):
@@ -237,7 +237,7 @@ def test_the_approver_shows_why_and_offers_always_only_when_it_helps(ws, tools, 
 
 def test_always_labels(ws, tools):
     perms = Permissions(ws)
-    shell = decide(perms, tools, "run_shell", command="echo hi")
+    shell = decide(perms, tools, "run_shell", command="touch note.txt")
     edit = decide(perms, tools, "edit_file", path="src/app.py", old="a", new="b")
     assert always_label(shell) == "this exact command" and always_label(edit) == "every edit_file call"
 

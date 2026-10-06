@@ -133,7 +133,10 @@ Behaviour:
 - Output is UTF-8 (including on Windows); Python programs run with `PYTHONUTF8=1`.
 - The Python running the agent is first on `PATH`, so `python` means that interpreter.
 - PowerShell's exit code is the real one of the last command (PowerShell itself only reports 0 or 1).
-- The command inherits your environment variables. See [security](../security.md).
+- The command inherits your environment variables **except secrets**: any variable whose name
+  contains a word like `KEY`, `TOKEN`, `SECRET`, `PASSWORD`, `AUTH` or `COOKIE`, or whose value looks
+  like an API key (`sk-...`), is removed. Allow specific ones with the `shell_env_keep`
+  [setting](configuration.md). See [Permissions](../user-guide/permissions.md#how-commands-are-read).
 
 Result: a status line (`exit code 0 (success) · 1.2 s · in .`, or `TIMED OUT after 60 s`),
 then `--- stdout ---` and `--- stderr ---` sections, or `(no output)`. Long output keeps the

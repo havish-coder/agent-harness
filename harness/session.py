@@ -43,7 +43,7 @@ class Session:
                                          on_retry=ui.retry)
         self.costs = CostTracker(settings.provider, self.provider.model, settings.prices)
         self.permissions = Permissions.from_settings(ws, settings.permission_mode, settings.permissions)
-        tools = default_tools(ws, shell=settings.shell)
+        tools = default_tools(ws, shell=settings.shell, env_keep=settings.shell_env_keep)
         for warning in self.permissions.unknown_tools([t.name for t in tools]):
             ui.warn(f"warning: {warning}")
         self.agent = Agent(self.provider, tools,

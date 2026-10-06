@@ -111,11 +111,13 @@ class PlainApprover:
     def __init__(self, ui: PlainUI | None = None):
         self.pause = nullcontext        # replaced by KeyWatcher.paused, so the prompt gets the keys
 
-    def show(self, call, tool, reason: str | None = None):
+    def show(self, call, tool, reason: str | None = None, notes=()):
         warning = " (may destroy data)" if tool.is_destructive(call.arguments) else ""
         print(f"{YELLOW}  ? {tool.name} wants to run{warning}{RESET}")
         if reason and reason != CHANGES:
             print(f"{YELLOW}    asking because {reason}{RESET}")
+        for note in notes:
+            print(f"{YELLOW}    ! {note}{RESET}")
         if tool.preview:
             try:
                 print(DIM + "    " + tool.preview(**call.arguments).replace("\n", "\n    ") + RESET)
@@ -129,7 +131,7 @@ class PlainApprover:
     def __call__(self, call, tool, decision=None) -> bool | str:
         always = always_label(decision)
         with self.pause():
-            self.show(call, tool, decision.reason if decision else None)
+            self.show(call, tool, decision.reason if decision else None, decision.notes if decision else ())
             while True:
                 answer = self.ask(always).strip().lower()
                 if answer in ("y", "yes"):

