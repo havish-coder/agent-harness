@@ -3,16 +3,25 @@
 Run:  python scripts/check_docs.py      (exit code 1 and a list of broken links on failure)
 """
 import re
+import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SKIP_DIRS = {".git", ".venv", "node_modules", "code-x", "mega-course", ".harness", "build", "dist"}
+SKIP_DIRS = {".git", ".venv", "node_modules", ".harness", "build", "dist"}
 LINK = re.compile(r"(?<!!)\[[^\]]*\]\(([^)\s]+)\)")   # [text](target), not images
 FENCE = re.compile(r"^(```|~~~)")
 
 
 def markdown_files(root: Path):
+    """The Markdown files git tracks (so folders git ignores are never checked); every *.md
+    outside the usual build folders when this isn't a git checkout."""
+    listed = subprocess.run(["git", "ls-files", "-z", "--", "*.md"], cwd=root, capture_output=True, text=True)
+    if listed.returncode == 0 and listed.stdout:
+        for name in listed.stdout.split(chr(0)):
+            if name and (root / name).is_file():
+                yield root / name
+        return
     for path in root.rglob("*.md"):
         if not SKIP_DIRS.intersection(path.relative_to(root).parts):
             yield path
