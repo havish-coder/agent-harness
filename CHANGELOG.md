@@ -33,7 +33,7 @@ is below 1.0, minor releases may contain breaking changes.
 - Math written with spaces inside the dollars (`$ a 
 eq 0 $`, which `qwen3:4b-instruct` did in
   every answer of a live check) now renders in the terminal and in `/export` as real math instead of
-  showing the dollar signs and LaTeX source. `oxed{...}` is understood by the terminal renderer.
+  showing the dollar signs and LaTeX source. `\boxed{...}` is understood by the terminal renderer.
 
 ### Changed
 - `--yes` is now `--mode bypass`: deny rules and protected paths still apply.
