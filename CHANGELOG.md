@@ -8,6 +8,8 @@ is below 1.0, minor releases may contain breaking changes.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-06
+
 ### Added
 - Rich terminal interface (ADR 0019): answers rendered as Markdown while they stream, a spinner
   while the model thinks, one-line tool calls with a short result preview (test summaries for
@@ -144,7 +146,8 @@ is below 1.0, minor releases may contain breaking changes.
   the system prompt.
 - Terminal chat (`harness`) with tool-call display, `/reset`, `/bye` and per-turn token counts.
 
-[Unreleased]: https://github.com/havish-coder/agent-harness/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/havish-coder/agent-harness/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/havish-coder/agent-harness/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/havish-coder/agent-harness/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/havish-coder/agent-harness/compare/lesson-07...v0.2.0
 [0.1.0]: https://github.com/havish-coder/agent-harness/releases/tag/lesson-07

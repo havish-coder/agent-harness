@@ -5,10 +5,12 @@ written from scratch in Python, without agent frameworks. It talks to a local mo
 [Ollama](https://ollama.com) or to a cloud API, inspects and edits files, runs commands, and
 explains every step it takes.
 
-> **Status: v0.3, pre-release.** The agent reads, searches and edits code and runs commands,
+> **Status: v0.4, pre-release.** The agent reads, searches and edits code and runs commands,
 > asking your approval (with a diff) before anything changes. It streams its answers and runs
 > on Ollama, Claude or any OpenAI-compatible service, with retries, settings files and cost
-> tracking. Security hardening, memory, sub-agents and a web UI are on the [roadmap](#roadmap).
+> tracking, in a terminal app with Markdown rendering, line editing, slash commands, output
+> styles, a status line and typeset math. Security hardening, memory, sub-agents and a web UI
+> are on the [roadmap](#roadmap).
 > See the [changelog](CHANGELOG.md) for what changed in each release.
 
 ![The agent fixing a bug: it reads the file, proposes a diff, runs the tests](docs/images/demo.svg)
@@ -44,6 +46,11 @@ plus [`httpx`](https://www.python-httpx.org/). Every design decision is written 
 | ✅ | Automatic retries with backoff; fallback model | v0.3 |
 | ✅ | Layered settings files; API keys only from the environment or `.env` | v0.3 |
 | ✅ | Token, cache and cost tracking per turn and per session | v0.3 |
+| ✅ | Rich terminal: Markdown while streaming, highlighted diffs, plain fallback | v0.4 |
+| ✅ | Line editing, history, `@file` mentions, Esc to stop, type-ahead | v0.4 |
+| ✅ | Slash commands, and your own as Markdown files | v0.4 |
+| ✅ | Output styles (concise, explanatory, learning, latex) and a status line | v0.4 |
+| ✅ | Math shown with Unicode symbols; `/export` to Markdown, LaTeX or PDF | v0.4 |
 
 ## Quickstart
 Requirements: Python 3.10+, [Ollama](https://ollama.com/download), about 3 GB of disk.
@@ -77,7 +84,6 @@ Then ask something like *"How many TODOs are in my notes?"*. Full walkthrough:
 ## Roadmap
 | Release | Theme |
 |---|---|
-| v0.4 | A polished terminal app: rich rendering, input history, slash commands, status line |
 | v0.5 | Security: path jail, permission modes and rules, shell hardening, hooks, audit log |
 | v0.6 | Context: token budgets, compaction, sessions, project and auto memory, undo |
 | v0.7 | Workflows: todo list, plan mode, sub-agents, skills, background tasks, MCP |
