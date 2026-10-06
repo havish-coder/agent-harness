@@ -21,7 +21,7 @@ from harness.cli import SYSTEM_PROMPT  # noqa: E402
 from harness.providers.fake import ReplayProvider, committed_copy  # noqa: E402
 from harness.tools import default_tools  # noqa: E402
 from harness.tools.fs import workspace_snapshot  # noqa: E402
-from harness.tui.rich_ui import RichApprover, RichUI  # noqa: E402
+from harness.tui.rich_ui import RichApprover, RichUI, options_markup  # noqa: E402
 from harness.workspace import Workspace  # noqa: E402
 
 CASSETTE = ROOT / "tests" / "cassettes" / "fix_subtotal.jsonl"
@@ -30,9 +30,8 @@ CASSETTE = ROOT / "tests" / "cassettes" / "fix_subtotal.jsonl"
 class DemoApprover(RichApprover):
     """Shows the real approval prompt, then answers 'y' as a user would."""
 
-    def ask(self, tool_name: str) -> str:
-        self.console.print(f"  [yellow]allow? [bold]y[/bold]es / [bold]n[/bold]o / [bold]a[/bold]lways "
-                           f"for {tool_name}:[/yellow] y")
+    def ask(self, always: str | None) -> str:
+        self.console.print(f"  [yellow]allow? {options_markup(always)}:[/yellow] y")
         return "y"
 
 

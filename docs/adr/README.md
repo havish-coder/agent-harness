@@ -32,3 +32,4 @@ Copy [the template](template.md) to `NNNN-short-title.md` with the next number.
 | [0023](0023-latex-math-and-export.md) | Our own LaTeX-to-Unicode converter for the terminal; pandoc and Tectonic for documents | Accepted |
 | [0024](0024-deterministic-security-decisions.md) | Make security decisions in deterministic code; treat tool calls as untrusted input | Accepted |
 | [0025](0025-path-jail.md) | Confine file tools by resolving paths, then checking containment | Accepted |
+| [0026](0026-permission-modes-and-rules.md) | Decide every tool call with modes and allow/ask/deny rules, strictest first | Accepted |

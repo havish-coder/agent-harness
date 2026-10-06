@@ -94,18 +94,23 @@ flowchart TD
     V -- no --> E2["Error: invalid arguments ... Expected: signature"]
     V -- yes --> TC{tool's own check<br/>passes?}
     TC -- no --> E3["Error from the tool, e.g.<br/>read the file first"]
-    TC -- yes --> R{read-only for<br/>these arguments?}
-    R -- yes --> RUN[run the tool]
-    R -- no --> A{approved?}
+    TC -- yes --> P{"permissions decide<br/>(rules, protected paths, mode)"}
+    P -- deny --> E4["Error: not allowed: reason"]
+    P -- allow --> RUN[run the tool]
+    P -- ask --> A{you approve?}
     A -- no --> D[denial message]
-    A -- yes --> RUN
+    A -- "yes / always" --> RUN
     RUN --> T[cap the result length] --> OUT[tool result]
 ```
 
 The checks live in [`harness/tools/registry.py`](../harness/tools/registry.py) (lookup,
 validation, running, truncation) and [`harness/agent.py`](../harness/agent.py) (the tool's
-own `check`, then the approval decision, [ADR 0005](adr/0005-approve-every-non-read-only-call.md)).
-A tool's check runs before approval so you are never asked to approve a call that would fail.
+own `check`, then the permission decision and, if it says *ask*, your answer). The decision is
+made by `Permissions.decide()` in [`harness/security/permissions.py`](../harness/security/permissions.py):
+deny rules first, then protected paths and ask rules, then the mode, then allow rules, then
+read-only tools; anything left asks ([ADR 0026](adr/0026-permission-modes-and-rules.md)). It is
+plain code, so the same call always gets the same answer ([ADR 0024](adr/0024-deterministic-security-decisions.md)).
+A tool's check runs before the decision so you are never asked to approve a call that would fail.
 
 Paths are confined before any of this matters: every file tool turns its path argument into a
 real location with `Workspace.path()` in [`harness/workspace.py`](../harness/workspace.py), which
@@ -128,8 +133,8 @@ flowchart LR
     B2 --> B3["batch 3: read d"]
 ```
 
-Approval prompts therefore never overlap: only tools that aren't concurrency-safe can need
-approval, and they always run alone. See
+Every call in a batch is checked and decided on the main thread before the batch runs, so
+questions to you never overlap and never come from a worker thread. See
 [ADR 0010](adr/0010-parallel-safe-tool-calls.md).
 
 ## Key design rules

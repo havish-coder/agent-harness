@@ -17,6 +17,25 @@ is below 1.0, minor releases may contain breaking changes.
 - `additional_directories` setting for folders outside the workspace the tools may use; not
   accepted from project settings.
 - User guide: [the workspace and its boundary](docs/user-guide/workspace.md).
+- Permission modes and rules (ADR 0026): `--mode default|accept-edits|plan|bypass`, the
+  `permission_mode` setting and `/mode` to switch while working. `allow`, `ask` and `deny` rules
+  per tool and per command or path (`run_shell(git status*)`, `edit_file(src/**)`) in every
+  settings layer, combined strictest first: deny rules apply in every mode, and ask rules beat
+  allow rules and bypass. `/permissions` lists the rules with their sources and adds or removes
+  session rules. Rules naming unknown tools warn at start.
+- Protected paths: writes to `.git/`, `.harness/`, `.vscode/`, `.idea/`, `.husky/`,
+  `.github/workflows/`, `.pre-commit-config.yaml`, `.envrc` and `.gitattributes` always ask,
+  bypass mode included.
+- `permission` and `tool_refused` events; `model_call` is now documented.
+- User guide: [permissions](docs/user-guide/permissions.md).
+
+### Changed
+- `--yes` is now `--mode bypass`: deny rules and protected paths still apply.
+- Answering `a` (always) to a command now allows that exact command for the session, not every
+  command; for file tools it still allows the tool. Questions say why they're asked when it's not
+  routine, and don't offer `a` for protected paths.
+- Project settings can't set `permission_mode` or add `allow` rules (ignored with a warning).
+- Tool calls in a batch are all checked and decided before any of them runs.
 
 ## [0.4.0] - 2026-10-06
 

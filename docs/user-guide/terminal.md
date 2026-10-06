@@ -81,12 +81,14 @@ For file edits the prompt shows exactly what will change, as a diff:
          def subtotal(self) -> float:
     -        return sum(price for _, price, qty in self.items)
     +        return sum(price * qty for _, price, qty in self.items)
-    allow? [y]es / [n]o / [a]lways for edit_file:
+    allow? [y]es / [n]o / [a]lways allow every edit_file call (this session):
 ```
 
 Overwriting an existing file with `write_file` is flagged `(may destroy data)`.
 
-`--yes` skips every question. Use it only in a folder you can afford to lose.
+To ask less often, pick a [permission mode or rules](permissions.md): for example
+`--mode accept-edits` lets file edits run and still asks before commands. `--yes` (bypass mode)
+skips nearly every question; use it only in a folder you can afford to lose.
 
 ## Ask for verification
 The agent can run commands (`run_shell`), such as your tests, but small models rarely check

@@ -94,6 +94,6 @@ def test_session_commands(home, tmp_path, monkeypatch):
     assert "switched to m2" in run("/model m2") and session.provider.model == "m2"
     assert len(session.agent.messages) == 3                               # the conversation was kept
     assert "m1: 1 call" in run("/cost")
-    assert "read_file" in run("/tools") and "asks first" in run("/tools")
+    assert "read_file" in run("/tools") and "can change things" in run("/tools")
     assert "model" in run("/config") and "command" in run("/config")      # the source of the switched model
     assert run("/reset") == "(conversation cleared)" and len(session.agent.messages) == 1

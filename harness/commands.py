@@ -149,6 +149,51 @@ def _style(session, args):
     return f"style: {args} (from the next reply on)"
 
 
+def _mode(session, args):
+    from harness.security.permissions import MODE_HELP
+    if not args:
+        return "\n".join(f"{'*' if m == session.permissions.mode else ' '} {m:<13} {h}" for m, h in MODE_HELP.items())
+    if args not in MODE_HELP:
+        return f"unknown mode '{args}'. /mode lists them"
+    session.set_mode(args)
+    return f"permission mode: {args} ({MODE_HELP[args]})"
+
+
+def _permissions(session, args):
+    """/permissions · /permissions allow|ask|deny RULE · /permissions remove RULE"""
+    from harness.security.permissions import RULE_HELP, Rule, RuleError
+    perms = session.permissions
+    words = args.split(maxsplit=1)
+    if not words:
+        rows = [f"mode: {perms.mode}"]
+        for action in ("deny", "ask", "allow"):
+            rules = [r for r in perms.rules if r.action == action]
+            if rules:
+                rows.append(f"{action}:")
+                rows += [f"  {r}{'  (exact)' if r.exact else ''}  ({r.source})" for r in rules]
+        if len(rows) == 1:
+            rows.append("no rules: reading runs, everything else asks")
+        rows.append("writes to .git, .harness, editor and CI folders always ask (docs/user-guide/permissions.md)")
+        return "\n".join(rows)
+    if len(words) < 2 or words[0] not in ("allow", "ask", "deny", "remove"):
+        return "usage: /permissions [allow|ask|deny|remove] RULE  " + RULE_HELP
+    verb, text = words
+    if verb == "remove":
+        keep = [r for r in perms.rules if not (str(r) == text.strip() and r.source == "session")]
+        if len(keep) == len(perms.rules):
+            return f"no session rule {text.strip()} (rules from settings files are changed there)"
+        perms.rules[:] = keep
+        return f"removed {text.strip()}"
+    try:
+        rule = Rule.parse(text, verb, "session")
+    except RuleError as e:
+        return str(e)
+    names = [t.name for t in session.agent.tools]
+    perms.remember(rule)
+    note = "" if rule.tool in names or rule.tool == "*" else f" (warning: there is no tool named {rule.tool})"
+    return f"{verb} {rule} for this session{note}"
+
+
 def _export(session, args):
     """/export [md|tex|pdf] [file] [--last]"""
     import datetime
@@ -182,7 +227,7 @@ def _tools(session, args):
         elif tool.read_only:
             flags.append("read-only")
         else:
-            flags.append("asks first")
+            flags.append("can change things")
         if tool.concurrency_safe is True:
             flags.append("parallel")
         rows.append(f"{tool.name:<12} {', '.join(flags):<22} {tool.description.splitlines()[0]}")
@@ -214,6 +259,9 @@ def builtin_commands() -> list[Command]:
         Command("model", "show the model, or switch to another one", run=_model, argument_hint="[name]"),
         Command("tools", "the tools the agent can use", run=_tools),
         Command("style", "list output styles, or switch to one", run=_style, argument_hint="[name]"),
+        Command("mode", "show the permission mode, or switch to another one", run=_mode, argument_hint="[mode]"),
+        Command("permissions", "the permission rules; add or remove one for this session", run=_permissions,
+                argument_hint="[allow|ask|deny|remove RULE]"),
         Command("export", "save the chat (or the last answer) as Markdown, LaTeX or PDF", run=_export,
                 argument_hint="[md|tex|pdf] [file] [--last]"),
         Command("bye", "quit", run=lambda session, args: None, aliases=("exit", "quit")),

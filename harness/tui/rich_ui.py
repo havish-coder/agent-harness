@@ -7,10 +7,12 @@ doesn't care which one it got.
 from rich.console import Console
 from rich.live import Live
 from rich.markdown import Markdown
+from rich.markup import escape
 from rich.padding import Padding
 from rich.syntax import Syntax
 from rich.text import Text
 
+from harness.security.permissions import CHANGES
 from harness.tui.latex import render_math
 from harness.tui.plain import PlainApprover
 
@@ -160,13 +162,13 @@ class RichUI:
 
 
 class RichApprover(PlainApprover):
-    """The same y/n/always rules as PlainApprover, with a highlighted diff."""
+    """The same y/n/always answers as PlainApprover, with a highlighted diff."""
 
-    def __init__(self, auto_approve: bool = False, ui: RichUI | None = None):
-        super().__init__(auto_approve)
+    def __init__(self, ui: RichUI | None = None):
+        super().__init__()
         self.console = ui.console if ui else Console()
 
-    def show(self, call, tool):
+    def show(self, call, tool, reason: str | None = None):
         destructive = tool.is_destructive(call.arguments)
         title = Text("? ", style="yellow")
         title.append(f"{tool.name}", style="bold yellow")
@@ -174,6 +176,8 @@ class RichApprover(PlainApprover):
         if destructive:
             title.append(" (may destroy data)", style="bold red")
         self.console.print(title)
+        if reason and reason != CHANGES:
+            self.console.print(Text(f"  asking because {reason}", style="yellow"))
         if call.name == "run_shell":
             self.console.print(Padding(Syntax(call.arguments.get("command", ""), "bash", theme="ansi_dark",
                                               word_wrap=True), (0, 0, 0, 2)))
@@ -185,6 +189,12 @@ class RichApprover(PlainApprover):
             except Exception as e:
                 self.console.print(Text(f"  (no preview: {e})", style="dim"))
 
-    def ask(self, tool_name: str) -> str:
-        return self.console.input(f"  [yellow]allow? [bold]y[/bold]es / [bold]n[/bold]o / "
-                                  f"[bold]a[/bold]lways for {tool_name}: [/yellow]")
+    def ask(self, always: str | None) -> str:
+        return self.console.input(f"  [yellow]allow? {options_markup(always)}: [/yellow]")
+
+
+def options_markup(always: str | None) -> str:
+    options = "[bold]y[/bold]es / [bold]n[/bold]o"
+    if always:
+        options += f" / [bold]a[/bold]lways allow {escape(always)} (this session)"
+    return options

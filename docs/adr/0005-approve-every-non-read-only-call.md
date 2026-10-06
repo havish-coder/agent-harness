@@ -1,6 +1,6 @@
 # 0005. Ask before every tool call that isn't read-only
 
-- **Status:** Accepted
+- **Status:** Accepted, amended by [0026](0026-permission-modes-and-rules.md)
 - **Date:** 2026-10-06
 
 ## Context

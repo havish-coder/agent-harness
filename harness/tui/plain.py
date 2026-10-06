@@ -7,6 +7,8 @@ an approver and a few messages.
 import os
 from contextlib import nullcontext
 
+from harness.security.permissions import CHANGES
+
 DIM, CYAN, BOLD, YELLOW, RESET = "\033[2m", "\033[36m", "\033[1m", "\033[33m", "\033[0m"
 
 
@@ -93,37 +95,46 @@ class PlainUI:
         return input(f"\n{BOLD}{prompt}{RESET}")
 
 
-class PlainApprover:
-    """Asks before any tool call that can change things. 'a' = always allow this tool."""
+def always_label(decision) -> str | None:
+    """What [a]lways would allow, in words, or None when "always" isn't offered (Lesson 29)."""
+    rule = decision.remember if decision is not None else None
+    if rule is None:
+        return None
+    return "this exact command" if rule.exact else f"every {rule.tool} call" if rule.pattern is None else str(rule)
 
-    def __init__(self, auto_approve: bool = False, ui: PlainUI | None = None):
-        self.auto_approve = auto_approve
-        self.always: set[str] = set()   # tool names allowed for the rest of the session
+
+class PlainApprover:
+    """Asks the user about a call the permissions sent to "ask" (Lesson 29). Answers True, False,
+    or "always": run it and add the decision's suggested rule for the rest of the session. Which
+    calls get here, and what "always" remembers, is decided by harness/security/permissions.py."""
+
+    def __init__(self, ui: PlainUI | None = None):
         self.pause = nullcontext        # replaced by KeyWatcher.paused, so the prompt gets the keys
 
-    def show(self, call, tool):
+    def show(self, call, tool, reason: str | None = None):
         warning = " (may destroy data)" if tool.is_destructive(call.arguments) else ""
         print(f"{YELLOW}  ? {tool.name} wants to run{warning}{RESET}")
+        if reason and reason != CHANGES:
+            print(f"{YELLOW}    asking because {reason}{RESET}")
         if tool.preview:
             try:
                 print(DIM + "    " + tool.preview(**call.arguments).replace("\n", "\n    ") + RESET)
             except Exception as e:
                 print(f"{DIM}    (no preview: {e}){RESET}")
 
-    def ask(self, tool_name: str) -> str:
-        return input(f"{YELLOW}    allow? [y]es / [n]o / [a]lways for {tool_name}: {RESET}")
+    def ask(self, always: str | None) -> str:
+        options = "[y]es / [n]o" + (f" / [a]lways allow {always} (this session)" if always else "")
+        return input(f"{YELLOW}    allow? {options}: {RESET}")
 
-    def __call__(self, call, tool) -> bool:
-        if self.auto_approve or tool.name in self.always:
-            return True
+    def __call__(self, call, tool, decision=None) -> bool | str:
+        always = always_label(decision)
         with self.pause():
-            self.show(call, tool)
+            self.show(call, tool, decision.reason if decision else None)
             while True:
-                answer = self.ask(tool.name).strip().lower()
+                answer = self.ask(always).strip().lower()
                 if answer in ("y", "yes"):
                     return True
                 if answer in ("n", "no", ""):
                     return False
-                if answer in ("a", "always"):
-                    self.always.add(tool.name)
-                    return True
+                if always and answer in ("a", "always"):
+                    return "always"

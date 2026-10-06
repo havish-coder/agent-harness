@@ -3,7 +3,7 @@ import os
 import sys
 
 
-def make_ui(plain: bool = False, auto_approve: bool = False):
+def make_ui(plain: bool = False):
     """Return (ui, approver). Rich needs the `tui` extra and a real terminal."""
     if not plain and not os.environ.get("NO_COLOR") and sys.stdout.isatty():
         try:
@@ -12,7 +12,7 @@ def make_ui(plain: bool = False, auto_approve: bool = False):
             pass
         else:
             ui = RichUI()
-            return ui, RichApprover(auto_approve, ui)
+            return ui, RichApprover(ui)
     from harness.tui.plain import PlainApprover, PlainUI, enable_ansi
     enable_ansi()
-    return PlainUI(), PlainApprover(auto_approve)
+    return PlainUI(), PlainApprover()

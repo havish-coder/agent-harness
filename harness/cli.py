@@ -15,6 +15,7 @@ from harness.config import USER_DIR, ConfigError, describe, load_dotenv, load_se
 from harness.mentions import expand_mentions
 from harness.providers.base import ProviderError
 from harness.providers.factory import PROVIDERS
+from harness.security.permissions import MODE_HELP, MODES
 from harness.session import SYSTEM_PROMPT, Session
 from harness.styles import load_styles
 from harness.tui import make_ui
@@ -36,8 +37,10 @@ def parse_args(argv=None):
                    help="a model (same provider) to try when the main one keeps failing")
     p.add_argument("--workspace", default="workspace", help="folder the agent works in")
     p.add_argument("--max-steps", type=int, default=None)
+    p.add_argument("--mode", default=None, choices=MODES,
+                   help="permission mode: " + "; ".join(f"{m}: {h}" for m, h in MODE_HELP.items()))
     p.add_argument("--yes", action="store_true",
-                   help="approve every tool call without asking (only for throwaway folders)")
+                   help="same as --mode bypass: run tool calls without asking (only for throwaway folders)")
     p.add_argument("--no-stream", action="store_true", help="wait for whole replies instead of streaming")
     p.add_argument("--think", action="store_true", help="for thinking models: show their reasoning separately")
     p.add_argument("--plain", action="store_true", help="plain text output (no colours, Markdown or spinners)")
@@ -74,7 +77,7 @@ def run_turn(session: Session, watcher: KeyWatcher, message: str) -> None:
 def main(argv=None):
     args = parse_args(argv)
     sys.stdout.reconfigure(encoding="utf-8")
-    ui, approver = make_ui(plain=args.plain, auto_approve=args.yes)
+    ui, approver = make_ui(plain=args.plain)
 
     workspace = Path(args.workspace).resolve()
     if not workspace.is_dir():
@@ -82,7 +85,8 @@ def main(argv=None):
 
     flags = {"provider": args.provider, "model": args.model, "base_url": args.base_url,
              "fallback_model": args.fallback_model, "max_steps": args.max_steps,
-             "stream": False if args.no_stream else None, "think": True if args.think else None}
+             "stream": False if args.no_stream else None, "think": True if args.think else None,
+             "permission_mode": "bypass" if args.yes else args.mode}
     try:
         _, env_warnings = load_dotenv(workspace)
         settings, warnings = load_settings(workspace, flags)
@@ -110,8 +114,8 @@ def main(argv=None):
     stop_keys = "Esc or Ctrl+C stops a running task" if watcher.available else "Ctrl+C stops a running task"
     ui.banner("Agent harness", f"{settings.provider} · {session.provider.model} · {workspace}")
     ui.info(f"/help commands · @file attaches a file · {stop_keys}")
-    if args.yes:
-        ui.warn("--yes: every tool call runs without asking.")
+    if settings.permission_mode != "default":
+        ui.warn(f"permission mode {settings.permission_mode}: {MODE_HELP[settings.permission_mode]}")
 
     while True:
         try:

@@ -12,8 +12,11 @@ agent = Agent(provider, tools, system_prompt, on_event=on_event)
 | `text_delta` | `str` | a piece of the model's answer arrived (streaming providers only) |
 | `thinking_delta` | `str` | a piece of a thinking model's reasoning arrived (with `--think`) |
 | `model_reply` | `Reply` | the model's message is complete (with or without tool calls); `Reply.usage` has the token counts, including `cache_read_tokens` and `cache_write_tokens`, and `Reply.model` the model that answered |
-| `tool_call` | `ToolCall` | right before a tool runs |
-| `tool_denied` | `ToolCall` | the approver refused a call; the model receives a denial message instead of a result |
+| `model_call` | `int` | right before each model call; the number of messages being sent |
+| `tool_call` | `ToolCall` | the model asked for this call (emitted before it is checked or run) |
+| `permission` | `(ToolCall, Decision)` | the permission decision for a call: `Decision.action` is `allow`, `ask` or `deny`, `Decision.reason` says why ([permissions](../user-guide/permissions.md)) |
+| `tool_refused` | `(ToolCall, str)` | the permissions denied a call (a deny rule, plan mode, a path outside the workspace); the string is the reason |
+| `tool_denied` | `ToolCall` | the user answered no; the model receives a denial message instead of a result |
 | `tool_result` | `(ToolCall, str)` | after every call, run or not; the string is exactly what the model will read |
 
 ## Stop reasons
@@ -32,6 +35,7 @@ While a reply streams, `text_delta` events arrive in order and always before tha
 
 When one reply contains several calls, `tool_call` is emitted for every call in a batch
 before the batch runs, and `tool_result` for each afterwards, in the order the model asked.
-All events are emitted from the thread that called `run()`.
+All events are emitted from the thread that called `run()`, and every question to the user is
+asked from it too: the calls of a batch are checked and decided first, then the allowed ones run.
 
 Handlers must not raise: an exception in a handler aborts the turn (and rolls it back).

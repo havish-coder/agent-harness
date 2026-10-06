@@ -11,8 +11,10 @@ send a ready-made request to the model.
 | `/cost` | tokens and cost so far, per model |
 | `/config` | the settings in effect and which file each came from |
 | `/model [name]` | show the model, or switch to another one; the conversation is kept |
-| `/tools` | the tools the agent can use, and which ones ask before running |
+| `/tools` | the tools the agent can use, and which ones only read |
 | `/style [name]` | list [output styles](styles-and-status.md), or switch to one |
+| `/mode [name]` | show the [permission modes](permissions.md), or switch to one |
+| `/permissions [allow\|ask\|deny\|remove RULE]` | the permission rules and where each came from; add or remove one for this session |
 | `/export [md\|tex\|pdf] [file] [--last]` | save the chat or the last answer ([details](math-and-export.md)) |
 | `/fix-tests [focus]` | asks the agent to run the tests, fix failures and repeat until they pass |
 | `/explain @path` | asks the agent to explain a file or folder |
@@ -53,4 +55,4 @@ Rules:
 - Your user commands may replace built-in prompt commands. **Project** commands can never replace a
   built-in command: a repository you cloned can't change what `/reset` or `/help` does.
 - A command only sends text to the model. Anything the model then wants to do still goes through
-  the usual approvals.
+  the usual [permissions](permissions.md).

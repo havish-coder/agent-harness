@@ -34,6 +34,9 @@ class Tool:
     # Tool-specific validation that runs BEFORE approval: returns an error for the model, or None.
     # The user is never asked to approve a call that can't succeed (Lesson 12).
     check: Callable[..., str | None] | None = None
+    # The argument permission rules are about (Lesson 29): "path" for file tools, "command" for
+    # the shell, "url" for the network. None: rules can only name the whole tool.
+    subject: str | None = None
 
     def schema(self) -> dict:
         """The provider-neutral description sent to the model."""
@@ -58,24 +61,33 @@ def _resolve(flag: Flag, args: dict) -> bool:
     return bool(flag)
 
 
+SUBJECTS = ("path", "command", "url")
+
+
 def tool(fn: Callable | None = None, *, name: str | None = None, read_only: Flag = False,
          concurrency_safe: Flag = False, destructive: Flag = False,
-         max_result_chars: int = DEFAULT_MAX_RESULT_CHARS) -> Any:
+         max_result_chars: int = DEFAULT_MAX_RESULT_CHARS, subject: str | None = "auto") -> Any:
     """Turn a function into a `Tool`. Use as `@tool` or `@tool(read_only=True, ...)`.
 
     - name: the function name (or `name=`)
     - description: the docstring text before `Args:`
     - parameters: built from type hints; arguments without a default are required;
       per-argument descriptions come from the docstring's `Args:` section
+    - subject: by default the `path`, `command` or `url` argument, if the function has one
     """
     def build(f: Callable) -> Tool:
         description, arg_docs = parse_docstring(f)
         if not description:
             raise TypeError(f"tool '{f.__name__}' needs a docstring: it is the model's only manual")
+        parameters = parameters_schema(f, arg_docs)
+        chosen = subject
+        if chosen == "auto":
+            chosen = next((a for a in SUBJECTS if a in parameters["properties"]), None)
         return Tool(
             name=name or f.__name__,
             description=description,
-            parameters=parameters_schema(f, arg_docs),
+            parameters=parameters,
+            subject=chosen,
             fn=f,
             read_only=read_only,
             concurrency_safe=concurrency_safe,

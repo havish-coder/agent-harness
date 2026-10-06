@@ -20,6 +20,8 @@ import subprocess
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
+from harness.security.permissions import MODES, Rule, RuleError
+
 USER_DIR = Path(os.environ.get("HARNESS_HOME", Path.home() / ".harness"))
 SECRET_KEY_NAMES = re.compile(r"(api[_-]?key|secret|token|password)", re.IGNORECASE)
 SECRET_VALUES = re.compile(r"\b(sk-[A-Za-z0-9_-]{16,}|sk-ant-[A-Za-z0-9_-]{16,}|gsk_[A-Za-z0-9]{16,}|AIza[A-Za-z0-9_-]{30,})")
@@ -47,6 +49,10 @@ class Settings:
     output_style: str = "default"                # see harness/styles.py (Lesson 25)
     status_line: str | None = None               # a shell command whose output is the status line
     additional_directories: list = field(default_factory=list)   # folders outside the workspace tools may use
+    permission_mode: str = "default"             # default, accept-edits, plan, bypass (Lesson 29)
+    # {"allow": [...], "ask": [...], "deny": [...]} in files; after loading, every layer's rules
+    # as [{"action", "rule", "source"}] (rules add up across layers, each remembering its file)
+    permissions: list = field(default_factory=list)
     sources: dict = field(default_factory=dict, repr=False, compare=False)   # key → where it came from
 
 
@@ -70,13 +76,16 @@ TYPES: dict[str, tuple] = {
     "context_window": (int,), "max_output_tokens": (int,), "max_steps": (int,), "stream": (bool,), "think": (bool,),
     "shell": (str, type(None)), "max_retries": (int,), "prices": (dict,),
     "output_style": (str,), "status_line": (str, type(None)), "additional_directories": (list,),
+    "permission_mode": (str,), "permissions": (dict,),
 }
 # Settings a project file may not set, and why: a cloned repository could otherwise run its own
 # code on your machine, or give the agent access to your other folders, just by being opened.
 NOT_FROM_PROJECT = {
     "status_line": "it runs a program",
     "additional_directories": "it gives the agent access to folders outside the workspace",
+    "permission_mode": "it decides what runs without asking",
 }
+RULE_ACTIONS = ("allow", "ask", "deny")
 
 
 def _type_ok(name: str, value) -> bool:
@@ -103,11 +112,28 @@ def check_layer(data: dict, where: str) -> list[str]:
             raise ConfigError(f"{where}: '{key}' has the wrong type ({type(value).__name__})")
         if key == "prices":
             check_prices(value, where)
+        if key == "permission_mode" and value not in MODES:
+            raise ConfigError(f"{where}: 'permission_mode' must be one of {', '.join(MODES)}")
+        if key == "permissions":
+            check_rules(value, where)
         if key == "additional_directories" and not all(isinstance(d, str) for d in value):
             raise ConfigError(f"{where}: 'additional_directories' must be a list of folder paths")
         if isinstance(value, str) and SECRET_VALUES.search(value):
             raise ConfigError(f"{where}: '{key}' contains what looks like an API key. Use an environment variable")
     return warnings
+
+
+def check_rules(permissions: dict, where: str) -> None:
+    if not set(permissions) <= set(RULE_ACTIONS):
+        raise ConfigError(f"{where}: 'permissions' may only contain {', '.join(RULE_ACTIONS)}")
+    for action, rules in permissions.items():
+        if not isinstance(rules, list) or not all(isinstance(r, str) for r in rules):
+            raise ConfigError(f"{where}: permissions['{action}'] must be a list of rules like \"run_shell(git status*)\"")
+        for rule in rules:
+            try:
+                Rule.parse(rule, action, where)
+            except RuleError as e:
+                raise ConfigError(f"{where}: {e}") from None
 
 
 def check_prices(prices: dict, where: str) -> None:
@@ -142,8 +168,12 @@ def env_layer(environ) -> dict:
                 out[name] = int(raw)
             elif list in kinds:          # folders, separated like PATH (';' on Windows, ':' elsewhere)
                 out[name] = [part for part in raw.split(os.pathsep) if part]
+            elif dict in kinds:          # JSON, e.g. HARNESS_PERMISSIONS='{"deny": ["run_shell(curl *)"]}'
+                out[name] = json.loads(raw)
             else:
                 out[name] = raw
+        except json.JSONDecodeError:
+            raise ConfigError(f"environment: HARNESS_{name.upper()} is not valid JSON") from None
         except ValueError:
             raise ConfigError(f"environment: HARNESS_{name.upper()}={raw!r} is not a number") from None
     return out
@@ -163,6 +193,10 @@ def load_settings(workspace: Path, flags: dict | None = None, environ=None) -> t
                 warnings.append(f"project settings can't set '{key}' ({NOT_FROM_PROJECT[key]}); ignored. "
                                 "Put it in your user or local settings")
             data = {k: v for k, v in data.items() if k not in NOT_FROM_PROJECT}
+        if label == "project" and data.get("permissions", {}).get("allow"):
+            warnings.append("project settings can't add allow rules (they let things run without asking); "
+                            f"ignored: {', '.join(data['permissions']['allow'])}")
+            data = {**data, "permissions": {k: v for k, v in data["permissions"].items() if k != "allow"}}
         if label == "project" and SENSITIVE & data.keys():
             warnings.append("project settings choose where your prompts are sent: "
                             + ", ".join(f"{k}={data[k]!r}" for k in sorted(SENSITIVE & data.keys())))
@@ -170,6 +204,9 @@ def load_settings(workspace: Path, flags: dict | None = None, environ=None) -> t
             if key in SETTING_NAMES:
                 if key == "prices":                      # price tables add up across layers
                     value = {**settings.prices, **value}
+                if key == "permissions":                 # so do rules, each keeping its source
+                    value = settings.permissions + [{"action": action, "rule": rule, "source": label}
+                                                    for action in RULE_ACTIONS for rule in value.get(action, [])]
                 setattr(settings, key, value)
                 settings.sources[key] = label
     return settings, warnings
@@ -228,5 +265,11 @@ def ignored_by_git(repo: Path, path: Path) -> bool:
 def describe(settings: Settings) -> str:
     """Effective settings and where each came from, for --show-config."""
     width = max(map(len, SETTING_NAMES))
-    return "\n".join(f"{name:<{width}}  {getattr(settings, name)!r:<28} ({settings.sources.get(name, 'default')})"
-                     for name in SETTING_NAMES)
+    rows = []
+    for name in SETTING_NAMES:
+        if name == "permissions" and settings.permissions:   # one rule per line, each with its own source
+            rows.append(f"{name:<{width}}")
+            rows += [f"  {e['action']:<5} {e['rule']:<{width + 22}} ({e['source']})" for e in settings.permissions]
+            continue
+        rows.append(f"{name:<{width}}  {getattr(settings, name)!r:<28} ({settings.sources.get(name, 'default')})")
+    return "\n".join(rows)

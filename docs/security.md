@@ -112,6 +112,9 @@ flowchart TD
 These remain even with every defense in place. Know them before you approve things.
 - **An approved command can do anything you can.** Command analysis helps you read a command;
   it can't prove a command is harmless. `python script.py` runs whatever the script contains.
+- **Protected paths guard the file tools, not commands.** `echo ... > .git/hooks/pre-commit`
+  through `run_shell` is stopped only by an approval or a deny rule, so `bypass` mode is for
+  throwaway folders. An OS sandbox that makes these folders read-only for commands closes it.
 - **Windows has no simple sandbox** for commands. Where the OS offers one, v0.5 documents how
   to use it; otherwise use a dedicated user account, a virtual machine or a container for
   untrusted projects.
@@ -128,8 +131,8 @@ These remain even with every defense in place. Know them before you approve thin
 | Step limit per task | v0.1 |
 | Secrets refused in settings files; project provider changes warned | v0.3 |
 | Code-running settings (`status_line`) refused from project files | v0.4 |
-| Path jail and protected paths | v0.5 |
-| Permission modes and allow/ask/deny rules | v0.5 |
+| Path jail and protected paths | v0.5 (done) |
+| Permission modes and allow/ask/deny rules | v0.5 (done) |
 | Shell command analysis and environment scrubbing | v0.5 |
 | Prompt-injection markers and taint-aware approvals | v0.5 |
 | Web fetch with a network guard against private addresses | v0.5 |

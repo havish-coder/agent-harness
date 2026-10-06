@@ -10,6 +10,7 @@ from harness.agent import Agent
 from harness.config import Settings
 from harness.providers.factory import make_provider
 from harness.providers.retry import RetryingProvider
+from harness.security.permissions import MODES, Permissions
 from harness.styles import BUILTIN, Style, apply_style
 from harness.tools import default_tools
 from harness.tools.fs import workspace_snapshot
@@ -41,9 +42,14 @@ class Session:
                                          if settings.fallback_model else None,
                                          on_retry=ui.retry)
         self.costs = CostTracker(settings.provider, self.provider.model, settings.prices)
-        self.agent = Agent(self.provider, default_tools(ws, shell=settings.shell),
+        self.permissions = Permissions.from_settings(ws, settings.permission_mode, settings.permissions)
+        tools = default_tools(ws, shell=settings.shell)
+        for warning in self.permissions.unknown_tools([t.name for t in tools]):
+            ui.warn(f"warning: {warning}")
+        self.agent = Agent(self.provider, tools,
                            apply_style(self.base_prompt, self.style), max_steps=settings.max_steps,
-                           on_event=self.on_event, approve=approver, stream=settings.stream)
+                           on_event=self.on_event, approve=approver, stream=settings.stream,
+                           permissions=self.permissions)
         self._status_error_shown = False
 
     def make_provider(self, model: str | None):
@@ -66,6 +72,13 @@ class Session:
         self.agent.system_prompt = apply_style(self.base_prompt, self.style)
         self.agent.messages[0].content = self.agent.system_prompt
 
+    def set_mode(self, mode: str) -> None:
+        """Switch the permission mode (Lesson 29); rules and the conversation are kept."""
+        if mode not in MODES:
+            raise ValueError(f"unknown mode '{mode}'; choose from {', '.join(MODES)}")
+        self.permissions.mode = self.settings.permission_mode = mode
+        self.settings.sources["permission_mode"] = "command"
+
     # --- the status line (Lesson 25) ------------------------------------------------------------
     def status(self) -> dict:
         cost = self.costs.cost()
@@ -73,6 +86,7 @@ class Session:
                 "context_tokens": self.context_tokens,
                 "context_window": self.settings.context_window if self.settings.provider == "ollama" else None,
                 "cost": None if cost is None else round(cost, 6), "style": self.style.name,
+                "mode": self.permissions.mode,
                 "workspace": str(self.ws.root), "turns": sum(m.role == "user" for m in self.agent.messages)}
 
     def status_text(self) -> str:
@@ -90,6 +104,8 @@ class Session:
         parts = [info["model"], f"context {context}", money]
         if info["style"] != "default":
             parts.append(f"style {info['style']}")
+        if info["mode"] != "default":
+            parts.append(f"mode {info['mode']}")
         return " · ".join(parts)
 
     def run_status_command(self, info: dict) -> str | None:

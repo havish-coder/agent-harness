@@ -119,7 +119,7 @@ def test_agent_streams_deltas_before_tool_calls_and_answer():
     events = []
     agent = Agent(provider, [look], "s", on_event=lambda k, d: events.append(k))
     assert agent.run("go") == "Done"
-    assert events == ["model_call", "text_delta", "model_reply", "tool_call", "tool_result",
+    assert events == ["model_call", "text_delta", "model_reply", "tool_call", "permission", "tool_result",
                       "model_call", "text_delta", "model_reply"]
 
 

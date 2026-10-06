@@ -98,9 +98,10 @@ warning: project settings choose where your prompts are sent: base_url='http://2
 
 Check that address before you continue.
 
-Settings that would let a project run a program on your computer (`status_line`) or reach your
-other folders (`additional_directories`) are **ignored** in project settings, with a warning. Put
-them in your user or local settings.
+Settings that would let a project run a program on your computer (`status_line`), reach your
+other folders (`additional_directories`) or skip your approvals (`permission_mode`, `allow`
+[rules](permissions.md)) are **ignored** in project settings, with a warning. Put them in your
+user or local settings.
 
 ## What to commit
 In your own projects, commit `.harness/settings.json` and ignore the rest:

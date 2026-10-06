@@ -3,6 +3,7 @@
 This file is the heart of the harness. Everything else (tools, policy, context, UI) plugs in
 around these few lines.
 """
+import inspect
 import json
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -10,15 +11,17 @@ from typing import Any
 
 from harness.messages import Message, Reply, ToolCall, Usage
 from harness.providers.base import Provider, ProviderError, StreamingProvider, TextDelta, ThinkingDelta
+from harness.security.permissions import AskForChanges, Decision, Permissions
 from harness.tools.base import Tool
 from harness.tools.registry import ToolRegistry
 
 # on_event(kind, data) lets a UI show progress without the loop knowing anything about UIs.
 # See docs/reference/events.md for the full list.
 EventHandler = Callable[[str, Any], None]
-# approve(call, tool) -> True to run a tool that can change things. Asked only for calls
-# that aren't read-only.
-Approver = Callable[[ToolCall, Tool], bool]
+# approve(call, tool[, decision]) -> True to run the call, False to refuse it, or "always" to run
+# it and add `decision.remember` as a session rule. Asked only when the permissions say "ask"
+# (Lesson 29). An approver that accepts a `decision` argument gets the reason it is being asked.
+Approver = Callable[..., bool | str]
 
 DENIED = ("The user denied this tool call, so it did not run. Do not try it again. "
           "Ask the user what they want to do instead.")
@@ -30,13 +33,16 @@ NO_APPROVER = ("Error: this tool call can change things and needs the user's app
 class Agent:
     def __init__(self, provider: Provider, tools: list[Tool] | ToolRegistry, system_prompt: str,
                  max_steps: int = 10, on_event: EventHandler | None = None,
-                 approve: Approver | None = None, stream: bool = True):
+                 approve: Approver | None = None, stream: bool = True,
+                 permissions: Permissions | None = None):
         self.provider = provider
         self.tools = tools if isinstance(tools, ToolRegistry) else ToolRegistry(tools)
         self.system_prompt = system_prompt
         self.max_steps = max_steps
         self.on_event = on_event or (lambda kind, data: None)
         self.approve = approve      # None = deny everything that isn't read-only (fail-closed)
+        self.permissions = permissions or AskForChanges()   # decides allow / ask / deny (Lesson 29)
+        self._approve_takes_decision = approve is not None and _accepts(approve, "decision")
         self.stream = stream        # use the provider's stream() when it has one (Lesson 16)
         self.usage = Usage()
         # Why the last run() ended: "completed", "max_steps", "max_tokens", "cancelled", "error"
@@ -134,28 +140,68 @@ class Agent:
         return [batch for _, batch in groups]
 
     def execute_batch(self, batch: list[ToolCall]) -> list[str]:
-        """Run one batch: a single call directly, several safe calls on threads."""
-        if len(batch) == 1:
-            return [self.execute(batch[0])]
-        with ThreadPoolExecutor(max_workers=min(MAX_PARALLEL, len(batch))) as pool:
-            return list(pool.map(self.execute, batch))
+        """Run one batch. Every call is checked and decided on this thread first, so events and
+        questions to the user never come from a worker thread; then the allowed calls run: one
+        directly, several safe ones on threads."""
+        prepared = [self.prepare(call) for call in batch]
+        results = [text for _, text in prepared]
+        runnable = [(i, tool, call) for i, ((tool, _), call) in enumerate(zip(prepared, batch, strict=True)) if tool]
+        if len(runnable) == 1:
+            i, tool, call = runnable[0]
+            results[i] = self.tools.invoke(tool, call.arguments)
+        elif runnable:
+            with ThreadPoolExecutor(max_workers=min(MAX_PARALLEL, len(runnable))) as pool:
+                done = pool.map(lambda r: self.tools.invoke(r[1], r[2].arguments), runnable)
+                for (i, _, _), text in zip(runnable, done, strict=True):
+                    results[i] = text
+        return results
 
     def execute(self, call: ToolCall) -> str:
         """Run one tool call. Every failure becomes text for the model, never a crash."""
+        return self.execute_batch([call])[0]
+
+    def prepare(self, call: ToolCall) -> tuple[Tool | None, str | None]:
+        """(tool, None) when the call may run, or (None, text for the model) when it may not:
+        unknown tool, bad arguments, the tool's own check, the permissions, the user's answer."""
         tool, error = self.tools.resolve(call)
         if error:
-            return error
+            return None, error
         if tool.check:
             try:
                 error = tool.check(**call.arguments)
             except Exception as e:
                 error = f"Error: {type(e).__name__}: {e}"
             if error:
-                return error
-        if not tool.is_read_only(call.arguments):
-            if self.approve is None:
-                return NO_APPROVER
-            if not self.approve(call, tool):
+                return None, error
+        decision = self.permissions.decide(call, tool)
+        self.on_event("permission", (call, decision))
+        if decision.action == "deny":
+            self.on_event("tool_refused", (call, decision.reason))
+            return None, (f"Error: not allowed: {decision.reason}. Don't try this again another way; "
+                          "if it's needed, ask the user.")
+        if decision.action == "ask":
+            answer = self.ask_user(call, tool, decision)
+            if answer is None:
+                return None, NO_APPROVER
+            if not answer:
                 self.on_event("tool_denied", call)
-                return DENIED
-        return self.tools.invoke(tool, call.arguments)
+                return None, DENIED
+            if answer == "always" and decision.remember:
+                self.permissions.remember(decision.remember)
+        return tool, None
+
+    def ask_user(self, call: ToolCall, tool: Tool, decision: Decision) -> bool | str | None:
+        """The approver's answer, or None when there is no one to ask."""
+        if self.approve is None:
+            return None
+        if self._approve_takes_decision:
+            return self.approve(call, tool, decision=decision)
+        return self.approve(call, tool)
+
+
+def _accepts(fn: Callable, name: str) -> bool:
+    try:
+        params = inspect.signature(fn).parameters
+    except (TypeError, ValueError):
+        return False
+    return name in params or any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values())
