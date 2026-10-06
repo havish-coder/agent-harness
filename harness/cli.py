@@ -10,7 +10,7 @@ from pathlib import Path
 
 from harness.agent import Agent
 from harness.providers.base import ProviderError
-from harness.providers.ollama import OllamaProvider
+from harness.providers.factory import PROVIDERS, make_provider
 from harness.tools import default_tools
 from harness.tools.fs import workspace_snapshot
 from harness.workspace import Workspace
@@ -105,7 +105,9 @@ class Printer:
 
 def main():
     p = argparse.ArgumentParser(description="Chat with a tool-using agent.")
-    p.add_argument("--model", default="qwen3:4b-instruct")
+    p.add_argument("--provider", default="ollama", choices=PROVIDERS, help="where the model runs")
+    p.add_argument("--model", default=None, help="model name (default for ollama: qwen3:4b-instruct)")
+    p.add_argument("--base-url", default=None, help="override the provider's server address")
     p.add_argument("--workspace", default="workspace", help="folder the agent can look at")
     p.add_argument("--max-steps", type=int, default=20)
     p.add_argument("--yes", action="store_true",
@@ -125,10 +127,13 @@ def main():
 
     system_prompt = SYSTEM_PROMPT.format(snapshot=workspace_snapshot(ws))
     printer = Printer()
-    provider = OllamaProvider(model=args.model, think=True if args.think else None)
+    try:
+        provider = make_provider(args.provider, args.model, args.base_url, think=True if args.think else None)
+    except ProviderError as e:
+        sys.exit(f"error: {e}")
     agent = Agent(provider, default_tools(ws), system_prompt, max_steps=args.max_steps, on_event=printer,
                   approve=TerminalApprover(auto_approve=args.yes), stream=not args.no_stream)
-    print(f"{BOLD}Agent harness{RESET} · model {args.model} · workspace {workspace}")
+    print(f"{BOLD}Agent harness{RESET} · {args.provider} · model {provider.model} · workspace {workspace}")
     print(f"{DIM}Commands: /reset (forget the conversation)  /bye (quit)  ·  Ctrl+C cancels a running task{RESET}")
     if args.yes:
         print(f"{YELLOW}--yes: every tool call runs without asking.{RESET}")

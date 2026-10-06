@@ -147,7 +147,10 @@ harness/
   cli.py            the terminal app (`harness` command)
   providers/
     base.py         the Provider interface and ProviderError
-    ollama.py       Ollama adapter (/api/chat)
+    ollama.py       Ollama adapter (/api/chat, NDJSON streaming)
+    openai_compat.py  OpenAI Chat Completions adapter (SSE streaming)
+    factory.py      make_provider(name, model, ...) for interfaces
+    fake.py         scripted, recording and replaying providers for tests
   tools/
     base.py         the Tool type and the @tool decorator
     registry.py     lookup, argument validation, running, result caps

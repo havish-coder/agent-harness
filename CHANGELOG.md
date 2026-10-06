@@ -13,6 +13,11 @@ is below 1.0, minor releases may contain breaking changes.
   `stream()`; the agent emits `text_delta` and `thinking_delta` events; `--no-stream` turns it
   off. Ctrl+C closes the connection so the model stops generating.
 - `--think` for thinking models: reasoning arrives separately and is shown dimmed.
+- OpenAI-compatible provider (ADR 0014): OpenAI, Groq, OpenRouter, Gemini, LM Studio, Ollama's
+  `/v1`, or any compatible server with `--base-url`; streaming with tool-call fragments joined
+  by index. `--provider`, `--base-url`; API keys only from environment variables.
+- User guide: [choosing a model and provider](docs/user-guide/models.md); developer guide:
+  [writing a provider](docs/developer-guide/writing-a-provider.md).
 - `ProviderError` carries `status`, `retryable` and `retry_after`.
 - Wire-format tests for the Ollama adapter against a fake HTTP server (`httpx.MockTransport`).
 

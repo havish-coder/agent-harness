@@ -1,12 +1,14 @@
 # CLI reference
 
 ```text
-harness [--model MODEL] [--workspace PATH] [--max-steps N] [--yes] [--no-stream] [--think]
+harness [--provider NAME] [--model MODEL] [--base-url URL] [--workspace PATH] [--max-steps N] [--yes] [--no-stream] [--think]
 ```
 
 | Flag | Default | Description |
 |---|---|---|
-| `--model` | `qwen3:4b-instruct` | Ollama model name. Must support tool calling. |
+| `--provider` | `ollama` | Where the model runs: `ollama`, `ollama-openai`, `lmstudio`, `openai`, `groq`, `openrouter`, `gemini`. See [models](../user-guide/models.md). |
+| `--model` | `qwen3:4b-instruct` for Ollama | Model name. Must support tool calling. Required for cloud providers. |
+| `--base-url` | the provider's | Another server address, e.g. any OpenAI-compatible server. |
 | `--workspace` | `workspace` | Folder the agent works in. Must exist. |
 | `--max-steps` | `20` | Maximum model calls per request before the agent stops. |
 | `--yes` | off | Approve every tool call without asking. Only for throwaway folders. |
