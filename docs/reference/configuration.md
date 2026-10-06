@@ -17,6 +17,7 @@ variable `HARNESS_<NAME>` (upper case) and most as a flag. How the layers combin
 | `think` | boolean | `false` | `--think` | Ask thinking models for separate reasoning. |
 | `shell` | string or null | `null` (auto) | | `bash`, `pwsh` or `powershell` for `run_shell`. |
 | `max_retries` | integer | `4` | | Retries for temporary model-server failures. |
+| `prices` | object | `{}` | | Extra prices: model-name prefix → `{"input", "output", "cache_read", "cache_write"}` in US dollars per million tokens. Merged across layers. |
 
 Environment values are converted to the setting's type: booleans accept `1`, `true`, `yes`,
 `on` (anything else is false); numbers must parse.

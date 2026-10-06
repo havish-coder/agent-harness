@@ -42,6 +42,7 @@ class Settings:
     think: bool = False
     shell: str | None = None            # bash, pwsh or powershell (see run_shell)
     max_retries: int = 4
+    prices: dict = field(default_factory=dict)   # model prefix → {"input", "output", ...} $/M tokens
     sources: dict = field(default_factory=dict, repr=False, compare=False)   # key → where it came from
 
 
@@ -63,7 +64,7 @@ TYPES: dict[str, tuple] = {
     "provider": (str,), "model": (str, type(None)), "base_url": (str, type(None)),
     "fallback_model": (str, type(None)), "temperature": (int, float, type(None)),
     "context_window": (int,), "max_steps": (int,), "stream": (bool,), "think": (bool,),
-    "shell": (str, type(None)), "max_retries": (int,),
+    "shell": (str, type(None)), "max_retries": (int,), "prices": (dict,),
 }
 
 
@@ -89,9 +90,19 @@ def check_layer(data: dict, where: str) -> list[str]:
             continue
         if not _type_ok(key, value):
             raise ConfigError(f"{where}: '{key}' has the wrong type ({type(value).__name__})")
+        if key == "prices":
+            check_prices(value, where)
         if isinstance(value, str) and SECRET_VALUES.search(value):
             raise ConfigError(f"{where}: '{key}' contains what looks like an API key. Use an environment variable")
     return warnings
+
+
+def check_prices(prices: dict, where: str) -> None:
+    for model, p in prices.items():
+        fields_ok = isinstance(p, dict) and {"input", "output"} <= p.keys() <= {"input", "output", "cache_read", "cache_write"}
+        if not fields_ok or not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in p.values()):
+            raise ConfigError(f"{where}: prices['{model}'] must look like "
+                              '{"input": 2.0, "output": 10.0, "cache_read": 0.2, "cache_write": 2.5} (dollars per million tokens)')
 
 
 def read_layer(path: Path) -> dict:
@@ -137,6 +148,8 @@ def load_settings(workspace: Path, flags: dict | None = None, environ=None) -> t
                             + ", ".join(f"{k}={data[k]!r}" for k in sorted(SENSITIVE & data.keys())))
         for key, value in data.items():
             if key in SETTING_NAMES:
+                if key == "prices":                      # price tables add up across layers
+                    value = {**settings.prices, **value}
                 setattr(settings, key, value)
                 settings.sources[key] = label
     return settings, warnings

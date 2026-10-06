@@ -95,7 +95,8 @@ class OpenAICompatProvider:
         message = {"content": text, "tool_calls": [
             {"id": c["id"], "function": {"name": c["name"], "arguments": c["arguments"]}}
             for _, c in sorted(calls.items())]}
-        yield from_openai({"choices": [{"message": message, "finish_reason": finish}], "usage": usage})
+        yield from_openai({"choices": [{"message": message, "finish_reason": finish}], "usage": usage,
+                           "model": self.model})
 
 
 def sse_data(lines) -> Iterator[str]:
@@ -148,5 +149,7 @@ def from_openai(data: dict) -> Reply:
     if calls and stop == "end":
         stop = "tool_calls"
     u = data.get("usage") or {}
+    cached = (u.get("prompt_tokens_details") or {}).get("cached_tokens", 0)
     return Reply(Message("assistant", msg.get("content") or "", tool_calls=calls), stop,
-                 Usage(u.get("prompt_tokens", 0), u.get("completion_tokens", 0)))
+                 Usage(u.get("prompt_tokens", 0), u.get("completion_tokens", 0), cache_read_tokens=cached or 0),
+                 model=data.get("model"))

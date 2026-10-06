@@ -26,6 +26,9 @@ is below 1.0, minor releases may contain breaking changes.
   with suggestions; secrets in settings files are refused; `.env` files for keys, with a
   warning when the workspace's `.env` isn't git-ignored; project settings that redirect
   prompts are flagged.
+- Usage and cost (ADR 0018): `Usage` counts cache reads and writes (Ollama, OpenAI-compatible and
+  Anthropic); per-turn cost in the terminal, `/cost`, a session summary on exit; dated prices for
+  Claude models, free local models, a `prices` setting for others, unknown prices shown as such.
 - User guide: [choosing a model and provider](docs/user-guide/models.md); developer guide:
   [writing a provider](docs/developer-guide/writing-a-provider.md).
 - `ProviderError` carries `status`, `retryable` and `retry_after`.

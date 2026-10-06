@@ -20,8 +20,11 @@ agent> The recipes folder contains one file: `pancakes.md` (163 bytes).
   [699 input + 49 output tokens]
 ```
 
-The token line shows what this turn cost: input tokens are everything sent to the model
-(the whole conversation, every step), output tokens are what it wrote.
+The line in brackets shows what this turn cost: input tokens are everything sent to the model
+(the whole conversation, every step), output tokens are what it wrote, and *cached* is the part
+of the input the model server reused from the previous request instead of processing it again.
+The price is `free` for models on your computer, a dollar amount for models with a known
+price, and `price unknown` otherwise (add prices in [settings](configuration.md)).
 
 ## Approve or deny actions
 Tools that only look at things (listing, reading, searching) run straight away. Any tool that
@@ -93,4 +96,5 @@ discarded as if you never asked. You can continue the conversation normally.
 | Command | Does |
 |---|---|
 | `/reset` | forget the conversation and start fresh |
+| `/cost` | tokens and cost so far in this session, per model |
 | `/bye` | quit (Ctrl+D or Ctrl+C at the prompt also quit) |

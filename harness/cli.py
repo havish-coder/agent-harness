@@ -1,4 +1,4 @@
-"""Lessons 07-20: a terminal chat app around the agent.
+"""Lessons 07-21: a terminal chat app around the agent.
 
 Run:  harness                               (after `pip install -e .`)
       python -m harness.cli --model qwen3:4b --workspace C:\\some\\folder
@@ -15,6 +15,7 @@ from harness.providers.factory import PROVIDERS, make_provider
 from harness.providers.retry import RetryingProvider
 from harness.tools import default_tools
 from harness.tools.fs import workspace_snapshot
+from harness.usage import CostTracker, format_cost
 from harness.workspace import Workspace
 
 # Short and direct works best for small models (see course/07-first-tools-and-repl.md).
@@ -165,10 +166,18 @@ def main():
         sys.exit(f"error: {e}")
     provider = RetryingProvider(provider, max_retries=settings.max_retries, fallback=fallback,
                                 on_retry=printer.retry)
+    costs = CostTracker(settings.provider, provider.model, settings.prices)
+
+    def on_event(kind, data):
+        if kind == "model_reply":
+            costs.add(data)
+        printer(kind, data)
+
     agent = Agent(provider, default_tools(ws, shell=settings.shell), system_prompt, max_steps=settings.max_steps,
-                  on_event=printer, approve=TerminalApprover(auto_approve=args.yes), stream=settings.stream)
+                  on_event=on_event, approve=TerminalApprover(auto_approve=args.yes), stream=settings.stream)
     print(f"{BOLD}Agent harness{RESET} · {settings.provider} · model {provider.model} · workspace {workspace}")
-    print(f"{DIM}Commands: /reset (forget the conversation)  /bye (quit)  ·  Ctrl+C cancels a running task{RESET}")
+    print(f"{DIM}Commands: /reset (forget the conversation)  /cost (usage so far)  /bye (quit)  ·  "
+          f"Ctrl+C cancels a running task{RESET}")
     if args.yes:
         print(f"{YELLOW}--yes: every tool call runs without asking.{RESET}")
 
@@ -181,13 +190,16 @@ def main():
             continue
         if user == "/bye":
             break
+        if user == "/cost":
+            print(f"{DIM}{costs.summary()}{RESET}")
+            continue
         if user == "/reset":
             agent.reset()
             ws.forget_reads()   # the model no longer has earlier reads in its context
             print(f"{DIM}(conversation cleared){RESET}")
             continue
 
-        before = agent.usage.input_tokens, agent.usage.output_tokens
+        before, cost_before = agent.usage.copy(), costs.cost()
         try:
             answer = agent.run(user)
         except KeyboardInterrupt:
@@ -199,9 +211,14 @@ def main():
             print(f"error: {e}")
             continue
         printer.answer(answer)
-        used_in = agent.usage.input_tokens - before[0]
-        used_out = agent.usage.output_tokens - before[1]
-        print(f"{DIM}  [{used_in} input + {used_out} output tokens]{RESET}")
+        turn = agent.usage - before
+        cached = f" ({turn.cache_read_tokens:,} cached)" if turn.cache_read_tokens else ""
+        cost_after = costs.cost()
+        money = "price unknown" if cost_after is None or cost_before is None else format_cost(cost_after - cost_before)
+        print(f"{DIM}  [{turn.input_tokens:,} input{cached} + {turn.output_tokens:,} output tokens · {money}]{RESET}")
+
+    if costs.models:
+        print(f"{DIM}session: {costs.summary()}{RESET}")
 
 
 if __name__ == "__main__":

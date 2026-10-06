@@ -43,8 +43,25 @@ class Message:
 
 @dataclass
 class Usage:
-    input_tokens: int = 0
+    input_tokens: int = 0          # everything the model read, cached or not
     output_tokens: int = 0
+    cache_read_tokens: int = 0     # part of input_tokens served from a prompt cache (Lesson 21)
+    cache_write_tokens: int = 0    # part of input_tokens stored into a prompt cache
+
+    def __iadd__(self, other: "Usage") -> "Usage":
+        self.input_tokens += other.input_tokens
+        self.output_tokens += other.output_tokens
+        self.cache_read_tokens += other.cache_read_tokens
+        self.cache_write_tokens += other.cache_write_tokens
+        return self
+
+    def __sub__(self, other: "Usage") -> "Usage":
+        return Usage(self.input_tokens - other.input_tokens, self.output_tokens - other.output_tokens,
+                     self.cache_read_tokens - other.cache_read_tokens,
+                     self.cache_write_tokens - other.cache_write_tokens)
+
+    def copy(self) -> "Usage":
+        return Usage(self.input_tokens, self.output_tokens, self.cache_read_tokens, self.cache_write_tokens)
 
 
 @dataclass
@@ -54,6 +71,7 @@ class Reply:
     message: Message         # always role="assistant"
     stop_reason: StopReason  # "end" = final answer, "tool_calls" = wants tools, "max_tokens" = cut off
     usage: Usage
+    model: str | None = None  # which model actually answered (a fallback may differ), for costs
 
 
 # --- Lesson 15: plain-dict form, for recordings (and sessions, Lesson 40) ---
@@ -75,8 +93,10 @@ def message_from_dict(d: dict) -> Message:
 
 
 def reply_to_dict(r: Reply) -> dict:
-    return {"message": message_to_dict(r.message), "stop_reason": r.stop_reason,
-            "usage": {"input_tokens": r.usage.input_tokens, "output_tokens": r.usage.output_tokens}}
+    usage = {"input_tokens": r.usage.input_tokens, "output_tokens": r.usage.output_tokens}
+    if r.usage.cache_read_tokens or r.usage.cache_write_tokens:
+        usage |= {"cache_read_tokens": r.usage.cache_read_tokens, "cache_write_tokens": r.usage.cache_write_tokens}
+    return {"message": message_to_dict(r.message), "stop_reason": r.stop_reason, "usage": usage}
 
 
 def reply_from_dict(d: dict) -> Reply:

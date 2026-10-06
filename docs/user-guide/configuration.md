@@ -54,6 +54,23 @@ Each line says which layer the value came from.
   `warning: project: unknown setting 'temprature' (did you mean 'temperature'?)`
 - A wrong type or invalid JSON is an **error** naming the file and the line.
 
+## Prices
+The agent knows the prices of Anthropic's Claude models (as of 2026-10-06) and treats models on
+your computer as free. For any other model, add its price, in US dollars per million tokens
+(the numbers below are only an example):
+
+```json
+{
+  "prices": {
+    "llama-3.3-70b": {"input": 0.59, "output": 0.79},
+    "my-model": {"input": 1.0, "output": 4.0, "cache_read": 0.1, "cache_write": 1.25}
+  }
+}
+```
+
+Names match by prefix, so `llama-3.3-70b` also covers `llama-3.3-70b-versatile`. Price tables
+from different layers add up. Check your provider's pricing page for current numbers.
+
 ## API keys: never in settings files
 Settings files are meant to be shared and committed, so they must not hold secrets. A setting
 named like `api_key`, `token` or `password`, or a value that looks like an API key, is refused.

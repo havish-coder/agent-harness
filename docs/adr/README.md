@@ -24,3 +24,4 @@ Copy [the template](template.md) to `NNNN-short-title.md` with the next number.
 | [0015](0015-anthropic-adapter-and-caching.md) | A native Anthropic adapter that adds prompt-cache markers | Accepted |
 | [0016](0016-retry-policy.md) | Retry temporary provider failures in a wrapper, never mid-text | Accepted |
 | [0017](0017-layered-json-settings.md) | Layered JSON settings; secrets only in the environment | Accepted |
+| [0018](0018-cost-tracking.md) | Track cost from token counts with a small, dated price table | Accepted |

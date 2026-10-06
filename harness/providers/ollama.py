@@ -124,5 +124,7 @@ def from_ollama(data: dict) -> Reply:
         stop = "max_tokens"
     else:
         stop = "tool_calls" if calls else "end"
-    usage = Usage(data.get("prompt_eval_count", 0), data.get("eval_count", 0))
-    return Reply(Message("assistant", content, tool_calls=calls), stop, usage)
+    # prompt_eval_cached_count: prompt tokens Ollama reused from its cache of the previous request
+    usage = Usage(data.get("prompt_eval_count", 0), data.get("eval_count", 0),
+                  cache_read_tokens=data.get("prompt_eval_cached_count", 0))
+    return Reply(Message("assistant", content, tool_calls=calls), stop, usage, model=data.get("model"))

@@ -11,7 +11,7 @@ agent = Agent(provider, tools, system_prompt, on_event=on_event)
 |---|---|---|
 | `text_delta` | `str` | a piece of the model's answer arrived (streaming providers only) |
 | `thinking_delta` | `str` | a piece of a thinking model's reasoning arrived (with `--think`) |
-| `model_reply` | `Reply` | the model's message is complete (with or without tool calls) |
+| `model_reply` | `Reply` | the model's message is complete (with or without tool calls); `Reply.usage` has the token counts, including `cache_read_tokens` and `cache_write_tokens`, and `Reply.model` the model that answered |
 | `tool_call` | `ToolCall` | right before a tool runs |
 | `tool_denied` | `ToolCall` | the approver refused a call; the model receives a denial message instead of a result |
 | `tool_result` | `(ToolCall, str)` | after every call, run or not; the string is exactly what the model will read |

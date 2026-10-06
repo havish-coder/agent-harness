@@ -116,7 +116,7 @@ class AnthropicProvider:
         except httpx.TimeoutException:
             raise ProviderError("the model took too long to respond", retryable=True) from None
         self.last_usage = message["usage"]
-        yield from_anthropic(message)
+        yield from_anthropic({**message, "model": self.model})
 
 
 def sse_events(lines) -> Iterator[tuple[str, dict]]:
@@ -200,7 +200,9 @@ def from_anthropic(data: dict) -> Reply:
         elif block.get("type") == "tool_use":
             calls.append(ToolCall(block["id"], block["name"], block.get("input") or {}))
     u = data.get("usage", {})
+    cache_read, cache_write = u.get("cache_read_input_tokens") or 0, u.get("cache_creation_input_tokens") or 0
     # input_tokens excludes cached tokens on this API; report everything the model read
-    read = u.get("input_tokens", 0) + u.get("cache_read_input_tokens", 0) + u.get("cache_creation_input_tokens", 0)
+    read = (u.get("input_tokens") or 0) + cache_read + cache_write
     stop = STOP.get(data.get("stop_reason"), "tool_calls" if calls else "end")
-    return Reply(Message("assistant", "".join(text), tool_calls=calls), stop, Usage(read, u.get("output_tokens", 0)))
+    return Reply(Message("assistant", "".join(text), tool_calls=calls), stop,
+                 Usage(read, u.get("output_tokens") or 0, cache_read, cache_write), model=data.get("model"))

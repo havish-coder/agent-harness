@@ -58,8 +58,7 @@ class Agent:
         try:
             for _ in range(self.max_steps):  # stop condition #2: never loop forever
                 reply = self.call_model(schemas)
-                self.usage.input_tokens += reply.usage.input_tokens
-                self.usage.output_tokens += reply.usage.output_tokens
+                self.usage += reply.usage
                 self.messages.append(reply.message)
                 self.on_event("model_reply", reply)
 
