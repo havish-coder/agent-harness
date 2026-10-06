@@ -82,7 +82,7 @@ harness/
     base.py         the Provider interface and ProviderError
     ollama.py       Ollama adapter (/api/chat)
   tools/
-    base.py         the Tool type
+    base.py         the Tool type and the @tool decorator
     fs.py           list_dir, read_file, workspace_snapshot
 scripts/            setup check and teaching scripts
 workspace/          a sample folder to try the agent on

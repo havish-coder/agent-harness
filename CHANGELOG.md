@@ -14,6 +14,10 @@ is below 1.0, minor releases may contain breaking changes.
 - MIT license.
 - Optional dependency groups: `tui`, `web`, `dev` (pytest, ruff), and ruff configuration.
 - `scripts/check_docs.py`: fails if any relative link in the docs is broken.
+- `@tool` decorator: tool schemas are generated from type hints and docstrings (ADR 0004).
+- Tool safety metadata: `read_only`, `concurrency_safe`, `destructive`, all defaulting to the
+  unsafe value; flags may depend on the call's arguments.
+- Developer guide: [Writing a tool](docs/developer-guide/writing-tools.md).
 
 ## [0.1.0] - 2026-10-05
 
