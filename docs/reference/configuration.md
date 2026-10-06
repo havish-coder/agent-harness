@@ -11,7 +11,7 @@ variable `HARNESS_<NAME>` (upper case) and most as a flag. How the layers combin
 | `base_url` | string or null | provider's default | `--base-url` | Server address. |
 | `fallback_model` | string or null | `null` | `--fallback-model` | Second model (same provider) used after retries run out. |
 | `temperature` | number or null | `null` (model default) | | Sampling temperature. |
-| `context_window` | integer | `8192` | | Context size requested from Ollama (`num_ctx`). Ignored by other providers. |
+| `context_window` | integer | `8192` | | Context size requested from Ollama (`num_ctx`), and the window the harness plans for. For other providers it overrides the window the harness knows from the model name ([context](../user-guide/context.md)). |
 | `max_output_tokens` | integer | `4096` | | Longest reply the model may write, in tokens. Stops a model that keeps repeating itself; a reply cut off here ends with a note. |
 | `max_steps` | integer | `20` | `--max-steps` | Maximum model calls per request. |
 | `stream` | boolean | `true` | `--no-stream` | Show answers as they are generated. |

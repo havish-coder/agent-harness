@@ -19,6 +19,7 @@ agent = Agent(provider, tools, system_prompt, on_event=on_event)
 | `tool_approved` | `(ToolCall, answer)` | the user said yes (`True`) or "always" to a question |
 | `redacted` | `(ToolCall, [kinds])` | secrets were found and hidden in a tool result |
 | `limit` | `str` | a session limit was reached; the string says which |
+| `context` | `ContextStatus` | before each model call: the estimated size of the conversation, the limit, and `level` (`ok`, `warn`, `critical`, `full`) |
 | `tool_refused` | `(ToolCall, str)` | the permissions denied a call (a deny rule, plan mode, a path outside the workspace); the string is the reason |
 | `tool_denied` | `ToolCall` | the user answered no; the model receives a denial message instead of a result |
 | `tool_result` | `(ToolCall, str)` | after every call, run or not; the string is exactly what the model will read |
@@ -31,6 +32,7 @@ After `run()` returns or raises, `agent.stop_reason` says why the turn ended:
 | `completed` | the model gave a final answer |
 | `max_steps` | the step limit was reached first |
 | `max_tokens` | the final answer was cut off by the output-token limit |
+| `context_full` | the conversation wouldn't fit the model's window, so the model wasn't called ([context](../user-guide/context.md)) |
 | `limit` | a session limit (tool calls, cost, tokens, minutes) was reached; the model wasn't called again |
 | `blocked` | a `user_prompt_submit` hook refused the message; the model was never called and nothing was added to the conversation |
 | `cancelled` | Ctrl+C (`KeyboardInterrupt`); the turn was rolled back |

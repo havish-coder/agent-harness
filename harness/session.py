@@ -12,6 +12,8 @@ from harness import config
 from harness.agent import Agent
 from harness.audit import AuditLog
 from harness.config import Settings
+from harness.context.tokens import ContextBudget
+from harness.context.windows import window_for
 from harness.hooks import Hooks, from_entries
 from harness.limits import Limits
 from harness.providers.factory import make_provider
@@ -48,7 +50,7 @@ class Session:
         self.base_prompt = SYSTEM_PROMPT.format(snapshot=workspace_snapshot(ws))
         if settings.fence_untrusted:
             self.base_prompt += "\n\n" + SYSTEM_RULE
-        self.context_tokens = 0          # size of the conversation at the last model call
+        self.reported_tokens = 0         # what the model server last said it read
         self.provider = RetryingProvider(self.make_provider(settings.model), max_retries=settings.max_retries,
                                          fallback=self.make_provider(settings.fallback_model)
                                          if settings.fallback_model else None,
@@ -74,11 +76,15 @@ class Session:
         month = datetime.date.today().strftime("%Y-%m")
         self.audit_log = AuditLog(config.USER_DIR / "audit" / f"{month}.jsonl", self.session_id) if settings.audit_log else None
         self._audit_warned = False
+        window = window_for(settings.provider, self.provider.model, settings.context_window,
+                            settings.sources.get("context_window", "default") != "default")
+        self.context = ContextBudget(window, reserve=min(settings.max_output_tokens, window // 4))
         self.agent = Agent(self.provider, tools,
                            apply_style(self.base_prompt, self.style), max_steps=settings.max_steps,
                            on_event=self.on_event, approve=approver, stream=settings.stream,
                            permissions=self.permissions, fence_untrusted=settings.fence_untrusted,
-                           hooks=self.hooks, redact_results=settings.redact_secrets, limit_check=self.limit_reason)
+                           hooks=self.hooks, redact_results=settings.redact_secrets, limit_check=self.limit_reason,
+                           context=self.context)
         self._status_error_shown = False
         self.audit("session", workspace=str(ws.root), provider=settings.provider, model=self.provider.model,
                    mode=self.permissions.mode, trusted=self.permissions.taint.trusted, tools=[t.name for t in tools],
@@ -94,7 +100,7 @@ class Session:
     def on_event(self, kind, data):
         if kind == "model_reply":
             self.costs.add(data)
-            self.context_tokens = data.usage.input_tokens + data.usage.output_tokens
+            self.reported_tokens = data.usage.input_tokens
             self.limits.tokens += data.usage.input_tokens + data.usage.output_tokens
         elif kind == "tool_call":
             self.limits.tool_calls += 1        # every call the model asks for, run or refused
@@ -178,12 +184,16 @@ class Session:
         self.permissions.mode = self.settings.permission_mode = mode
         self.settings.sources["permission_mode"] = "command"
 
+    def estimate_context(self) -> int:
+        """Tokens in the conversation as it stands now (an estimate, Lesson 36)."""
+        return self.context.check(self.agent.messages, self.agent.tools.schemas()).estimated
+
     # --- the status line (Lesson 25) ------------------------------------------------------------
     def status(self) -> dict:
         cost = self.costs.cost()
         return {"provider": self.settings.provider, "model": self.provider.model,
-                "context_tokens": self.context_tokens,
-                "context_window": self.settings.context_window if self.settings.provider == "ollama" else None,
+                "context_tokens": self.estimate_context(),
+                "context_window": self.context.window,
                 "cost": None if cost is None else round(cost, 6), "style": self.style.name,
                 "mode": self.permissions.mode,
                 "workspace": str(self.ws.root), "turns": sum(m.role == "user" for m in self.agent.messages)}
@@ -196,7 +206,7 @@ class Session:
             if custom is not None:
                 return custom
         window = info["context_window"]
-        context = f"{info['context_tokens'] / 1000:.1f}k"
+        context = f"~{info['context_tokens'] / 1000:.1f}k"
         if window:
             context += f"/{window / 1000:.1f}k ({100 * info['context_tokens'] // window}%)"
         money = "price unknown" if info["cost"] is None else format_cost(info["cost"])

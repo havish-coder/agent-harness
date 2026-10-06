@@ -220,6 +220,29 @@ def _hooks(session, args):
     return "\n".join(f"{'runs    ' if h in session.hooks.hooks else 'not run '} {h}" for h in everything)
 
 
+def _context(session, args):
+    """/context: where the conversation's tokens go, against the model's window."""
+    status = session.context.check(session.agent.messages, session.agent.tools.schemas())
+    parts, total = status.breakdown, max(status.raw, 1)
+
+    def row(name, tokens, extra=""):
+        return f"  {name:<18} {tokens:>7,}  {100 * tokens // total:>3}%{extra}"
+    results = sorted(parts.results.items(), key=lambda kv: -kv[1])
+    lines = [f"context: ~{status.estimated:,} of {status.window:,} tokens ({status.percent}%); "
+             f"{status.window - status.limit:,} are kept free for the reply, so the conversation may use {status.limit:,}",
+             row("system prompt", parts.system), row("tool definitions", parts.tools),
+             row("your messages", parts.user), row("assistant", parts.assistant),
+             row("tool results", sum(parts.results.values()),
+                 "  (" + " · ".join(f"{n} {t:,}" for n, t in results[:4]) + ")" if results else "")]
+    if session.reported_tokens:
+        lines.append(f"the model server last reported reading {session.reported_tokens:,} tokens"
+                     + (f" (our estimate is calibrated by {status.estimated / max(status.raw, 1):.2f}x)"
+                        if session.context.calibrator.samples else ""))
+    lines.append({"ok": "plenty of room", "warn": "getting full: long file reads and command output are what fills it",
+                  "critical": "nearly full: the next big result may not fit", "full": "does not fit: /reset to start a new chat"}[status.level])
+    return "\n".join(lines)
+
+
 def _audit(session, args):
     """/audit [N] · /audit verify"""
     from harness.audit import format_entry, verify
@@ -334,6 +357,7 @@ def builtin_commands() -> list[Command]:
         Command("mode", "show the permission mode, or switch to another one", run=_mode, argument_hint="[mode]"),
         Command("trust", "trust this folder: its files are yours, not untrusted content", run=_trust_command(True)),
         Command("untrust", "stop trusting this folder", run=_trust_command(False)),
+        Command("context", "where the conversation's tokens go, against the model's window", run=_context),
         Command("audit", "the audit log: recent entries, or `verify` to check it wasn't altered", run=_audit, argument_hint="[N|verify]"),
         Command("limits", "what this chat has used against its limits", run=_limits),
         Command("hooks", "the hooks in your settings, and whether each runs", run=_hooks),

@@ -69,8 +69,9 @@ def run_turn(session: Session, watcher: KeyWatcher, message: str) -> None:
     cached = f" ({turn.cache_read_tokens:,} cached)" if turn.cache_read_tokens else ""
     cost_after = costs.cost()
     money = "price unknown" if cost_after is None or cost_before is None else format_cost(cost_after - cost_before)
-    window = session.status()["context_window"]
-    context = f" · context {100 * session.context_tokens // window}%" if window else ""
+    info = session.status()
+    window = info["context_window"]
+    context = f" · context ~{100 * info['context_tokens'] // window}%" if window else ""
     ui.usage_line(f"{turn.input_tokens:,} input{cached} + {turn.output_tokens:,} output tokens · {money}{context}")
 
 

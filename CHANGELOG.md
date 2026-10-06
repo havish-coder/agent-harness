@@ -8,6 +8,18 @@ is below 1.0, minor releases may contain breaking changes.
 
 ## [Unreleased]
 
+### Added
+- The context window (ADR 0033): the harness estimates the conversation's size before every model call
+  (character kinds fitted to a real tokenizer, calibrated against the server's reports) and **stops instead of
+  sending what won't fit**, because model servers cut an over-long prompt silently and report a misleading count.
+  `/context` shows where the tokens go (system prompt, tool definitions, messages, results by tool); the status line
+  and the line after each answer show the estimate, marked `~`. Windows for cloud models are known by name.
+  `context` event; `context_full` stop reason. User guide: [the context window](docs/user-guide/context.md).
+
+### Changed
+- The status line's context figure is the harness's own estimate of the conversation as it stands, not the last
+  request's reported size.
+
 ## [0.5.0] - 2026-10-06
 
 The security release. The agent still reads, searches, edits and runs commands, but what it may do is now decided by

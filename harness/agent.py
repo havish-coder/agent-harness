@@ -9,6 +9,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
+from harness.context.tokens import ContextBudget
 from harness.hooks import Hooks
 from harness.messages import Message, Reply, ToolCall, Usage
 from harness.providers.base import Provider, ProviderError, StreamingProvider, TextDelta, ThinkingDelta
@@ -40,7 +41,7 @@ class Agent:
                  approve: Approver | None = None, stream: bool = True,
                  permissions: Permissions | None = None, fence_untrusted: bool = False,
                  hooks: Hooks | None = None, redact_results: bool = False,
-                 limit_check: Callable[[], str | None] | None = None):
+                 limit_check: Callable[[], str | None] | None = None, context: ContextBudget | None = None):
         self.provider = provider
         self.tools = tools if isinstance(tools, ToolRegistry) else ToolRegistry(tools)
         self.system_prompt = system_prompt
@@ -52,6 +53,7 @@ class Agent:
         self.stream = stream        # use the provider's stream() when it has one (Lesson 16)
         self.redact_results = redact_results     # hide secrets in tool results (Lesson 34)
         self.limit_check = limit_check           # returns why the session must stop, or None (Lesson 34)
+        self.context = context      # measures the conversation against the model's window (Lesson 36)
         self.hooks = hooks          # the user's scripts at fixed points (Lesson 33)
         self.fence_untrusted = fence_untrusted   # wrap outside content in <untrusted> tags (Lesson 31)
         self.usage = Usage()
@@ -84,7 +86,16 @@ class Agent:
                     self.on_event("limit", why)
                     return (f"(stopped: {why}. /limits shows the limits; raise one in your settings, "
                             "or /reset to start a new chat)")
+                status = self.context.check(self.messages, schemas) if self.context else None
+                if status:
+                    self.on_event("context", status)
+                    if status.level == "full":      # stop condition #4: never send what won't fit (Lesson 36)
+                        self.stop_reason = "context_full"
+                        return (f"(stopped: the conversation is about {status.estimated:,} tokens and the model's window "
+                                f"leaves room for {status.limit:,}. /context shows where they go; /reset starts a new chat)")
                 reply = self.call_model(schemas)
+                if status:
+                    self.context.observe(status, reply.usage.input_tokens)
                 self.usage += reply.usage
                 self.messages.append(reply.message)
                 self.on_event("model_reply", reply)

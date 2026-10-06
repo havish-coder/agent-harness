@@ -64,7 +64,8 @@ def test_switching_style_keeps_the_conversation(session):
 
 def test_status_text(session):
     session.on_event("model_reply", Reply(Message("assistant", "x"), "end", Usage(3_000, 200), model="m1"))
-    assert session.status_text() == "m1 · context 3.2k/8.2k (39%) · free"
+    session.estimate_context = lambda: 3_200                                # the conversation's estimated size
+    assert session.status_text() == "m1 · context ~3.2k/8.2k (39%) · free"
     session.set_style("latex")
     assert session.status_text().endswith("· style latex")
 
