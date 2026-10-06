@@ -19,6 +19,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from typing import Literal
+from urllib.parse import urlsplit
 
 from harness.security.shell import Analysis, Part, analyze, part_writes
 from harness.security.taint import Taint
@@ -230,7 +231,7 @@ class Permissions:
         except OutsideWorkspace as e:
             return Decision("deny", str(e))
         analysis = analyze(subject, getattr(tool, "dialect", None) or "posix") if kind == "command" and subject else None
-        notes = self.notes(analysis)
+        notes = self.notes(analysis) if kind == "command" else self.url_notes(subject) if kind == "url" else []
         read_only = tool.is_read_only(call.arguments) or (analysis is not None and self.is_safe(analysis))
         matching = [r for r in self.rules if r.action != "allow" and self.applies(r, tool.name, subject, kind, analysis)]
 
@@ -250,6 +251,9 @@ class Permissions:
         for rule in matching:
             if rule.action == "ask":
                 return ask(f"the rule {rule} ({rule.source}) asks first")
+        if kind == "url" and tainted and subject and (urlsplit(subject).query or urlsplit(subject).fragment):
+            return ask("the address carries data and this chat has read content you may not trust: "
+                       "that is how a hidden instruction sends your data out")
         if self.mode == "plan" and not read_only:                               # 3
             return Decision("deny", "plan mode is on: only tools that read are allowed. "
                                     "Describe the change instead of making it")
@@ -268,6 +272,19 @@ class Permissions:
         return ask(CHANGES, suggestion)
 
     # --- shell commands (Lesson 30) ------------------------------------------------------------
+    @staticmethod
+    def url_notes(subject: str | None) -> list[str]:
+        """What to tell the user about an address (Lesson 32)."""
+        if not subject:
+            return []
+        parts = urlsplit(subject)
+        notes = [f"contacts {parts.netloc}"] if parts.netloc else []
+        if parts.scheme == "http":
+            notes.append("not encrypted (http)")
+        if parts.query or parts.fragment:
+            notes.append("the address carries data after the ? (anything in it is sent to the site)")
+        return notes
+
     @staticmethod
     def notes(analysis: Analysis | None) -> list[str]:
         if analysis is None:
@@ -365,6 +382,10 @@ class Permissions:
         a `*` in an approved command (`rm *.pyc`) must not become a wildcard."""
         if kind == "command" and subject:
             return Rule("allow", tool.name, subject.strip(), "session", exact=True)
+        if kind == "url" and subject:
+            parts = urlsplit(subject)
+            if parts.scheme and parts.netloc:                 # allow this site, not just this page
+                return Rule("allow", tool.name, f"{parts.scheme}://{parts.netloc}/*", "session")
         return Rule("allow", tool.name, None, "session")
 
     def remember(self, rule: Rule) -> None:

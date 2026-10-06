@@ -22,6 +22,8 @@ variable `HARNESS_<NAME>` (upper case) and most as a flag. How the layers combin
 | `status_line` | string or null | `null` | | A command whose first output line replaces the status line. Not accepted from project settings. |
 | `permission_mode` | string | `"default"` | `--mode`, `--yes` | `default`, `accept-edits`, `plan` or `bypass` ([permissions](../user-guide/permissions.md)). Not accepted from project settings. |
 | `permissions` | object | `{}` | | `{"allow": [...], "ask": [...], "deny": [...]}`, rules like `run_shell(git status*)`. Rules from all layers add up. Project settings may not add `allow` rules. In the environment: JSON. |
+| `web_fetch` | boolean | `true` | | Give the agent the `web_fetch` tool ([Reading web pages](../user-guide/web.md)). |
+| `web_allow_local` | list of strings | `[]` | `HARNESS_WEB_ALLOW_LOCAL` (separated like `PATH`) | `host` or `host:port` entries `web_fetch` may reach on your own machine or network, such as `localhost:3000`. Not accepted from project settings. |
 | `fence_untrusted` | boolean | `true` | | Wrap file text, command output and web pages in `<untrusted>` tags and tell the model they are data ([untrusted content](../user-guide/untrusted-content.md)). Not accepted from project settings. |
 | `shell_env_keep` | list of strings | `[]` | `HARNESS_SHELL_ENV_KEEP` (separated like `PATH`) | Environment variables commands may see even though they look secret (for example `SSH_AUTH_SOCK` to let `git push` use your ssh agent). Names are compared without case. Not accepted from project settings. |
 | `additional_directories` | list of strings | `[]` | | Folders outside the workspace the file tools may also use ([workspace](../user-guide/workspace.md)). Relative to the workspace. Not accepted from project settings. |
@@ -49,7 +51,7 @@ Environment values are converted to the setting's type: booleans accept `1`, `tr
 | a value that looks like an API key (`sk-...`, `sk-ant-...`, `gsk_...`, `AIza...`) | error |
 | project settings that set `provider` or `base_url` | warning showing the values |
 | a workspace `.env` not ignored by git | warning |
-| project settings that set `status_line` (it runs a program), `additional_directories` (it widens access) `permission_mode` (it decides what runs without asking), `shell_env_keep` (it hands your secrets to commands) or `fence_untrusted` (it removes a protection) | warning; the value is ignored |
+| project settings that set `status_line` (it runs a program), `additional_directories` (it widens access) `permission_mode` (it decides what runs without asking), `shell_env_keep` (it hands your secrets to commands) or `fence_untrusted` (it removes a protection) or `web_allow_local` (it lets web_fetch reach your own network) | warning; the value is ignored |
 | project settings with `allow` rules | warning; the allow rules are ignored, `ask` and `deny` rules are kept |
 | a rule that can't be read (`run shell`, `run_shell()`), or an unknown key under `permissions` | error |
 | a rule naming a tool that doesn't exist | warning at start |

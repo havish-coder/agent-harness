@@ -166,6 +166,6 @@ These remain even with every defense in place. Know them before you approve thin
 | Shell command analysis (rules read each command; risks listed in the question) | v0.5 (done) |
 | Secret environment variables removed from commands | v0.5 (done) |
 | Prompt-injection fencing and taint-aware approvals; folder trust | v0.5 (done) |
-| Web fetch with a network guard against private addresses | v0.5 |
+| Web fetch with a network guard against private addresses | v0.5 (done) |
 | Hooks | v0.5 |
 | Audit log, secret redaction, session limits | v0.5 |

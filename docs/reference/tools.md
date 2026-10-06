@@ -11,6 +11,7 @@ Tools the model can call. Paths are relative to the workspace root.
 | `edit_file` | no | no | Replace exact text in a file the model has read. |
 | `write_file` | no | no | Create a file, or replace a whole file the model has read. |
 | `run_shell` | no | no | Run a shell command; returns the exit code and output. |
+| `web_fetch` | no | yes | Fetch one web page and return its text. |
 
 Results longer than a tool's limit (8,000 characters by default) are shortened: the agent
 keeps the first 80% and the last 20% and says how much was cut in the middle.
@@ -142,3 +143,23 @@ Result: a status line (`exit code 0 (success) · 1.2 s · in .`, or `TIMED OUT a
 then `--- stdout ---` and `--- stderr ---` sections, or `(no output)`. Long output keeps the
 first 30% and the last 70% of about 7,000 characters, because summaries (test results,
 errors) are usually at the end.
+
+## `web_fetch`
+Available unless `web_fetch` is `false` in the [settings](configuration.md). Not read-only: the first fetch from
+a site asks ([Reading web pages](../user-guide/web.md)).
+
+| Argument | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `url` | string | yes | | The full address, `http://` or `https://`. |
+| `max_chars` | integer | no | `8000` | Characters of the page to return; at most 30,000. |
+
+Result: a header (`HTTP 200 · text/html · https://example.com/page`, the title, and `redirected from ...` when
+it followed redirects within the site), a blank line, then the page as text: scripts and styles removed, a blank
+line between paragraphs, `- ` before list items, links as `text (url)`. Long pages end with how many characters
+were cut. Images, archives and other non-text types return `Not shown: this is a ... file, not text.`
+
+Limits: public servers only (ports 80 and 443; not this computer, private networks, cloud metadata addresses,
+`file://` and other schemes; `user@host` addresses are refused), 15 seconds, about 2 MB read (counted after
+decompression), up to 5 redirects within the same site. A redirect to a different site isn't followed: the result
+names the new address. Proxy environment variables are ignored. The result is
+[untrusted content](../user-guide/untrusted-content.md): fenced, and it taints the chat.

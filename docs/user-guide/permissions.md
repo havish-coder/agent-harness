@@ -60,6 +60,7 @@ Rules say what to allow, ask about or deny, per tool and optionally per *subject
 | `write_file(src)` | `src` and everything inside it |
 | `edit_file(src/*.py)` | Python files directly in `src` (`*` stays inside one folder) |
 | `edit_file(src/**)` | everything under `src`, at any depth |
+| `web_fetch(https://docs.python.org/*)` | fetching from that site ([web pages](web.md)); the pattern matches the whole address |
 | `*` | every tool |
 
 Paths are relative to the workspace and are compared **after** they're resolved, so

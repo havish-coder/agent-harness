@@ -49,7 +49,8 @@ class Session:
         self.costs = CostTracker(settings.provider, self.provider.model, settings.prices)
         self.permissions = Permissions.from_settings(ws, settings.permission_mode, settings.permissions)
         self.permissions.taint.trusted = is_trusted(ws.root, config.USER_DIR)
-        tools = default_tools(ws, shell=settings.shell, env_keep=settings.shell_env_keep)
+        tools = default_tools(ws, shell=settings.shell, env_keep=settings.shell_env_keep, web=settings.web_fetch,
+                              web_allow_local=settings.web_allow_local)
         for warning in self.permissions.unknown_tools([t.name for t in tools]):
             ui.warn(f"warning: {warning}")
         self.agent = Agent(self.provider, tools,

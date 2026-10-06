@@ -51,6 +51,13 @@ is below 1.0, minor releases may contain breaking changes.
 - `fence_untrusted` setting (default on; not accepted from project settings).
 - `scripts/injection_lab.py` reports what a hostile instruction would have done under each mode,
   with `--fence` and `--trust`.
+- `web_fetch` tool (ADR 0029): fetches one page as text. Public servers only: the address a name
+  resolves to is checked (loopback, private, link-local and metadata addresses, tunnels, IPv4-mapped IPv6,
+  disguised spellings such as `2130706433`), only ports 80 and 443, and the connection goes to the address
+  that was checked, so DNS rebinding can't redirect it. Redirects are followed only within the same site and
+  every hop is checked. 15 s, about 2 MB after decompression, text types only, proxy variables ignored.
+  The first fetch from a site asks and "always" allows the site; an address with a query string asks after
+  untrusted content has been read. `web_fetch` and `web_allow_local` settings; user guide *Reading web pages*.
 - `permission` and `tool_refused` events; `model_call` is now documented.
 - User guide: [permissions](docs/user-guide/permissions.md).
 
