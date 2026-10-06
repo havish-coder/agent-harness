@@ -12,6 +12,7 @@ from typing import Any
 from harness.messages import Message, Reply, ToolCall, Usage
 from harness.providers.base import Provider, ProviderError, StreamingProvider, TextDelta, ThinkingDelta
 from harness.security.permissions import AskForChanges, Decision, Permissions
+from harness.security.taint import fence
 from harness.tools.base import Tool
 from harness.tools.registry import ToolRegistry
 
@@ -34,7 +35,7 @@ class Agent:
     def __init__(self, provider: Provider, tools: list[Tool] | ToolRegistry, system_prompt: str,
                  max_steps: int = 10, on_event: EventHandler | None = None,
                  approve: Approver | None = None, stream: bool = True,
-                 permissions: Permissions | None = None):
+                 permissions: Permissions | None = None, fence_untrusted: bool = False):
         self.provider = provider
         self.tools = tools if isinstance(tools, ToolRegistry) else ToolRegistry(tools)
         self.system_prompt = system_prompt
@@ -44,6 +45,7 @@ class Agent:
         self.permissions = permissions or AskForChanges()   # decides allow / ask / deny (Lesson 29)
         self._approve_takes_decision = approve is not None and _accepts(approve, "decision")
         self.stream = stream        # use the provider's stream() when it has one (Lesson 16)
+        self.fence_untrusted = fence_untrusted   # wrap outside content in <untrusted> tags (Lesson 31)
         self.usage = Usage()
         # Why the last run() ended: "completed", "max_steps", "max_tokens", "cancelled", "error"
         self.stop_reason: str | None = None
@@ -78,11 +80,11 @@ class Agent:
                 for batch in self.batches(reply.message.tool_calls):
                     for call in batch:
                         self.on_event("tool_call", call)
-                    results = self.execute_batch(batch)
-                    for call, result in zip(batch, results, strict=True):  # in the order the model asked
+                    outcomes = self.execute_outcomes(batch)
+                    for call, (result, ran) in zip(batch, outcomes, strict=True):  # in the order the model asked
                         result = self.note_repeats(seen, call, result)
                         self.on_event("tool_result", (call, result))
-                        self.messages.append(Message.tool_result(call, result))
+                        self.messages.append(Message.tool_result(call, self.mark_untrusted(call, result, ran)))
 
             self.stop_reason = "max_steps"
             return f"(stopped: reached the limit of {self.max_steps} steps without a final answer)"
@@ -139,10 +141,27 @@ class Agent:
                 groups.append((safe, [call]))    # start a new batch (an unsafe call is always alone)
         return [batch for _, batch in groups]
 
+    def mark_untrusted(self, call: ToolCall, result: str, ran: bool) -> str:
+        """What the model reads for this result (Lesson 31). Text that carries content someone else
+        may have written is remembered as a taint source and, when fencing is on, wrapped in
+        <untrusted> tags. Refusals and errors are the harness's own words and stay as they are."""
+        tool = self.tools.get(call.name)
+        if not (ran and tool and tool.content_kind) or result.startswith("Error"):
+            return result
+        source = f"{call.name} {_subject_text(call, tool)}".strip()
+        taint = getattr(self.permissions, "taint", None)
+        if taint is not None:
+            taint.add(tool.content_kind, source)
+        return fence(result, source) if self.fence_untrusted else result
+
     def execute_batch(self, batch: list[ToolCall]) -> list[str]:
-        """Run one batch. Every call is checked and decided on this thread first, so events and
-        questions to the user never come from a worker thread; then the allowed calls run: one
-        directly, several safe ones on threads."""
+        """Run one batch; the results are texts, in the order of `batch`."""
+        return [text for text, _ in self.execute_outcomes(batch)]
+
+    def execute_outcomes(self, batch: list[ToolCall]) -> list[tuple[str, bool]]:
+        """(text, whether the tool actually ran) for each call. Every call is checked and decided on
+        this thread first, so events and questions to the user never come from a worker thread; then
+        the allowed calls run: one directly, several safe ones on threads."""
         prepared = [self.prepare(call) for call in batch]
         results = [text for _, text in prepared]
         runnable = [(i, tool, call) for i, ((tool, _), call) in enumerate(zip(prepared, batch, strict=True)) if tool]
@@ -154,7 +173,8 @@ class Agent:
                 done = pool.map(lambda r: self.tools.invoke(r[1], r[2].arguments), runnable)
                 for (i, _, _), text in zip(runnable, done, strict=True):
                     results[i] = text
-        return results
+        ran = {i for i, _, _ in runnable}
+        return [(text, i in ran) for i, text in enumerate(results)]
 
     def execute(self, call: ToolCall) -> str:
         """Run one tool call. Every failure becomes text for the model, never a crash."""
@@ -197,6 +217,13 @@ class Agent:
         if self._approve_takes_decision:
             return self.approve(call, tool, decision=decision)
         return self.approve(call, tool)
+
+
+def _subject_text(call: ToolCall, tool: Tool) -> str:
+    """A short label for what a call touched: its path, command or url."""
+    value = call.arguments.get(tool.subject) if tool.subject else None
+    text = " ".join(str(value).split()) if value is not None else ""
+    return text if len(text) <= 60 else text[:57] + "..."
 
 
 def _accepts(fn: Callable, name: str) -> bool:

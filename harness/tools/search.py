@@ -80,7 +80,7 @@ def make_search_tools(ws: Workspace) -> list[Tool]:
             lines.append(f"... and {len(found) - GLOB_LIMIT} more. Use a more specific pattern or path.")
         return "\n".join(lines)
 
-    @tool(read_only=True, concurrency_safe=True)
+    @tool(read_only=True, concurrency_safe=True, content_kind="file")
     def grep(pattern: str, path: str = ".", glob: str | None = None, ignore_case: bool = False,
              output: Literal["lines", "files", "count"] = "lines", context: int = 0,
              limit: int = 50) -> str:

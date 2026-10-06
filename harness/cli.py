@@ -116,6 +116,11 @@ def main(argv=None):
     ui.info(f"/help commands · @file attaches a file · {stop_keys}")
     if settings.permission_mode != "default":
         ui.warn(f"permission mode {settings.permission_mode}: {MODE_HELP[settings.permission_mode]}")
+    broad = settings.permission_mode in ("accept-edits", "bypass") or any(
+        e["action"] == "allow" and "(" not in e["rule"] for e in settings.permissions)
+    if broad and not session.permissions.taint.trusted:
+        ui.warn("this folder isn't trusted: after the agent reads files or runs commands here, only rules "
+                "with a pattern run without asking. /trust if the files are yours.")
 
     while True:
         try:

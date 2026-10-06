@@ -6,11 +6,14 @@ receive it so they can act on the running app (switch the model, show costs, res
 import json
 import subprocess
 
+from harness import config
 from harness.agent import Agent
 from harness.config import Settings
 from harness.providers.factory import make_provider
 from harness.providers.retry import RetryingProvider
 from harness.security.permissions import MODES, Permissions
+from harness.security.taint import SYSTEM_RULE
+from harness.security.trust import is_trusted
 from harness.styles import BUILTIN, Style, apply_style
 from harness.tools import default_tools
 from harness.tools.fs import workspace_snapshot
@@ -36,6 +39,8 @@ class Session:
             settings.output_style = "default"
         self.style = self.styles[settings.output_style]
         self.base_prompt = SYSTEM_PROMPT.format(snapshot=workspace_snapshot(ws))
+        if settings.fence_untrusted:
+            self.base_prompt += "\n\n" + SYSTEM_RULE
         self.context_tokens = 0          # size of the conversation at the last model call
         self.provider = RetryingProvider(self.make_provider(settings.model), max_retries=settings.max_retries,
                                          fallback=self.make_provider(settings.fallback_model)
@@ -43,13 +48,14 @@ class Session:
                                          on_retry=ui.retry)
         self.costs = CostTracker(settings.provider, self.provider.model, settings.prices)
         self.permissions = Permissions.from_settings(ws, settings.permission_mode, settings.permissions)
+        self.permissions.taint.trusted = is_trusted(ws.root, config.USER_DIR)
         tools = default_tools(ws, shell=settings.shell, env_keep=settings.shell_env_keep)
         for warning in self.permissions.unknown_tools([t.name for t in tools]):
             ui.warn(f"warning: {warning}")
         self.agent = Agent(self.provider, tools,
                            apply_style(self.base_prompt, self.style), max_steps=settings.max_steps,
                            on_event=self.on_event, approve=approver, stream=settings.stream,
-                           permissions=self.permissions)
+                           permissions=self.permissions, fence_untrusted=settings.fence_untrusted)
         self._status_error_shown = False
 
     def make_provider(self, model: str | None):
@@ -129,4 +135,5 @@ class Session:
 
     def reset(self) -> None:
         self.agent.reset()
+        self.permissions.taint.clear()   # a new conversation has read nothing yet
         self.ws.forget_reads()   # the model no longer has earlier reads in its context

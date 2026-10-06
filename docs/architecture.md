@@ -112,6 +112,11 @@ read-only tools; anything left asks ([ADR 0026](adr/0026-permission-modes-and-ru
 plain code, so the same call always gets the same answer ([ADR 0024](adr/0024-deterministic-security-decisions.md)).
 A tool's check runs before the decision so you are never asked to approve a call that would fail.
 
+Content that comes back from tools is handled before the model sees it: results from tools that carry
+outside text (`read_file`, `grep`, `run_shell`) are wrapped in `<untrusted>` tags and recorded in a
+**taint** list that the permission decision consults ([`harness/security/taint.py`](../harness/security/taint.py),
+[ADR 0028](adr/0028-fence-and-taint-untrusted-content.md)).
+
 For `run_shell`, the decision first *reads* the command ([`harness/security/shell.py`](../harness/security/shell.py),
 [ADR 0027](adr/0027-read-commands-and-scrub-secrets.md)): it splits `a && b | $(c)` into the commands
 it would run and notes their risks, so deny rules can find a command wherever it hides and allow rules

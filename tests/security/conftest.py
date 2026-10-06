@@ -60,7 +60,7 @@ class Lab:
         """Run the calls as one model turn; return everything the model saw afterwards."""
         self.provider = ScriptedProvider([tool_calls(*calls), text("done")])
         Agent(self.provider, default_tools(self.ws), "lab", approve=self.approve, stream=False,
-              permissions=self.permissions).run("go")
+              permissions=self.permissions, fence_untrusted=True).run("go")
         last_request = self.provider.requests[-1][0]
         return "\n".join(m.content or "" for m in last_request if m.role == "tool")
 

@@ -138,7 +138,7 @@ def run_command(shell: Shell, command: str, cwd: Path, timeout: int,
 def make_shell_tools(ws: Workspace, shell: Shell | None = None, env_keep=()) -> list[Tool]:
     shell = shell or detect_shell()
 
-    @tool(read_only=False, concurrency_safe=False, max_result_chars=OUTPUT_BUDGET + 1_000)
+    @tool(read_only=False, concurrency_safe=False, max_result_chars=OUTPUT_BUDGET + 1_000, content_kind="command")
     def run_shell(command: str, timeout: int = DEFAULT_TIMEOUT) -> str:
         """Run a shell command in the workspace root folder and return its exit code and output.
 

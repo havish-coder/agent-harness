@@ -53,6 +53,7 @@ class Settings:
     # {"allow": [...], "ask": [...], "deny": [...]} in files; after loading, every layer's rules
     # as [{"action", "rule", "source"}] (rules add up across layers, each remembering its file)
     permissions: list = field(default_factory=list)
+    fence_untrusted: bool = True                 # wrap file text, command output, web pages in <untrusted> tags (Lesson 31)
     shell_env_keep: list = field(default_factory=list)   # environment variables commands may see despite looking secret
     sources: dict = field(default_factory=dict, repr=False, compare=False)   # key → where it came from
 
@@ -77,7 +78,7 @@ TYPES: dict[str, tuple] = {
     "context_window": (int,), "max_output_tokens": (int,), "max_steps": (int,), "stream": (bool,), "think": (bool,),
     "shell": (str, type(None)), "max_retries": (int,), "prices": (dict,),
     "output_style": (str,), "status_line": (str, type(None)), "additional_directories": (list,),
-    "permission_mode": (str,), "permissions": (dict,), "shell_env_keep": (list,),
+    "permission_mode": (str,), "permissions": (dict,), "shell_env_keep": (list,), "fence_untrusted": (bool,),
 }
 # Settings a project file may not set, and why: a cloned repository could otherwise run its own
 # code on your machine, or give the agent access to your other folders, just by being opened.
@@ -86,6 +87,7 @@ NOT_FROM_PROJECT = {
     "additional_directories": "it gives the agent access to folders outside the workspace",
     "permission_mode": "it decides what runs without asking",
     "shell_env_keep": "it hands your secret environment variables to commands",
+    "fence_untrusted": "it removes a protection against instructions hidden in files and web pages",
 }
 RULE_ACTIONS = ("allow", "ask", "deny")
 

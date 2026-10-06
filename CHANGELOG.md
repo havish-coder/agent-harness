@@ -41,6 +41,16 @@ is below 1.0, minor releases may contain breaking changes.
 - Secret environment variables (`*_KEY`, `*_TOKEN`, `*_SECRET`, `*_PASSWORD`, `AUTH`, `COOKIE`, values
   shaped like API keys) are removed from the environment of `run_shell` commands. `shell_env_keep`
   setting to allow specific names; not accepted from project settings.
+- Untrusted content (ADR 0028): file text, command output and (later) web pages reach the model inside
+  `<untrusted source="...">` tags, with a standing instruction that they are data; a file can't close
+  its own fence. The chat remembers the sources it has read, and after that `bypass`, `accept-edits`
+  and rules for a whole tool ask instead of running; pattern rules and exact "always" answers still
+  run. File text and command output count only in folders the user hasn't trusted.
+- `/trust`, `/untrust` (stored in the user's settings folder, never in a project), `/taint [clear]`;
+  `/reset` clears the taint. A startup notice when a broad approval is combined with an untrusted folder.
+- `fence_untrusted` setting (default on; not accepted from project settings).
+- `scripts/injection_lab.py` reports what a hostile instruction would have done under each mode,
+  with `--fence` and `--trust`.
 - `permission` and `tool_refused` events; `model_call` is now documented.
 - User guide: [permissions](docs/user-guide/permissions.md).
 

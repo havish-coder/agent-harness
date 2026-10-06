@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from harness.security.shell import Analysis, Part, analyze, part_writes
+from harness.security.taint import Taint
 from harness.workspace import OutsideWorkspace, Workspace
 
 Action = Literal["allow", "ask", "deny"]
@@ -195,6 +196,7 @@ class Permissions:
     ws: Workspace
     mode: str = "default"
     rules: list[Rule] = field(default_factory=list)
+    taint: Taint = field(default_factory=Taint)     # untrusted content read so far (Lesson 31)
 
     def __post_init__(self):
         if self.mode not in MODES:
@@ -215,6 +217,14 @@ class Permissions:
         return (str(raw) if raw is not None else None), tool.subject
 
     def decide(self, call, tool) -> Decision:
+        """allow, ask or deny for this call. After untrusted content has been read, nothing that was
+        approved broadly (a mode, a rule for a whole tool) runs without asking (Lesson 31)."""
+        decision = self._decide(call, tool, tainted=self.taint.active)
+        if self.taint.active and decision.action == "ask" and decision.reason == CHANGES                 and self._decide(call, tool, tainted=False).action == "allow":
+            decision.reason = self.taint.reason()          # it would have run, but for the taint
+        return decision
+
+    def _decide(self, call, tool, tainted: bool) -> Decision:
         try:
             subject, kind = self.subject(call, tool)
         except OutsideWorkspace as e:
@@ -243,16 +253,19 @@ class Permissions:
         if self.mode == "plan" and not read_only:                               # 3
             return Decision("deny", "plan mode is on: only tools that read are allowed. "
                                     "Describe the change instead of making it")
-        if self.mode == "bypass":
+        if self.mode == "bypass" and not tainted:
             return Decision("allow", "bypass mode")
-        if self.mode == "accept-edits" and kind == "path" and not read_only:
+        if self.mode == "accept-edits" and kind == "path" and not read_only and not tainted:
             return Decision("allow", "accept-edits mode")
-        rule = self.allowing_rule(tool.name, subject, kind, analysis)           # 4
+        rule = self.allowing_rule(tool.name, subject, kind, analysis, broad=not tainted)   # 4
         if rule:
             return Decision("allow", f"allowed by the rule {rule} ({rule.source})")
         if read_only:                                                           # 5
             return Decision("allow", "reads only")
-        return ask(CHANGES, self.suggest(tool, subject, kind))                  # 6
+        suggestion = self.suggest(tool, subject, kind)                          # 6
+        if tainted and suggestion.pattern is None:
+            suggestion = None            # "always for this whole tool" would be a broad rule: not honored now
+        return ask(CHANGES, suggestion)
 
     # --- shell commands (Lesson 30) ------------------------------------------------------------
     @staticmethod
@@ -320,13 +333,15 @@ class Permissions:
         return any(match_command(rule.pattern, t, ignore_case=True) for t in texts)
 
     def allowing_rule(self, tool_name: str, subject: str | None, kind: str | None,
-                      analysis: Analysis | None) -> Rule | None:
+                      analysis: Analysis | None, broad: bool = True) -> Rule | None:
         """The allow rule that lets this call run, or None. A command is allowed by patterns only
         when it was fully understood and *every* command in it is covered: `pytest && curl x`
         is not allowed by `pytest*`. Commands run with a changed environment or through a wrapper
         (`env`, `sudo`, `NAME=value`) are never covered by a pattern: it isn't the command the
         user allowed."""
         allows = [r for r in self.rules if r.action == "allow" and r.tool in ("*", tool_name)]
+        if not broad:                                  # after untrusted content: only what was spelled out
+            allows = [r for r in allows if r.pattern is not None]
         for rule in allows:
             if rule.pattern is None or (rule.exact and subject is not None and subject.strip() == rule.pattern):
                 return rule

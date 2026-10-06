@@ -40,6 +40,9 @@ class Tool:
     # For tools whose subject is a command: the language it is written in, "posix" or "powershell"
     # (Lesson 30), so permission rules and risk notes read it correctly.
     dialect: str | None = None
+    # Where the text this tool returns comes from, when someone else may have written it (Lesson 31):
+    # "file", "command", "web" or "external". None: the result is made by the harness itself.
+    content_kind: str | None = None
 
     def schema(self) -> dict:
         """The provider-neutral description sent to the model."""
@@ -69,7 +72,8 @@ SUBJECTS = ("path", "command", "url")
 
 def tool(fn: Callable | None = None, *, name: str | None = None, read_only: Flag = False,
          concurrency_safe: Flag = False, destructive: Flag = False,
-         max_result_chars: int = DEFAULT_MAX_RESULT_CHARS, subject: str | None = "auto") -> Any:
+         max_result_chars: int = DEFAULT_MAX_RESULT_CHARS, subject: str | None = "auto",
+         content_kind: str | None = None) -> Any:
     """Turn a function into a `Tool`. Use as `@tool` or `@tool(read_only=True, ...)`.
 
     - name: the function name (or `name=`)
@@ -77,6 +81,8 @@ def tool(fn: Callable | None = None, *, name: str | None = None, read_only: Flag
     - parameters: built from type hints; arguments without a default are required;
       per-argument descriptions come from the docstring's `Args:` section
     - subject: by default the `path`, `command` or `url` argument, if the function has one
+    - content_kind: "file", "command", "web" or "external" when the result carries text someone
+      else wrote; it gets fenced as untrusted and may taint the conversation (Lesson 31)
     """
     def build(f: Callable) -> Tool:
         description, arg_docs = parse_docstring(f)
@@ -96,6 +102,7 @@ def tool(fn: Callable | None = None, *, name: str | None = None, read_only: Flag
             concurrency_safe=concurrency_safe,
             destructive=destructive,
             max_result_chars=max_result_chars,
+            content_kind=content_kind,
         )
 
     return build(fn) if fn is not None else build

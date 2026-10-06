@@ -108,6 +108,30 @@ flowchart TD
     OUT --> LOG[(Audit log)]
 ```
 
+## Prompt injection
+Text the agent reads (files, command output, web pages) can contain instructions aimed at the model, and a
+model can't reliably tell data from instructions. We measured it with `scripts/injection_lab.py` on
+`qwen3:4b-instruct`: three hidden instructions, three runs each, with approvals switched off (`--mode
+bypass`); every call that isn't read-only is recorded and refused.
+
+| Fence | Folder | Model asked for the injected action | Would have run without asking |
+|---|---|---|---|
+| off | trusted | 5 / 9 | 5 / 9 |
+| off | not trusted | 5 / 9 | **0 / 9** |
+| on | trusted | 3 / 9 | 3 / 9 |
+| on | not trusted | 3 / 9 | **0 / 9** |
+
+- **Fencing** (`<untrusted>` tags and a standing instruction) helped against text that imitates the user
+  (2 / 3 to 0 / 3 in that scenario) and not against a README the user told the agent to follow (3 / 3 both ways).
+  It is a statistical defense; the numbers are small and for one model.
+- **Taint** doesn't change what the model attempts; it changes what happens next. In a folder you haven't
+  trusted, once a file has been read, broad approvals pause (5 unasked actions became 0). See
+  [untrusted content](user-guide/untrusted-content.md) and [ADR 0028](adr/0028-fence-and-taint-untrusted-content.md).
+
+A hostile file in a folder you **trust** isn't noticed, and a model can still be persuaded to ask for something
+a pattern rule you wrote allows. The rule of thumb: be most careful right after the agent has read web
+pages or files you didn't write, and keep `bypass` for throwaway folders.
+
 ## Residual risks
 These remain even with every defense in place. Know them before you approve things.
 - **An approved command can do anything you can.** Command analysis helps you read a command;
@@ -141,7 +165,7 @@ These remain even with every defense in place. Know them before you approve thin
 | Permission modes and allow/ask/deny rules | v0.5 (done) |
 | Shell command analysis (rules read each command; risks listed in the question) | v0.5 (done) |
 | Secret environment variables removed from commands | v0.5 (done) |
-| Prompt-injection markers and taint-aware approvals | v0.5 |
+| Prompt-injection fencing and taint-aware approvals; folder trust | v0.5 (done) |
 | Web fetch with a network guard against private addresses | v0.5 |
 | Hooks | v0.5 |
 | Audit log, secret redaction, session limits | v0.5 |

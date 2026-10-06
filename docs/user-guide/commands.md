@@ -14,6 +14,8 @@ send a ready-made request to the model.
 | `/tools` | the tools the agent can use, and which ones only read |
 | `/style [name]` | list [output styles](styles-and-status.md), or switch to one |
 | `/mode [name]` | show the [permission modes](permissions.md), or switch to one |
+| `/trust`, `/untrust` | trust this folder, or stop: [untrusted content](untrusted-content.md) |
+| `/taint [clear]` | what untrusted content this chat has read; clear it |
 | `/permissions [allow\|ask\|deny\|remove RULE]` | the permission rules and where each came from; add or remove one for this session |
 | `/export [md\|tex\|pdf] [file] [--last]` | save the chat or the last answer ([details](math-and-export.md)) |
 | `/fix-tests [focus]` | asks the agent to run the tests, fix failures and repeat until they pass |

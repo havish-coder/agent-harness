@@ -194,6 +194,34 @@ def _permissions(session, args):
     return f"{verb} {rule} for this session{note}"
 
 
+def _trust_command(trusting: bool):
+    """/trust and /untrust: vouch for this folder (or stop doing so)."""
+    def run(session, args):
+        from harness import config
+        from harness.security.trust import set_trusted
+        set_trusted(session.ws.root, config.USER_DIR, trusting)
+        session.permissions.taint.trusted = trusting
+        if trusting:
+            return (f"trusted: {session.ws.root}. Files you read here no longer count as untrusted content "
+                    "(web pages still do)")
+        return f"no longer trusted: {session.ws.root}. File text and command output now count as untrusted content"
+    return run
+
+
+def _taint(session, args):
+    """/taint · /taint clear"""
+    taint = session.permissions.taint
+    if args == "clear":
+        taint.clear()
+        return "cleared: broad approvals (modes, rules for a whole tool) apply again"
+    where = "trusted" if taint.trusted else "NOT trusted (/trust to trust it)"
+    if not taint.active:
+        return f"nothing untrusted has been read in this chat. This folder is {where}."
+    listing = "\n".join(f"  {s}" for s in taint.sources)
+    return (f"untrusted content read in this chat:\n{listing}\nUntil you /taint clear (or /reset), only rules "
+            f"you wrote run without asking. This folder is {where}.")
+
+
 def _export(session, args):
     """/export [md|tex|pdf] [file] [--last]"""
     import datetime
@@ -260,6 +288,9 @@ def builtin_commands() -> list[Command]:
         Command("tools", "the tools the agent can use", run=_tools),
         Command("style", "list output styles, or switch to one", run=_style, argument_hint="[name]"),
         Command("mode", "show the permission mode, or switch to another one", run=_mode, argument_hint="[mode]"),
+        Command("trust", "trust this folder: its files are yours, not untrusted content", run=_trust_command(True)),
+        Command("untrust", "stop trusting this folder", run=_trust_command(False)),
+        Command("taint", "what untrusted content this chat has read; clear it", run=_taint, argument_hint="[clear]"),
         Command("permissions", "the permission rules; add or remove one for this session", run=_permissions,
                 argument_hint="[allow|ask|deny|remove RULE]"),
         Command("export", "save the chat (or the last answer) as Markdown, LaTeX or PDF", run=_export,

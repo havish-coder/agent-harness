@@ -117,7 +117,7 @@ def make_fs_tools(workspace: Path | Workspace) -> list[Tool]:
                  else f"{p.name}/" if p.is_dir() else f"{p.name}  ({p.stat().st_size:,} bytes)" for p in entries]
         return "\n".join(lines) or "(empty folder)"
 
-    @tool(read_only=True, concurrency_safe=True)
+    @tool(read_only=True, concurrency_safe=True, content_kind="file")
     def read_file(path: str, offset: int = 1, limit: int = READ_LIMIT) -> str:
         """Read a text file from the workspace. Lines come back numbered, like `cat -n`.
 

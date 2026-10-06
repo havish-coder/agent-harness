@@ -150,6 +150,11 @@ A rule naming a tool that doesn't exist (`run_shel`) gets a warning at start.
 
 Rules from settings files are changed in those files.
 
+**After untrusted content.** Once the chat has read content you may not trust (files in a folder
+you haven't trusted, web pages), steps 3 and 4 stop honouring broad approvals: `bypass`, `accept-edits`
+and rules for a whole tool ask instead, and only pattern rules and exact "always" answers still run.
+See [untrusted content](untrusted-content.md).
+
 ## Protected paths
 Writing to these always asks, whatever the mode or rules, because something runs what's in them
 later, often without you noticing:
