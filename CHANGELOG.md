@@ -8,6 +8,14 @@ is below 1.0, minor releases may contain breaking changes.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-06
+
+The security release. The agent still reads, searches, edits and runs commands, but what it may do is now decided by
+code that doesn't depend on the model: the workspace boundary, permission modes and rules, command analysis,
+untrusted-content handling, an address guard for web pages, hooks, redaction, an audit log, limits, and (where the
+OS offers one) a sandbox. 66 attacks are tested; one known to get through on Windows, and none where a sandbox exists.
+Start with [the security model](docs/security.md).
+
 ### Added
 - Path jail (ADR 0025): file tools only reach the workspace. Paths are resolved first (`..`,
   absolute paths, drive letters, UNC and `\\?\` forms, symlinks and Windows junctions) and refused

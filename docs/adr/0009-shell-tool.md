@@ -1,6 +1,6 @@
 # 0009. A single shell tool, PowerShell on Windows
 
-- **Status:** Superseded by [0011](0011-prefer-bash-no-cwd.md)
+- **Status:** Superseded by [0011](0011-prefer-bash-no-cwd.md); its note on command analysis is answered by [0027](0027-read-commands-and-scrub-secrets.md)
 - **Date:** 2026-10-06
 
 ## Context

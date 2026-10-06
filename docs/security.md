@@ -1,7 +1,7 @@
 # Security model
 
 Agent Harness lets a language model run tools on your computer: read and change files, run
-commands and, from v0.5, fetch web pages. This page is the **threat model**: what we protect,
+commands and fetch web pages. This page is the **threat model**: what we protect,
 from whom, where the trust boundaries are, and which defense covers which threat. Each defense
 names the release that adds it.
 

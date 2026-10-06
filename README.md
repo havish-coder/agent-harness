@@ -5,12 +5,13 @@ written from scratch in Python, without agent frameworks. It talks to a local mo
 [Ollama](https://ollama.com) or to a cloud API, inspects and edits files, runs commands, and
 explains every step it takes.
 
-> **Status: v0.4, pre-release.** The agent reads, searches and edits code and runs commands,
-> asking your approval (with a diff) before anything changes. It streams its answers and runs
-> on Ollama, Claude or any OpenAI-compatible service, with retries, settings files and cost
-> tracking, in a terminal app with Markdown rendering, line editing, slash commands, output
-> styles, a status line and typeset math. Security hardening, memory, sub-agents and a web UI
-> are on the [roadmap](#roadmap).
+> **Status: v0.5, pre-release.** The agent reads, searches and edits code, runs commands and
+> fetches web pages, and what it may do is decided by code, not by the model: a workspace
+> boundary, permission modes and rules, command analysis, untrusted-content handling, hooks,
+> secret redaction, an audit log and limits (and an OS sandbox on Linux and macOS). It streams
+> its answers and runs on Ollama, Claude or any OpenAI-compatible service, in a terminal app with
+> Markdown rendering, slash commands, output styles and typeset math. Memory, sub-agents and a
+> web UI are on the [roadmap](#roadmap).
 > See the [changelog](CHANGELOG.md) for what changed in each release.
 
 ![The agent fixing a bug: it reads the file, proposes a diff, runs the tests](docs/images/demo.svg)
@@ -51,6 +52,13 @@ plus [`httpx`](https://www.python-httpx.org/). Every design decision is written 
 | ✅ | Slash commands, and your own as Markdown files | v0.4 |
 | ✅ | Output styles (concise, explanatory, learning, latex) and a status line | v0.4 |
 | ✅ | Math shown with Unicode symbols; `/export` to Markdown, LaTeX or PDF | v0.4 |
+| ✅ | Path jail: file tools only reach the workspace, however a path is written | v0.5 |
+| ✅ | Permission modes (`accept-edits`, `plan`, `bypass`) and allow / ask / deny rules; protected places always ask | v0.5 |
+| ✅ | Shell commands read before they run; risks listed in the question; secrets kept out of their environment | v0.5 |
+| ✅ | Fenced untrusted content, taint-aware approvals and folder trust | v0.5 |
+| ✅ | `web_fetch` with an address guard against private networks | v0.5 |
+| ✅ | Hooks, secret redaction, a hash-chained audit log, per-chat limits | v0.5 |
+| ✅ | Command sandbox on Linux and macOS; an attack lab with 66 tested attacks | v0.5 |
 
 ## Quickstart
 Requirements: Python 3.10+, [Ollama](https://ollama.com/download), about 3 GB of disk.
@@ -80,11 +88,12 @@ Then ask something like *"How many TODOs are in my notes?"*. Full walkthrough:
 | [Architecture](docs/architecture.md) | how the agent works inside |
 | [Decision records](docs/adr/) | why it is built this way |
 | [Security](SECURITY.md) | the security model and how to report issues |
+| [Threat model](docs/security.md) | what is protected, from whom, and which defense covers which threat |
 
 ## Roadmap
 | Release | Theme |
 |---|---|
-| v0.5 | Security: path jail, permission modes and rules, shell hardening, hooks, audit log |
+| v0.5 ✅ | Security: path jail, permission modes and rules, shell hardening, hooks, audit log |
 | v0.6 | Context: token budgets, compaction, sessions, project and auto memory, undo |
 | v0.7 | Workflows: todo list, plan mode, sub-agents, skills, background tasks, MCP |
 | v0.8 | Web UI with streaming, approvals and settings |
