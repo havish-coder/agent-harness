@@ -22,6 +22,7 @@ variable `HARNESS_<NAME>` (upper case) and most as a flag. How the layers combin
 | `status_line` | string or null | `null` | | A command whose first output line replaces the status line. Not accepted from project settings. |
 | `permission_mode` | string | `"default"` | `--mode`, `--yes` | `default`, `accept-edits`, `plan` or `bypass` ([permissions](../user-guide/permissions.md)). Not accepted from project settings. |
 | `permissions` | object | `{}` | | `{"allow": [...], "ask": [...], "deny": [...]}`, rules like `run_shell(git status*)`. Rules from all layers add up. Project settings may not add `allow` rules. In the environment: JSON. |
+| `hooks` | object | `{}` | `HARNESS_HOOKS` (JSON) | `{"pre_tool_use": [{"command": "...", "match": "run_shell(git push*)", "timeout": 10}], "post_tool_use": [...], "user_prompt_submit": [...]}`. Hooks from all layers add up; a project's hooks run only in a trusted folder ([hooks](../user-guide/hooks.md)). |
 | `web_fetch` | boolean | `true` | | Give the agent the `web_fetch` tool ([Reading web pages](../user-guide/web.md)). |
 | `web_allow_local` | list of strings | `[]` | `HARNESS_WEB_ALLOW_LOCAL` (separated like `PATH`) | `host` or `host:port` entries `web_fetch` may reach on your own machine or network, such as `localhost:3000`. Not accepted from project settings. |
 | `fence_untrusted` | boolean | `true` | | Wrap file text, command output and web pages in `<untrusted>` tags and tell the model they are data ([untrusted content](../user-guide/untrusted-content.md)). Not accepted from project settings. |

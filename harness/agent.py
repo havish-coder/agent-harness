@@ -9,9 +9,10 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
+from harness.hooks import Hooks
 from harness.messages import Message, Reply, ToolCall, Usage
 from harness.providers.base import Provider, ProviderError, StreamingProvider, TextDelta, ThinkingDelta
-from harness.security.permissions import AskForChanges, Decision, Permissions
+from harness.security.permissions import CHANGES, AskForChanges, Decision, Permissions
 from harness.security.taint import fence
 from harness.tools.base import Tool
 from harness.tools.registry import ToolRegistry
@@ -27,6 +28,7 @@ Approver = Callable[..., bool | str]
 DENIED = ("The user denied this tool call, so it did not run. Do not try it again. "
           "Ask the user what they want to do instead.")
 MAX_PARALLEL = 8   # concurrency-safe calls run on up to this many threads (Lesson 14)
+HOOK_REFUSAL = "a hook refused it:"
 NO_APPROVER = ("Error: this tool call can change things and needs the user's approval, "
                "but approval isn't possible in this session. Use read-only tools only.")
 
@@ -35,7 +37,8 @@ class Agent:
     def __init__(self, provider: Provider, tools: list[Tool] | ToolRegistry, system_prompt: str,
                  max_steps: int = 10, on_event: EventHandler | None = None,
                  approve: Approver | None = None, stream: bool = True,
-                 permissions: Permissions | None = None, fence_untrusted: bool = False):
+                 permissions: Permissions | None = None, fence_untrusted: bool = False,
+                 hooks: Hooks | None = None):
         self.provider = provider
         self.tools = tools if isinstance(tools, ToolRegistry) else ToolRegistry(tools)
         self.system_prompt = system_prompt
@@ -45,6 +48,7 @@ class Agent:
         self.permissions = permissions or AskForChanges()   # decides allow / ask / deny (Lesson 29)
         self._approve_takes_decision = approve is not None and _accepts(approve, "decision")
         self.stream = stream        # use the provider's stream() when it has one (Lesson 16)
+        self.hooks = hooks          # the user's scripts at fixed points (Lesson 33)
         self.fence_untrusted = fence_untrusted   # wrap outside content in <untrusted> tags (Lesson 31)
         self.usage = Usage()
         # Why the last run() ended: "completed", "max_steps", "max_tokens", "cancelled", "error"
@@ -57,6 +61,11 @@ class Agent:
 
     def run(self, user_input: str) -> str:
         """Handle one user message. May call the model and tools many times."""
+        if self.hooks:
+            blocked, user_input = self.prompt_hooks(user_input)
+            if blocked:
+                self.stop_reason = "blocked"
+                return blocked
         turn_start = len(self.messages)
         self.messages.append(Message.user(user_input))
         schemas = self.tools.schemas()
@@ -83,8 +92,9 @@ class Agent:
                     outcomes = self.execute_outcomes(batch)
                     for call, (result, ran) in zip(batch, outcomes, strict=True):  # in the order the model asked
                         result = self.note_repeats(seen, call, result)
-                        self.on_event("tool_result", (call, result))
-                        self.messages.append(Message.tool_result(call, self.mark_untrusted(call, result, ran)))
+                        from_hooks = self.post_hooks(call, result) if ran else ""     # the user's own words: not fenced
+                        self.on_event("tool_result", (call, result + from_hooks))
+                        self.messages.append(Message.tool_result(call, self.mark_untrusted(call, result, ran) + from_hooks))
 
             self.stop_reason = "max_steps"
             return f"(stopped: reached the limit of {self.max_steps} steps without a final answer)"
@@ -194,9 +204,14 @@ class Agent:
             if error:
                 return None, error
         decision = self.permissions.decide(call, tool)
+        if self.hooks and decision.action != "deny":
+            decision = self.apply_hooks(call, tool, decision)
         self.on_event("permission", (call, decision))
         if decision.action == "deny":
             self.on_event("tool_refused", (call, decision.reason))
+            if decision.reason.startswith(HOOK_REFUSAL):    # the user's own script explained itself: follow it
+                return None, (f"Error: {decision.reason}. Do what that says; if it offers no alternative, "
+                              "don't try another way: tell the user.")
             return None, (f"Error: not allowed: {decision.reason}. Don't try this again another way; "
                           "if it's needed, ask the user.")
         if decision.action == "ask":
@@ -209,6 +224,49 @@ class Agent:
             if answer == "always" and decision.remember:
                 self.permissions.remember(decision.remember)
         return tool, None
+
+    # --- hooks (Lesson 33): they may tighten a decision, and loosen only a routine question ---------
+    def apply_hooks(self, call: ToolCall, tool: Tool, decision: Decision) -> Decision:
+        result = self.hooks.pre_tool(call, tool)
+        if not (result.decision or result.failed or result.context):
+            return decision
+        self.on_event("hook", ("pre_tool_use", call, result))
+        if result.context:
+            decision.notes = [*decision.notes, f"hook: {result.context}"]
+        if result.failed:
+            decision.notes = [*decision.notes, f"a hook failed: {result.failed}"]
+        tainted = getattr(getattr(self.permissions, "taint", None), "active", False)
+        said = result.reason or "no reason given"
+        if result.decision == "deny":
+            return Decision("deny", f"{HOOK_REFUSAL} {said}")
+        if decision.action == "allow" and (result.decision == "ask" or result.failed):
+            why = f"a hook asks first: {said}" if result.decision == "ask" else "a hook failed, so it can't confirm this call"
+            return Decision("ask", why, None, decision.notes)
+        if result.decision == "ask" and decision.reason == CHANGES:
+            decision.reason = f"a hook asks first: {said}"
+        if result.decision == "allow" and decision.action == "ask" and decision.reason == CHANGES and not tainted:
+            return Decision("allow", "allowed by a hook")
+        return decision
+
+    def post_hooks(self, call: ToolCall, result: str) -> str:
+        """Text the post_tool_use hooks want the model to see, to append to the result ("" for none)."""
+        tool = self.tools.get(call.name)
+        if tool is None:
+            return ""
+        outcome = self.hooks.post_tool(call, tool, result) if self.hooks else None
+        if outcome is None or not (outcome.context or outcome.failed):
+            return ""
+        self.on_event("hook", ("post_tool_use", call, outcome))
+        return f"\n\n[hook] {outcome.context}" if outcome.context else ""
+
+    def prompt_hooks(self, text: str) -> tuple[str | None, str]:
+        """(a reason to stop, the message to send): user_prompt_submit hooks may block it or add context."""
+        outcome = self.hooks.user_prompt(text)
+        if outcome.decision or outcome.failed or outcome.context:
+            self.on_event("hook", ("user_prompt_submit", None, outcome))
+        if outcome.decision == "deny":
+            return f"(blocked by a hook: {outcome.reason or 'no reason given'})", text
+        return None, text + (f"\n\n[from a hook]\n{outcome.context}" if outcome.context else "")
 
     def ask_user(self, call: ToolCall, tool: Tool, decision: Decision) -> bool | str | None:
         """The approver's answer, or None when there is no one to ask."""

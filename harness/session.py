@@ -9,6 +9,7 @@ import subprocess
 from harness import config
 from harness.agent import Agent
 from harness.config import Settings
+from harness.hooks import Hooks, from_entries
 from harness.providers.factory import make_provider
 from harness.providers.retry import RetryingProvider
 from harness.security.permissions import MODES, Permissions
@@ -53,10 +54,13 @@ class Session:
                               web_allow_local=settings.web_allow_local)
         for warning in self.permissions.unknown_tools([t.name for t in tools]):
             ui.warn(f"warning: {warning}")
+        self.hooks = Hooks([], ws.root, self.permissions, settings.shell_env_keep)
+        self.refresh_hooks(announce=True)
         self.agent = Agent(self.provider, tools,
                            apply_style(self.base_prompt, self.style), max_steps=settings.max_steps,
                            on_event=self.on_event, approve=approver, stream=settings.stream,
-                           permissions=self.permissions, fence_untrusted=settings.fence_untrusted)
+                           permissions=self.permissions, fence_untrusted=settings.fence_untrusted,
+                           hooks=self.hooks)
         self._status_error_shown = False
 
     def make_provider(self, model: str | None):
@@ -78,6 +82,17 @@ class Session:
         self.settings.sources["output_style"] = "command"
         self.agent.system_prompt = apply_style(self.base_prompt, self.style)
         self.agent.messages[0].content = self.agent.system_prompt
+
+    def refresh_hooks(self, announce: bool = False) -> None:
+        """Choose the hooks that run (Lesson 33). A project's hooks run only in a trusted folder; when
+        they don't, say which were left out."""
+        everything = from_entries(self.settings.hooks)
+        trusted = self.permissions.taint.trusted
+        self.hooks.hooks = [h for h in everything if h.source != "project" or trusted]
+        skipped = [h for h in everything if h not in self.hooks.hooks]
+        if skipped and announce:
+            self.ui.warn(f"warning: {len(skipped)} hook(s) from this project's settings were not run because the folder "
+                         "isn't trusted (a hook is a program). /hooks lists them; /trust if the project is yours.")
 
     def set_mode(self, mode: str) -> None:
         """Switch the permission mode (Lesson 29); rules and the conversation are kept."""

@@ -36,3 +36,4 @@ Copy [the template](template.md) to `NNNN-short-title.md` with the next number.
 | [0027](0027-read-commands-and-scrub-secrets.md) | Read shell commands before applying rules, and run them without secrets | Accepted |
 | [0028](0028-fence-and-taint-untrusted-content.md) | Fence untrusted content, and stop blanket approvals once it has been read | Accepted |
 | [0029](0029-web-fetch-with-an-address-guard.md) | Fetch web pages through an address guard that connects to the address it checked | Accepted |
+| [0030](0030-hooks-tighten-never-loosen.md) | Hooks are user scripts that can tighten decisions, and never loosen the protected ones | Accepted |

@@ -167,5 +167,5 @@ These remain even with every defense in place. Know them before you approve thin
 | Secret environment variables removed from commands | v0.5 (done) |
 | Prompt-injection fencing and taint-aware approvals; folder trust | v0.5 (done) |
 | Web fetch with a network guard against private addresses | v0.5 (done) |
-| Hooks | v0.5 |
+| Hooks (tighten decisions; project hooks only in trusted folders) | v0.5 (done) |
 | Audit log, secret redaction, session limits | v0.5 |

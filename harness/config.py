@@ -20,6 +20,7 @@ import subprocess
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
+from harness.hooks import HookError, check_hooks
 from harness.security.permissions import MODES, Rule, RuleError
 from harness.security.secrets import SECRET_VALUES
 
@@ -53,6 +54,9 @@ class Settings:
     # {"allow": [...], "ask": [...], "deny": [...]} in files; after loading, every layer's rules
     # as [{"action", "rule", "source"}] (rules add up across layers, each remembering its file)
     permissions: list = field(default_factory=list)
+    # {"pre_tool_use": [{"command", "match", "timeout"}], ...} in files; after loading, every layer's hooks as
+    # [{"event", "command", "match", "timeout", "source"}] (hooks add up across layers, like rules; Lesson 33)
+    hooks: list = field(default_factory=list)
     web_fetch: bool = True                       # give the agent the web_fetch tool (Lesson 32)
     web_allow_local: list = field(default_factory=list)   # "host" or "host:port" entries web_fetch may reach on this machine
     fence_untrusted: bool = True                 # wrap file text, command output, web pages in <untrusted> tags (Lesson 31)
@@ -80,7 +84,7 @@ TYPES: dict[str, tuple] = {
     "context_window": (int,), "max_output_tokens": (int,), "max_steps": (int,), "stream": (bool,), "think": (bool,),
     "shell": (str, type(None)), "max_retries": (int,), "prices": (dict,),
     "output_style": (str,), "status_line": (str, type(None)), "additional_directories": (list,),
-    "permission_mode": (str,), "permissions": (dict,), "shell_env_keep": (list,), "fence_untrusted": (bool,), "web_fetch": (bool,), "web_allow_local": (list,),
+    "permission_mode": (str,), "permissions": (dict,), "shell_env_keep": (list,), "fence_untrusted": (bool,), "web_fetch": (bool,), "hooks": (dict,), "web_allow_local": (list,),
 }
 # Settings a project file may not set, and why: a cloned repository could otherwise run its own
 # code on your machine, or give the agent access to your other folders, just by being opened.
@@ -123,6 +127,11 @@ def check_layer(data: dict, where: str) -> list[str]:
             raise ConfigError(f"{where}: 'permission_mode' must be one of {', '.join(MODES)}")
         if key == "permissions":
             check_rules(value, where)
+        if key == "hooks":
+            try:
+                check_hooks(value, where)
+            except HookError as e:
+                raise ConfigError(str(e)) from None
         if key == "additional_directories" and not all(isinstance(d, str) for d in value):
             raise ConfigError(f"{where}: 'additional_directories' must be a list of folder paths")
         if isinstance(value, str) and SECRET_VALUES.search(value):
@@ -214,6 +223,10 @@ def load_settings(workspace: Path, flags: dict | None = None, environ=None) -> t
                 if key == "permissions":                 # so do rules, each keeping its source
                     value = settings.permissions + [{"action": action, "rule": rule, "source": label}
                                                     for action in RULE_ACTIONS for rule in value.get(action, [])]
+                if key == "hooks":                       # hooks add up too, each remembering its layer
+                    value = settings.hooks + [{"event": event, "command": h["command"].strip(), "match": h.get("match"),
+                                               "timeout": h.get("timeout", 10), "source": label}
+                                              for event, entries in value.items() for h in entries]
                 setattr(settings, key, value)
                 settings.sources[key] = label
     return settings, warnings
@@ -274,6 +287,10 @@ def describe(settings: Settings) -> str:
     width = max(map(len, SETTING_NAMES))
     rows = []
     for name in SETTING_NAMES:
+        if name == "hooks" and settings.hooks:
+            rows.append(f"{name:<{width}}")
+            rows += [f"  {h['event']:<18} {(h['match'] or '*'):<24} {h['command']}  ({h['source']})" for h in settings.hooks]
+            continue
         if name == "permissions" and settings.permissions:   # one rule per line, each with its own source
             rows.append(f"{name:<{width}}")
             rows += [f"  {e['action']:<5} {e['rule']:<{width + 22}} ({e['source']})" for e in settings.permissions]

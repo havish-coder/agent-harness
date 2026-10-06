@@ -201,11 +201,21 @@ def _trust_command(trusting: bool):
         from harness.security.trust import set_trusted
         set_trusted(session.ws.root, config.USER_DIR, trusting)
         session.permissions.taint.trusted = trusting
+        session.refresh_hooks()
         if trusting:
             return (f"trusted: {session.ws.root}. Files you read here no longer count as untrusted content "
                     "(web pages still do)")
         return f"no longer trusted: {session.ws.root}. File text and command output now count as untrusted content"
     return run
+
+
+def _hooks(session, args):
+    """/hooks: every hook in the settings, and whether it runs."""
+    from harness.hooks import from_entries
+    everything = from_entries(session.settings.hooks)
+    if not everything:
+        return "no hooks. Add them under \"hooks\" in your settings (docs/user-guide/hooks.md)"
+    return "\n".join(f"{'runs    ' if h in session.hooks.hooks else 'not run '} {h}" for h in everything)
 
 
 def _taint(session, args):
@@ -290,6 +300,7 @@ def builtin_commands() -> list[Command]:
         Command("mode", "show the permission mode, or switch to another one", run=_mode, argument_hint="[mode]"),
         Command("trust", "trust this folder: its files are yours, not untrusted content", run=_trust_command(True)),
         Command("untrust", "stop trusting this folder", run=_trust_command(False)),
+        Command("hooks", "the hooks in your settings, and whether each runs", run=_hooks),
         Command("taint", "what untrusted content this chat has read; clear it", run=_taint, argument_hint="[clear]"),
         Command("permissions", "the permission rules; add or remove one for this session", run=_permissions,
                 argument_hint="[allow|ask|deny|remove RULE]"),

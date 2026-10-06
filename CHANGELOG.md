@@ -58,6 +58,12 @@ is below 1.0, minor releases may contain breaking changes.
   every hop is checked. 15 s, about 2 MB after decompression, text types only, proxy variables ignored.
   The first fetch from a site asks and "always" allows the site; an address with a query string asks after
   untrusted content has been read. `web_fetch` and `web_allow_local` settings; user guide *Reading web pages*.
+- Hooks (ADR 0030): your own commands at `user_prompt_submit`, `pre_tool_use` and `post_tool_use`, with a JSON
+  description of the call on standard input and an answer in the exit code (2 denies) or JSON. A `match` in rule
+  syntax picks the calls (for commands, any command in the line). Hooks can deny or force a question; their
+  `allow` only settles a routine question, never a deny rule, protected path, ask rule, plan mode or the pause
+  after untrusted content; a hook that fails, times out or answers badly never allows (it asks). Project hooks run
+  only in a trusted folder; `/hooks` lists them. `hooks` setting; `hook` event; `blocked` stop reason.
 - `permission` and `tool_refused` events; `model_call` is now documented.
 - User guide: [permissions](docs/user-guide/permissions.md).
 
@@ -73,6 +79,8 @@ is below 1.0, minor releases may contain breaking changes.
   routine, and don't offer `a` for protected paths.
 - Project settings can't set `permission_mode` or add `allow` rules (ignored with a warning).
 - Tool calls in a batch are all checked and decided before any of them runs.
+- The system instruction about `<untrusted>` tags and the `web_fetch` description were reworded after a measurement:
+  the first versions made `qwen3:4b-instruct` decline to call the tool in some runs.
 - `/tools` labels tools that aren't read-only "can change things" (they no longer all ask: see permissions).
 
 ## [0.4.0] - 2026-10-06

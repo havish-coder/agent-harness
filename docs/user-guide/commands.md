@@ -15,6 +15,7 @@ send a ready-made request to the model.
 | `/style [name]` | list [output styles](styles-and-status.md), or switch to one |
 | `/mode [name]` | show the [permission modes](permissions.md), or switch to one |
 | `/trust`, `/untrust` | trust this folder, or stop: [untrusted content](untrusted-content.md) |
+| `/hooks` | the [hooks](hooks.md) in your settings and whether each runs |
 | `/taint [clear]` | what untrusted content this chat has read; clear it |
 | `/permissions [allow\|ask\|deny\|remove RULE]` | the permission rules and where each came from; add or remove one for this session |
 | `/export [md\|tex\|pdf] [file] [--last]` | save the chat or the last answer ([details](math-and-export.md)) |
