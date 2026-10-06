@@ -18,6 +18,16 @@ is below 1.0, minor releases may contain breaking changes.
 - Tool safety metadata: `read_only`, `concurrency_safe`, `destructive`, all defaulting to the
   unsafe value; flags may depend on the call's arguments.
 - Developer guide: [Writing a tool](docs/developer-guide/writing-tools.md).
+- Tool registry: unknown tools, missing/unknown/mistyped arguments and invalid choices are
+  reported to the model with the expected signature; quoted numbers and booleans
+  (`"30"`, `"true"`) are accepted; `null` for an optional argument means "use the default".
+- Approval: every tool call that isn't read-only asks first (`y` / `n` / `a`lways); `--yes`
+  approves everything. Without an approver such calls are refused (ADR 0005).
+- `agent.stop_reason`: `completed`, `max_steps`, `max_tokens`, `cancelled` or `error`.
+- `tool_denied` event.
+
+### Changed
+- Tool results longer than 8,000 characters are shortened, keeping the start and the end.
 
 ## [0.1.0] - 2026-10-05
 

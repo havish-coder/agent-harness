@@ -1,4 +1,4 @@
-"""Lesson 07: a terminal chat app around the agent.
+"""Lessons 07-09: a terminal chat app around the agent.
 
 Run:  harness                               (after `pip install -e .`)
       python -m harness.cli --model qwen3:4b --workspace C:\\some\\folder
@@ -21,7 +21,35 @@ Paths are relative to the workspace root. Be concise.
 Workspace files (snapshot at session start; may have changed since):
 {snapshot}"""
 
-DIM, CYAN, BOLD, RESET = "\033[2m", "\033[36m", "\033[1m", "\033[0m"
+DIM, CYAN, BOLD, YELLOW, RESET = "\033[2m", "\033[36m", "\033[1m", "\033[33m", "\033[0m"
+
+
+class TerminalApprover:
+    """Asks before any tool call that can change things. 'a' = always allow this tool."""
+
+    def __init__(self, auto_approve: bool = False):
+        self.auto_approve = auto_approve
+        self.always: set[str] = set()   # tool names allowed for the rest of the session
+
+    def __call__(self, call, tool) -> bool:
+        if self.auto_approve or tool.name in self.always:
+            return True
+        warning = " (may destroy data)" if tool.is_destructive(call.arguments) else ""
+        print(f"{YELLOW}  ? {tool.name} wants to run{warning}{RESET}")
+        if tool.preview:
+            try:
+                print(DIM + "    " + tool.preview(**call.arguments).replace("\n", "\n    ") + RESET)
+            except Exception as e:
+                print(f"{DIM}    (no preview: {e}){RESET}")
+        while True:
+            answer = input(f"{YELLOW}    allow? [y]es / [n]o / [a]lways for {tool.name}: {RESET}").strip().lower()
+            if answer in ("y", "yes"):
+                return True
+            if answer in ("n", "no", ""):
+                return False
+            if answer in ("a", "always"):
+                self.always.add(tool.name)
+                return True
 
 
 def show_event(kind, data):
@@ -29,6 +57,8 @@ def show_event(kind, data):
     if kind == "tool_call":
         args = ", ".join(f"{k}={v!r}" for k, v in data.arguments.items())
         print(f"{CYAN}  → {data.name}({args}){RESET}")
+    elif kind == "tool_denied":
+        print(f"{DIM}    (denied){RESET}")
     elif kind == "tool_result":
         _, result = data
         preview = result if len(result) <= 300 else result[:300] + " …"
@@ -40,6 +70,8 @@ def main():
     p.add_argument("--model", default="qwen3:4b-instruct")
     p.add_argument("--workspace", default="workspace", help="folder the agent can look at")
     p.add_argument("--max-steps", type=int, default=10)
+    p.add_argument("--yes", action="store_true",
+                   help="approve every tool call without asking (only for throwaway folders)")
     args = p.parse_args()
 
     if os.name == "nt":
@@ -52,9 +84,12 @@ def main():
 
     system_prompt = SYSTEM_PROMPT.format(snapshot=workspace_snapshot(workspace))
     agent = Agent(OllamaProvider(model=args.model), make_fs_tools(workspace), system_prompt,
-                  max_steps=args.max_steps, on_event=show_event)
+                  max_steps=args.max_steps, on_event=show_event,
+                  approve=TerminalApprover(auto_approve=args.yes))
     print(f"{BOLD}Agent harness{RESET} · model {args.model} · workspace {workspace}")
     print(f"{DIM}Commands: /reset (forget the conversation)  /bye (quit)  ·  Ctrl+C cancels a running task{RESET}")
+    if args.yes:
+        print(f"{YELLOW}--yes: every tool call runs without asking.{RESET}")
 
     while True:
         try:

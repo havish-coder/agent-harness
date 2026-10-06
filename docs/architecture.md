@@ -49,6 +49,29 @@ sequenceDiagram
 The loop repeats *call the model → run the requested tools → append the results* until the
 model answers without asking for tools, or until the step limit (default 10) is reached.
 
+## Running one tool call
+
+Every call the model makes goes through the same checks, in this order. Each "no" becomes a
+text result the model reads on its next step; nothing here can crash the loop.
+
+```mermaid
+flowchart TD
+    C[tool call from the model] --> K{known tool?}
+    K -- no --> E1["Error: unknown tool ... Available tools: ..."]
+    K -- yes --> V{arguments valid?}
+    V -- no --> E2["Error: invalid arguments ... Expected: signature"]
+    V -- yes --> R{read-only for<br/>these arguments?}
+    R -- yes --> RUN[run the tool]
+    R -- no --> A{approved?}
+    A -- no --> D[denial message]
+    A -- yes --> RUN
+    RUN --> T[cap the result length] --> OUT[tool result]
+```
+
+The checks live in [`harness/tools/registry.py`](../harness/tools/registry.py) (lookup,
+validation, running, truncation) and [`harness/agent.py`](../harness/agent.py) (the approval
+decision, [ADR 0005](adr/0005-approve-every-non-read-only-call.md)).
+
 ## Key design rules
 
 ### 1. One message format inside, many outside
@@ -83,6 +106,7 @@ harness/
     ollama.py       Ollama adapter (/api/chat)
   tools/
     base.py         the Tool type and the @tool decorator
+    registry.py     lookup, argument validation, running, result caps
     fs.py           list_dir, read_file, workspace_snapshot
 scripts/            setup check and teaching scripts
 workspace/          a sample folder to try the agent on

@@ -15,7 +15,7 @@ from typing import Any, Literal, Union, get_args, get_origin, get_type_hints
 # read-only, shell("rm x") is not.
 Flag = bool | Callable[[dict], bool]
 
-DEFAULT_MAX_RESULT_CHARS = 20_000
+DEFAULT_MAX_RESULT_CHARS = 8_000   # ~2-3K tokens: a quarter of an 8K context (Lesson 09)
 
 
 @dataclass

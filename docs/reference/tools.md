@@ -7,6 +7,9 @@ Tools the model can call. Paths are relative to the workspace root.
 | `list_dir` | yes | yes | List a folder. Folders end with `/`; files show their size. |
 | `read_file` | yes | yes | Return a text file's full contents (UTF-8). |
 
+Results longer than a tool's limit (8,000 characters by default) are shortened: the agent
+keeps the first 80% and the last 20% and says how much was cut in the middle.
+
 *Read-only* tools never change anything and run without approval. *Parallel-safe* tools may
 run at the same time as other parallel-safe calls. See
 [Writing a tool](../developer-guide/writing-tools.md#safety-flags) for what the flags mean.

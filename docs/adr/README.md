@@ -11,3 +11,4 @@ Copy [the template](template.md) to `NNNN-short-title.md` with the next number.
 | [0002](0002-no-agent-frameworks.md) | No agent frameworks; minimal core dependencies | Accepted |
 | [0003](0003-provider-neutral-message-model.md) | One provider-neutral message model | Accepted |
 | [0004](0004-tool-schemas-from-type-hints.md) | Generate tool schemas from type hints and docstrings | Accepted |
+| [0005](0005-approve-every-non-read-only-call.md) | Ask before every tool call that isn't read-only | Accepted |
