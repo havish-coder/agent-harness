@@ -5,9 +5,10 @@ written from scratch in Python, without agent frameworks. It talks to a local mo
 [Ollama](https://ollama.com) or to a cloud API, inspects and edits files, runs commands, and
 explains every step it takes.
 
-> **Status: v0.2, pre-release.** The agent reads, searches and edits code and runs commands,
-> asking your approval (with a diff) before anything changes. Streaming, cloud providers,
-> security hardening, memory, sub-agents and a web UI are on the [roadmap](#roadmap).
+> **Status: v0.3, pre-release.** The agent reads, searches and edits code and runs commands,
+> asking your approval (with a diff) before anything changes. It streams its answers and runs
+> on Ollama, Claude or any OpenAI-compatible service, with retries, settings files and cost
+> tracking. Security hardening, memory, sub-agents and a web UI are on the [roadmap](#roadmap).
 > See the [changelog](CHANGELOG.md) for what changed in each release.
 
 ---
@@ -33,6 +34,11 @@ plus [`httpx`](https://www.python-httpx.org/). Every design decision is written 
 | ✅ | Approval before every change, with a diff; `a`lways per tool | v0.2 |
 | ✅ | Safe tool calls run in parallel | v0.2 |
 | ✅ | Recorded real runs replayed as regression tests | v0.2 |
+| ✅ | Streaming answers; Ctrl+C really stops the model | v0.3 |
+| ✅ | Providers: Ollama, Anthropic (with prompt caching), any OpenAI-compatible API | v0.3 |
+| ✅ | Automatic retries with backoff; fallback model | v0.3 |
+| ✅ | Layered settings files; API keys only from the environment or `.env` | v0.3 |
+| ✅ | Token, cache and cost tracking per turn and per session | v0.3 |
 
 ## Quickstart
 Requirements: Python 3.10+, [Ollama](https://ollama.com/download), about 3 GB of disk.
@@ -46,6 +52,9 @@ python -m venv .venv
 pip install -e ".[tui,dev]"
 harness --workspace workspace
 ```
+
+Cloud models work too, e.g. `harness --provider anthropic` with `ANTHROPIC_API_KEY` set; see
+[choosing a model](docs/user-guide/models.md).
 
 Then ask something like *"How many TODOs are in my notes?"*. Full walkthrough:
 [Getting started](docs/getting-started.md).
@@ -63,7 +72,6 @@ Then ask something like *"How many TODOs are in my notes?"*. Full walkthrough:
 ## Roadmap
 | Release | Theme |
 |---|---|
-| v0.3 | Streaming, OpenAI-compatible and Anthropic providers, retries, config, cost tracking |
 | v0.4 | A polished terminal app: rich rendering, input history, slash commands, status line |
 | v0.5 | Security: path jail, permission modes and rules, shell hardening, hooks, audit log |
 | v0.6 | Context: token budgets, compaction, sessions, project and auto memory, undo |

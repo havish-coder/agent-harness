@@ -8,6 +8,8 @@ is below 1.0, minor releases may contain breaking changes.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-06
+
 ### Added
 - Streaming: answers appear as they are generated (ADR 0013). Providers may implement
   `stream()`; the agent emits `text_delta` and `thinking_delta` events; `--no-stream` turns it
@@ -98,6 +100,7 @@ is below 1.0, minor releases may contain breaking changes.
   the system prompt.
 - Terminal chat (`harness`) with tool-call display, `/reset`, `/bye` and per-turn token counts.
 
-[Unreleased]: https://github.com/havish-coder/agent-harness/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/havish-coder/agent-harness/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/havish-coder/agent-harness/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/havish-coder/agent-harness/compare/lesson-07...v0.2.0
 [0.1.0]: https://github.com/havish-coder/agent-harness/releases/tag/lesson-07
