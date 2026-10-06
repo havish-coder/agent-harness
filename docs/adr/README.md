@@ -22,3 +22,4 @@ Copy [the template](template.md) to `NNNN-short-title.md` with the next number.
 | [0013](0013-streaming-generators.md) | Stream with a generator per model call, reported through events | Accepted |
 | [0014](0014-openai-compatible-adapter.md) | One OpenAI-compatible adapter for cloud models; keys only from the environment | Accepted |
 | [0015](0015-anthropic-adapter-and-caching.md) | A native Anthropic adapter that adds prompt-cache markers | Accepted |
+| [0016](0016-retry-policy.md) | Retry temporary provider failures in a wrapper, never mid-text | Accepted |

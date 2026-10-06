@@ -19,6 +19,8 @@ is below 1.0, minor releases may contain breaking changes.
 - Anthropic provider (ADR 0015): Messages API with content blocks, grouped tool results,
   streaming of text, thinking and partial tool input, and automatic prompt-cache markers on the
   system prompt, tools and newest message. `--provider anthropic` with `ANTHROPIC_API_KEY`.
+- Automatic retries (ADR 0016): exponential backoff with jitter, `Retry-After`, a 90 s budget,
+  streams retried only before their first text; `--fallback-model`; retry notices in the terminal.
 - User guide: [choosing a model and provider](docs/user-guide/models.md); developer guide:
   [writing a provider](docs/developer-guide/writing-a-provider.md).
 - `ProviderError` carries `status`, `retryable` and `retry_after`.

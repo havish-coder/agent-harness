@@ -71,6 +71,19 @@ produced a broken test 3 times out of 3; with it, the agent ran the tests, saw t
 fixed it and re-ran them, 3 times out of 3. Putting the rule in the system prompt instead did
 not help (0 of 3).
 
+## When the model server has a problem
+Temporary failures (a crashed GPU runner, an overloaded or rate-limited cloud API, a dropped
+connection) are retried automatically, waiting a little longer each time:
+
+```text
+  ! HTTP 500: CUDA error — retrying in 0.6 s (retry 1)
+  ! HTTP 500: CUDA error — retrying in 1.1 s (retry 2)
+```
+
+Up to 4 retries, at most 90 seconds of waiting per model call; if the server says how long to
+wait (`Retry-After`), that wins. Permanent errors (a wrong API key, an unknown model) fail
+immediately. With `--fallback-model`, a second model gets one try after the retries run out.
+
 ## Cancel
 Answers appear as the model writes them. Press **Ctrl+C** while the agent is working, even
 mid-sentence: the connection to the model is closed, so it stops generating immediately, and the turn is

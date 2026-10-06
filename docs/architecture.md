@@ -71,6 +71,16 @@ sequenceDiagram
     A-->>UI: model_reply
 ```
 
+## Retries
+
+Interfaces wrap the provider in `RetryingProvider`
+([`harness/providers/retry.py`](../harness/providers/retry.py)). It retries errors marked
+`retryable` (connection failures, timeouts, 408, 409, 429, 5xx, overloaded) with exponential
+backoff and jitter, honours `Retry-After`, stops at a total waiting budget, and can hand the
+call to a fallback provider. A stream is retried only if it failed before its first piece of
+text. The agent loop never sees a retried failure. See
+[ADR 0016](adr/0016-retry-policy.md).
+
 ## Running one tool call
 
 Every call the model makes goes through the same checks, in this order. Each "no" becomes a
@@ -151,6 +161,7 @@ harness/
     openai_compat.py  OpenAI Chat Completions adapter (SSE streaming)
     anthropic.py    Anthropic Messages adapter (content blocks, named SSE events, prompt caching)
     factory.py      make_provider(name, model, ...) for interfaces
+    retry.py        RetryingProvider: backoff, Retry-After, budget, fallback
     fake.py         scripted, recording and replaying providers for tests
   tools/
     base.py         the Tool type and the @tool decorator

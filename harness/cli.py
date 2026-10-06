@@ -1,4 +1,4 @@
-"""Lessons 07-16: a terminal chat app around the agent.
+"""Lessons 07-19: a terminal chat app around the agent.
 
 Run:  harness                               (after `pip install -e .`)
       python -m harness.cli --model qwen3:4b --workspace C:\\some\\folder
@@ -11,6 +11,7 @@ from pathlib import Path
 from harness.agent import Agent
 from harness.providers.base import ProviderError
 from harness.providers.factory import PROVIDERS, make_provider
+from harness.providers.retry import RetryingProvider
 from harness.tools import default_tools
 from harness.tools.fs import workspace_snapshot
 from harness.workspace import Workspace
@@ -95,6 +96,14 @@ class Printer:
             preview = result if len(result) <= 300 else result[:300] + " …"
             print(DIM + "    " + preview.replace("\n", "\n    ") + RESET)
 
+    def retry(self, notice):
+        """Called by RetryingProvider before it waits and tries again."""
+        self.end_line()
+        if notice.fallback:
+            print(f"{YELLOW}  ! {notice.error} — switching to the fallback model{RESET}")
+        else:
+            print(f"{YELLOW}  ! {notice.error} — retrying in {notice.delay:.1f} s (retry {notice.attempt}){RESET}")
+
     def answer(self, text: str):
         """Print the final answer, unless it was already streamed to the screen."""
         self.end_line()
@@ -108,6 +117,8 @@ def main():
     p.add_argument("--provider", default="ollama", choices=PROVIDERS, help="where the model runs")
     p.add_argument("--model", default=None, help="model name (default for ollama: qwen3:4b-instruct)")
     p.add_argument("--base-url", default=None, help="override the provider's server address")
+    p.add_argument("--fallback-model", default=None,
+                   help="a model (same provider) to try when the main one keeps failing")
     p.add_argument("--workspace", default="workspace", help="folder the agent can look at")
     p.add_argument("--max-steps", type=int, default=20)
     p.add_argument("--yes", action="store_true",
@@ -128,9 +139,12 @@ def main():
     system_prompt = SYSTEM_PROMPT.format(snapshot=workspace_snapshot(ws))
     printer = Printer()
     try:
-        provider = make_provider(args.provider, args.model, args.base_url, think=True if args.think else None)
+        think = True if args.think else None
+        provider = make_provider(args.provider, args.model, args.base_url, think=think)
+        fallback = make_provider(args.provider, args.fallback_model, args.base_url) if args.fallback_model else None
     except ProviderError as e:
         sys.exit(f"error: {e}")
+    provider = RetryingProvider(provider, fallback=fallback, on_retry=printer.retry)
     agent = Agent(provider, default_tools(ws), system_prompt, max_steps=args.max_steps, on_event=printer,
                   approve=TerminalApprover(auto_approve=args.yes), stream=not args.no_stream)
     print(f"{BOLD}Agent harness{RESET} · {args.provider} · model {provider.model} · workspace {workspace}")
