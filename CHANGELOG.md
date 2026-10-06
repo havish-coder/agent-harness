@@ -32,6 +32,11 @@ is below 1.0, minor releases may contain breaking changes.
   symbols in the rich terminal, also while streaming; prices and code are left alone.
 - `/export [md|tex|pdf] [file] [--last]`: the chat or the last answer as Markdown, LaTeX (pandoc) or
   PDF (pandoc + Tectonic), tools found on PATH or in `~/.harness/tools/`.
+- Security documentation (ADR 0024): a threat model in `docs/security.md` (trust boundaries,
+  assets, actors, threats T1-T15 and their defenses, residual risks).
+- Attack lab: `tests/security/` tests each attack from the threat model as the safe outcome;
+  attacks not defended yet are strict expected failures naming the release that fixes them.
+  `scripts/injection_lab.py` measures how often a model follows instructions planted in files.
 - `scripts/render_demo.py` renders `docs/images/demo.svg` from the recorded bug-fix run.
 
 ### Changed
