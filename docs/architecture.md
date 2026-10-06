@@ -108,6 +108,7 @@ harness/
     base.py         the Tool type and the @tool decorator
     registry.py     lookup, argument validation, running, result caps
     fs.py           list_dir, read_file, workspace_snapshot
+    search.py       glob, grep
   workspace.py      path resolution and read tracking for all file tools
 scripts/            setup check and teaching scripts
 workspace/          a sample folder to try the agent on

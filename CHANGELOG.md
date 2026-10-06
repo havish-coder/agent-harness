@@ -30,6 +30,10 @@ is below 1.0, minor releases may contain breaking changes.
   a header saying which lines were returned and where to continue, and clear handling of
   empty, binary, non-UTF-8 and missing files (ADR 0006).
 - `Workspace`: one object resolves every tool path and remembers what the model has read.
+- `glob` and `grep` tools (pure Python, ADR 0007): name patterns, regex search with context,
+  `files`/`count` modes, plain-text fallback for invalid patterns, capped output.
+- Sample code project in `workspace/project` (a small cart library with a failing test).
+- System prompt tells the model to grep for a likely word to find definitions.
 
 ### Changed
 - Tool results longer than 8,000 characters are shortened, keeping the start and the end.

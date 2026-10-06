@@ -28,8 +28,8 @@ python scripts/check_setup.py      # checks Python, Ollama and the model
 ```
 
 ## 3. Your first conversation
-The repository ships a small sample folder, `workspace/`, with notes, a recipe and a CSV
-file. Start the agent there:
+The repository ships a small sample folder, `workspace/`, with notes, a recipe, a CSV file
+and `project/`, a tiny Python library with a bug to find. Start the agent there:
 
 ```bash
 harness --workspace workspace

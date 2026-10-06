@@ -13,3 +13,4 @@ Copy [the template](template.md) to `NNNN-short-title.md` with the next number.
 | [0004](0004-tool-schemas-from-type-hints.md) | Generate tool schemas from type hints and docstrings | Accepted |
 | [0005](0005-approve-every-non-read-only-call.md) | Ask before every tool call that isn't read-only | Accepted |
 | [0006](0006-paged-numbered-file-reads.md) | Read files in numbered, bounded pages | Accepted |
+| [0007](0007-pure-python-search.md) | Implement search in pure Python | Accepted |

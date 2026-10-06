@@ -12,11 +12,13 @@ from harness.agent import Agent
 from harness.providers.base import ProviderError
 from harness.providers.ollama import OllamaProvider
 from harness.tools.fs import make_fs_tools, workspace_snapshot
+from harness.tools.search import make_search_tools
 from harness.workspace import Workspace
 
 # Short and direct works best for small models (see course/07-first-tools-and-repl.md).
 SYSTEM_PROMPT = """You are a helpful agent. Use tools to inspect the workspace; never guess file contents.
-Explore folders with list_dir before saying something doesn't exist.
+Find files with glob, search inside them with grep, explore folders with list_dir.
+To find where something is defined or used, grep for a likely word (e.g. grep 'timeout' to find a timeout setting).
 Paths are relative to the workspace root. Be concise.
 
 Workspace files (snapshot at session start; may have changed since):
@@ -85,7 +87,7 @@ def main():
     ws = Workspace(workspace)
 
     system_prompt = SYSTEM_PROMPT.format(snapshot=workspace_snapshot(ws))
-    agent = Agent(OllamaProvider(model=args.model), make_fs_tools(ws), system_prompt,
+    agent = Agent(OllamaProvider(model=args.model), make_fs_tools(ws) + make_search_tools(ws), system_prompt,
                   max_steps=args.max_steps, on_event=show_event,
                   approve=TerminalApprover(auto_approve=args.yes))
     print(f"{BOLD}Agent harness{RESET} · model {args.model} · workspace {workspace}")

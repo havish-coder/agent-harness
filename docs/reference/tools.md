@@ -6,6 +6,8 @@ Tools the model can call. Paths are relative to the workspace root.
 |---|---|---|---|
 | `list_dir` | yes | yes | List a folder. Folders end with `/`; files show their size. |
 | `read_file` | yes | yes | Return numbered lines from a text file, a page at a time. |
+| `glob` | yes | yes | Find files by name pattern, newest first. |
+| `grep` | yes | yes | Search inside files with a regular expression. |
 
 Results longer than a tool's limit (8,000 characters by default) are shortened: the agent
 keeps the first 80% and the last 20% and says how much was cut in the middle.
@@ -49,3 +51,28 @@ continue); lines longer than 500 characters are cut with a marker.
 | binary file (NUL byte in the first 8 KB) | error |
 | folder | error suggesting `list_dir` |
 | missing file | error with up to three similar names (`Did you mean: notes.txt?`) |
+
+## `glob`
+| Argument | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `pattern` | string | yes | | Glob pattern. Without `/` it matches file names in every folder (`*.py`); with `/` it matches the relative path (`src/**/test_*.py`; `**` may match zero folders). |
+| `path` | string | no | `.` | Folder to search. |
+
+Result: matching file paths, most recently modified first, at most 100 (then
+`... and N more`). Folders such as `.git`, `.venv` and `node_modules` are skipped.
+
+## `grep`
+| Argument | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `pattern` | string | yes | | Python regular expression. An invalid one is searched as plain text, with a note. |
+| `path` | string | no | `.` | File or folder to search. |
+| `glob` | string | no | | Only files matching this pattern (same rules as `glob`). |
+| `ignore_case` | boolean | no | `false` | Case-insensitive matching. |
+| `output` | `"lines"` / `"files"` / `"count"` | no | `"lines"` | Matching lines, file names, or matches per file. |
+| `context` | integer | no | `0` | Lines before and after each match (`lines` mode). |
+| `limit` | integer | no | `50` | Maximum lines (or files) returned. |
+
+Result (`lines`): `path:line: text` for matches, `path-line- text` for context lines, `--`
+between groups, then a summary such as `(2 matches in 2 files)`. Binary files, files over
+2 MB and ignored folders are skipped. Lines longer than 300 characters are cut.
+
