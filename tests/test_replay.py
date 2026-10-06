@@ -6,7 +6,6 @@ fails if a tool's output, the system prompt or the loop changes in a way the rec
 see. Re-record deliberately with scripts/record_cassette.py when that happens.
 """
 import json
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -15,7 +14,14 @@ import pytest
 
 from harness.agent import Agent
 from harness.cli import SYSTEM_PROMPT
-from harness.providers.fake import Normalizer, RecordingProvider, ReplayMismatch, ReplayProvider, text
+from harness.providers.fake import (
+    Normalizer,
+    RecordingProvider,
+    ReplayMismatch,
+    ReplayProvider,
+    committed_copy,
+    text,
+)
 from harness.tools import default_tools
 from harness.tools.fs import workspace_snapshot
 from harness.workspace import Workspace
@@ -25,9 +31,7 @@ CASSETTE = REPO / "tests" / "cassettes" / "fix_subtotal.jsonl"
 
 
 def fresh_workspace(tmp_path) -> Path:
-    root = tmp_path / "ws"
-    shutil.copytree(REPO / "workspace", root, ignore=shutil.ignore_patterns("__pycache__", ".pytest_cache"))
-    return root
+    return committed_copy(REPO, "workspace", tmp_path / "ws")
 
 
 def recorded_task() -> str:

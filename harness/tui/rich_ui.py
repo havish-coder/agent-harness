@@ -11,6 +11,7 @@ from rich.padding import Padding
 from rich.syntax import Syntax
 from rich.text import Text
 
+from harness.tui.latex import render_math
 from harness.tui.plain import PlainApprover
 
 TOOL_RESULT_LINES = 4       # lines of a tool result shown under the call
@@ -37,6 +38,11 @@ class RichUI:
         self.current = ""
         self.last_streamed = ""
         self.thinking = False
+
+    @staticmethod
+    def markdown(text: str) -> Markdown:
+        """An answer as rich Markdown, with LaTeX math shown as Unicode (Lesson 25b)."""
+        return Markdown(render_math(text))
 
     # --- the two live regions: never more than one at a time ---------------------------------
     def stop_spinner(self):
@@ -76,16 +82,16 @@ class RichUI:
             self.current += data
             if self.live is None:
                 self.console.print()                 # a blank line before the answer
-                self.live = Live(Markdown(self.current), console=self.console, refresh_per_second=10,
+                self.live = Live(self.markdown(self.current), console=self.console, refresh_per_second=10,
                                  vertical_overflow="visible", transient=False)
                 self.live.start()
             else:
-                self.live.update(Markdown(self.current))
+                self.live.update(self.markdown(self.current))
         elif kind == "model_reply":
             self.stop_spinner()
             self.end_thinking()
             if self.live is not None:
-                self.live.update(Markdown(self.current))
+                self.live.update(self.markdown(self.current))
                 self.stop_live()
             self.last_streamed, self.current = self.current, ""
         elif kind == "tool_call":
@@ -118,7 +124,7 @@ class RichUI:
         self.stop_live()
         if text.strip() != self.last_streamed.strip():
             self.console.print()
-            self.console.print(Markdown(text))
+            self.console.print(self.markdown(text))
         self.last_streamed = ""
 
     def retry(self, notice):

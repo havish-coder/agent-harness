@@ -23,7 +23,27 @@ is below 1.0, minor releases may contain breaking changes.
   commands as Markdown files in `~/.harness/commands/` or `<workspace>/.harness/commands/`, with
   `$ARGUMENTS` and `$1`...; project commands can't replace built-ins; `//` escapes a leading slash.
 - `Session`: the running app (provider, agent, costs, UI) shared by interfaces and commands.
+- Output styles (ADR 0022): `default`, `concise`, `explanatory`, `learning`, `latex`, and your own
+  as Markdown files; `/style`; the `output_style` setting. Projects can't replace built-in styles.
+- Status line under the prompt: model, context used (with Ollama, out of the window), session cost,
+  style; the per-turn line shows the context percentage. `status_line` setting for your own
+  command (JSON on stdin; never accepted from project settings).
+- Math in answers (ADR 0023): LaTeX math (`$...$`, `$$...$$`, `\(...\)`, `\[...\]`) shown with Unicode
+  symbols in the rich terminal, also while streaming; prices and code are left alone.
+- `/export [md|tex|pdf] [file] [--last]`: the chat or the last answer as Markdown, LaTeX (pandoc) or
+  PDF (pandoc + Tectonic), tools found on PATH or in `~/.harness/tools/`.
 - `scripts/render_demo.py` renders `docs/images/demo.svg` from the recorded bug-fix run.
+
+### Changed
+- When `edit_file` or `write_file` refuses because the file wasn't read (or changed since), the
+  refusal now includes the file's current content, counts as reading it, and tells the model to
+  call the tool again. Small models used to read the file and then never retry the edit.
+- `/fix-tests` first finds out how the project runs its tests (README, config files, the folder
+  with `conftest.py` or `pyproject.toml`) and treats the code under test, not the tests, as broken.
+
+### Fixed
+- The replay tests, `render_demo.py` and `record_cassette.py` copy the workspace as committed:
+  files you added to `workspace/` while trying the agent no longer break them.
 
 ## [0.3.0] - 2026-10-06
 

@@ -8,15 +8,35 @@
 A cassette is a JSON Lines file: one {"request": [...messages], "tools": [...names],
 "reply": {...}} object per model call. Volatile text (the workspace path, timings) is
 replaced with placeholders so cassettes work on any machine.
+
+`committed_copy()` gives a recording or replay the workspace exactly as committed.
 """
 import difflib
 import json
 import re
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
 from harness.messages import Message, Reply, ToolCall, Usage, message_to_dict, reply_from_dict, reply_to_dict
 from harness.providers.base import ProviderError
+
+
+def committed_copy(repo: Path, folder: str, dest: Path) -> Path:
+    """Copy `repo/folder` to `dest`, only the files git tracks. Files a user added while trying
+    the agent would change the workspace snapshot in the system prompt and break replays.
+    Outside a git checkout, everything is copied."""
+    listed = subprocess.run(["git", "ls-files", "-z", folder], cwd=repo, capture_output=True, text=True)
+    files = [f for f in listed.stdout.split("\0") if f] if listed.returncode == 0 else []
+    if not files:
+        shutil.copytree(repo / folder, dest, ignore=shutil.ignore_patterns("__pycache__", ".pytest_cache"))
+        return dest
+    for name in files:
+        target = dest / Path(name).relative_to(folder)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(repo / name, target)
+    return dest
 
 
 class ScriptedProvider:

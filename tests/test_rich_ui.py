@@ -61,3 +61,12 @@ def test_approver_shows_a_highlighted_diff_and_the_command():
     text = console.export_text()
     assert "? edit wants to run" in text and "-old" in text and "+new" in text
     assert "python -m pytest -q" in text
+
+
+def test_math_is_rendered_while_streaming():
+    r, console = ui()
+    for piece in [r"The sum is $\sum_{i=1}^{n} i", r" = \frac{n(n+1)}{2}$, and $5 is a price."]:
+        r("text_delta", piece)
+    r("model_reply", Reply(Message("assistant", "x"), "end", Usage()))
+    text = console.export_text()
+    assert "∑ᵢ₌₁ⁿ i = (n(n + 1))/2" in text and "$5 is a price" in text and r"\frac" not in text

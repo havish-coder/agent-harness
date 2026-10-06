@@ -7,7 +7,6 @@ real tools run on a temporary copy of workspace/, so the picture is reproducible
 """
 import io
 import json
-import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -19,7 +18,7 @@ from rich.console import Console  # noqa: E402
 
 from harness.agent import Agent  # noqa: E402
 from harness.cli import SYSTEM_PROMPT  # noqa: E402
-from harness.providers.fake import ReplayProvider  # noqa: E402
+from harness.providers.fake import ReplayProvider, committed_copy  # noqa: E402
 from harness.tools import default_tools  # noqa: E402
 from harness.tools.fs import workspace_snapshot  # noqa: E402
 from harness.tui.rich_ui import RichApprover, RichUI  # noqa: E402
@@ -39,7 +38,7 @@ class DemoApprover(RichApprover):
 
 def main() -> None:
     root = Path(tempfile.mkdtemp()) / "ws"
-    shutil.copytree(ROOT / "workspace", root, ignore=shutil.ignore_patterns("__pycache__", ".pytest_cache"))
+    committed_copy(ROOT, "workspace", root)
     console = Console(file=io.StringIO(), record=True, force_terminal=True, width=96,
                       color_system="truecolor", legacy_windows=False)   # record only, print nothing
     ui = RichUI(console, spinner=False)

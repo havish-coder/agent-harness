@@ -9,6 +9,7 @@ import hashlib
 import re
 
 from harness.tools.base import Tool, tool
+from harness.tools.fs import read_lines
 from harness.workspace import FileStamp, Workspace
 
 MAX_EDIT_BYTES = 1_000_000
@@ -41,18 +42,34 @@ def unified_diff(name: str, before: str, after: str) -> str:
 def make_edit_tools(ws: Workspace) -> list[Tool]:
 
     def check_fresh(p, name: str) -> bytes:
-        """The file must have been read in this conversation and not changed since."""
+        """The file must have been read in this conversation and not changed since.
+
+        When it hasn't been (or has changed), the error includes the current content, which
+        counts as reading it, and says plainly that nothing was changed. Measured (Lesson 24):
+        after a bare "read it first" refusal the model read the file and then believed its edit
+        had been applied, never retrying it.
+        """
         stamp: FileStamp | None = ws.reads.get(p)
         if stamp is None:
-            raise EditError(f"you haven't read '{name}' yet. Read it with read_file first, "
-                            "so you edit what is really there")
+            raise EditError(f"the edit was NOT made: you hadn't read '{name}' yet. Its current content is "
+                            f"below (this counts as reading it). If your old_string matches it, call the "
+                            f"tool again with the same arguments.\n{current(name)}")
         data = p.read_bytes()
         if p.stat().st_mtime_ns != stamp.mtime_ns and digest(data) != stamp.digest:
-            raise EditError(f"'{name}' changed since you read it (by the user or another program). "
-                            "Read it again before editing")
+            ws.forget_reads()
+            raise EditError(f"the edit was NOT made: '{name}' changed since you read it (by the user or "
+                            f"another program). Its current content is below; call the tool again with an "
+                            f"old_string that matches it.\n{current(name)}")
         if len(data) > MAX_EDIT_BYTES:
             raise EditError(f"'{name}' is too large to edit ({len(data):,} bytes; the limit is {MAX_EDIT_BYTES:,})")
         return data
+
+    def current(name: str) -> str:
+        """The file as read_file would show it, recorded as read."""
+        try:
+            return read_lines(ws, name)
+        except (OSError, ValueError) as e:
+            return f"(could not show it: {e})"
 
     def remember(p, data: bytes) -> None:
         """After our own write the model knows the new content: keep the file 'fresh'."""

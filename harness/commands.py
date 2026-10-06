@@ -138,6 +138,41 @@ def _model(session, args):
     return f"model switched to {args}; the conversation is kept"
 
 
+def _style(session, args):
+    if not args:
+        rows = [f"{'*' if s.name == session.style.name else ' '} {s.name:<12} {s.description}"
+                + (f"  ({s.source})" if s.source != "built-in" else "") for s in session.styles.values()]
+        return "\n".join(rows)
+    if args not in session.styles:
+        return f"unknown style '{args}'. /style lists them"
+    session.set_style(args)
+    return f"style: {args} (from the next reply on)"
+
+
+def _export(session, args):
+    """/export [md|tex|pdf] [file] [--last]"""
+    import datetime
+
+    from harness.export import ExportError, chat_markdown, export
+    words = args.split()
+    last = "--last" in words
+    words = [w for w in words if w != "--last"]
+    fmt = (words[0] if words else "pdf").lower().lstrip(".")
+    if fmt not in ("md", "tex", "pdf"):
+        return "usage: /export [md|tex|pdf] [file] [--last]"
+    stamp = datetime.datetime.now().strftime("%Y-%m-%d-%H%M%S")
+    target = session.ws.path(words[1]) if len(words) > 1 else session.ws.root / ".harness" / "exports" / f"chat-{stamp}"
+    first = next((m.content for m in session.agent.messages if m.role == "user"), "Agent Harness chat")
+    title = first.splitlines()[0][:70].replace('"', "'")
+    if fmt == "pdf":
+        session.ui.info("building the PDF (the first time can take a minute)...")
+    try:
+        written = export(chat_markdown(session.agent.messages, title, session.provider.model, last), fmt, target)
+    except ExportError as e:
+        return str(e)
+    return f"wrote {written}"
+
+
 def _tools(session, args):
     rows = []
     for tool in session.agent.tools:
@@ -154,9 +189,14 @@ def _tools(session, args):
     return "\n".join(rows)
 
 
-FIX_TESTS = """Run this project's tests with run_shell and read the result.
-If any test fails: find the cause in the code, fix it with edit_file, and run the tests again.
-Repeat until every test passes (at most 3 rounds), then say what you changed.
+# Measured (Lesson 24): without the first sentence the model ran a test file directly, got an
+# import error, and "fixed" the package structure instead of the bug.
+FIX_TESTS = """First find out how this project runs its tests: look at its README and config files
+(for a Python project it is usually `python -m pytest`, run in the folder that contains the tests'
+conftest.py or pyproject.toml). Run the tests that way with run_shell and read the result.
+If a test fails, the bug is in the code being tested, not in the tests or the project setup
+(unless the error clearly says otherwise): read that code, fix it with edit_file, and run the tests again.
+Repeat until every test passes (at most 3 rounds), then say in a few lines what you changed.
 $ARGUMENTS"""
 
 EXPLAIN = """Explain $ARGUMENTS: what it does, how the main parts fit together, and anything surprising.
@@ -171,6 +211,9 @@ def builtin_commands() -> list[Command]:
         Command("config", "the settings in effect and where each came from", run=_config),
         Command("model", "show the model, or switch to another one", run=_model, argument_hint="[name]"),
         Command("tools", "the tools the agent can use", run=_tools),
+        Command("style", "list output styles, or switch to one", run=_style, argument_hint="[name]"),
+        Command("export", "save the chat (or the last answer) as Markdown, LaTeX or PDF", run=_export,
+                argument_hint="[md|tex|pdf] [file] [--last]"),
         Command("bye", "quit", run=lambda session, args: None, aliases=("exit", "quit")),
         Command("fix-tests", "run the tests, fix failures, repeat until they pass", kind="prompt",
                 template=FIX_TESTS, argument_hint="[what to focus on]"),

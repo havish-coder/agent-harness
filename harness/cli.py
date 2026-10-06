@@ -3,7 +3,7 @@
 Run:  harness                               (after `pip install -e ".[tui]"`)
       harness --workspace C:\\some\\folder --provider anthropic
 
-Lessons 07-24. The screen is drawn by harness/tui (rich when available, plain otherwise); the
+Lessons 07-25. The screen is drawn by harness/tui (rich when available, plain otherwise); the
 running app is a harness.session.Session; slash commands live in harness/commands.py.
 """
 import argparse
@@ -16,6 +16,7 @@ from harness.mentions import expand_mentions
 from harness.providers.base import ProviderError
 from harness.providers.factory import PROVIDERS
 from harness.session import SYSTEM_PROMPT, Session
+from harness.styles import load_styles
 from harness.tui import make_ui
 from harness.tui.keys import KeyWatcher
 from harness.tui.prompt import LineReader
@@ -65,7 +66,9 @@ def run_turn(session: Session, watcher: KeyWatcher, message: str) -> None:
     cached = f" ({turn.cache_read_tokens:,} cached)" if turn.cache_read_tokens else ""
     cost_after = costs.cost()
     money = "price unknown" if cost_after is None or cost_before is None else format_cost(cost_after - cost_before)
-    ui.usage_line(f"{turn.input_tokens:,} input{cached} + {turn.output_tokens:,} output tokens · {money}")
+    window = session.status()["context_window"]
+    context = f" · context {100 * session.context_tokens // window}%" if window else ""
+    ui.usage_line(f"{turn.input_tokens:,} input{cached} + {turn.output_tokens:,} output tokens · {money}{context}")
 
 
 def main(argv=None):
@@ -87,14 +90,15 @@ def main(argv=None):
     except ConfigError as e:
         sys.exit(f"settings error: {e}")
     commands = load_commands(workspace)
-    for warning in env_warnings + warnings + commands.warnings:
+    styles, style_warnings = load_styles(workspace)
+    for warning in env_warnings + warnings + commands.warnings + style_warnings:
         ui.warn(f"warning: {warning}")
     if args.show_config:
         print(describe(settings))
         return
 
     try:
-        session = Session(settings, ws, ui, approver)
+        session = Session(settings, ws, ui, approver, styles)
     except ProviderError as e:
         sys.exit(f"error: {e}")
     session.commands = commands
@@ -110,7 +114,8 @@ def main(argv=None):
 
     while True:
         try:
-            line = reader.read(default=watcher.take_typeahead()).strip()
+            # The status line is computed once per prompt: the toolbar redraws on every keystroke.
+            line = reader.read(default=watcher.take_typeahead(), toolbar=session.status_text()).strip()
         except (EOFError, KeyboardInterrupt):
             break
         if not line:

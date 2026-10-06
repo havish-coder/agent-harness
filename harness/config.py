@@ -43,6 +43,8 @@ class Settings:
     shell: str | None = None            # bash, pwsh or powershell (see run_shell)
     max_retries: int = 4
     prices: dict = field(default_factory=dict)   # model prefix → {"input", "output", ...} $/M tokens
+    output_style: str = "default"                # see harness/styles.py (Lesson 25)
+    status_line: str | None = None               # a shell command whose output is the status line
     sources: dict = field(default_factory=dict, repr=False, compare=False)   # key → where it came from
 
 
@@ -65,7 +67,11 @@ TYPES: dict[str, tuple] = {
     "fallback_model": (str, type(None)), "temperature": (int, float, type(None)),
     "context_window": (int,), "max_steps": (int,), "stream": (bool,), "think": (bool,),
     "shell": (str, type(None)), "max_retries": (int,), "prices": (dict,),
+    "output_style": (str,), "status_line": (str, type(None)),
 }
+# Settings that run a program. A project file may not set them: a cloned repository would run
+# its own code on your machine just by being opened.
+RUNS_CODE = {"status_line"}
 
 
 def _type_ok(name: str, value) -> bool:
@@ -143,6 +149,11 @@ def load_settings(workspace: Path, flags: dict | None = None, environ=None) -> t
     layers += [("environment", env_layer(environ)), ("flag", {k: v for k, v in (flags or {}).items() if v is not None})]
     for label, data in layers:
         warnings += check_layer(data, label)
+        if label == "project" and RUNS_CODE & data.keys():
+            for key in sorted(RUNS_CODE & data.keys()):
+                warnings.append(f"project settings can't set '{key}' (it runs a program); ignored. "
+                                "Put it in your user or local settings")
+            data = {k: v for k, v in data.items() if k not in RUNS_CODE}
         if label == "project" and SENSITIVE & data.keys():
             warnings.append("project settings choose where your prompts are sent: "
                             + ", ".join(f"{k}={data[k]!r}" for k in sorted(SENSITIVE & data.keys())))

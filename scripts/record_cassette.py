@@ -7,7 +7,6 @@ tool call approved, saves tests/cassettes/<name>.jsonl, and reports whether the 
 project's tests pass afterwards. Re-record when a deliberate change (a prompt, a tool's
 output) makes the replay test fail.
 """
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -19,7 +18,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 from harness.agent import Agent  # noqa: E402
 from harness.cli import SYSTEM_PROMPT  # noqa: E402
-from harness.providers.fake import RecordingProvider  # noqa: E402
+from harness.providers.fake import RecordingProvider, committed_copy  # noqa: E402
 from harness.providers.ollama import OllamaProvider  # noqa: E402
 from harness.tools import default_tools  # noqa: E402
 from harness.tools.fs import workspace_snapshot  # noqa: E402
@@ -28,7 +27,7 @@ from harness.workspace import Workspace  # noqa: E402
 
 def main(name: str, task: str) -> int:
     root = Path(tempfile.mkdtemp()) / "ws"
-    shutil.copytree(ROOT / "workspace", root, ignore=shutil.ignore_patterns("__pycache__", ".pytest_cache"))
+    committed_copy(ROOT, "workspace", root)
     ws = Workspace(root)
     cassette = ROOT / "tests" / "cassettes" / f"{name}.jsonl"
     provider = RecordingProvider(OllamaProvider(temperature=0), cassette, root=root)

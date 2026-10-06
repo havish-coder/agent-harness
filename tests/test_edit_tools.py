@@ -33,9 +33,11 @@ def edit(t, **args):
     return t["edit_file"].fn(**args)
 
 
-def test_edit_requires_a_read_first(t):
-    assert "haven't read 'cart.py' yet" in t["edit_file"].check(path="cart.py", old_string="qty", new_string="q")
-    read(t, "cart.py")
+def test_an_unread_file_is_refused_with_its_content(t):
+    error = t["edit_file"].check(path="cart.py", old_string="price for", new_string="price * qty for")
+    assert error.startswith("Error: the edit was NOT made: you hadn't read 'cart.py' yet.")
+    assert "     3\t        return sum(price for _, price, qty in self.items)" in error   # the file, as read_file shows it
+    # showing it counts as reading it: the same call now goes through
     assert t["edit_file"].check(path="cart.py", old_string="price for", new_string="price * qty for") is None
 
 
@@ -74,7 +76,8 @@ def test_stale_file_is_refused_but_touch_alone_is_not(ws, t):
     os.utime(p, ns=(st.st_atime_ns, st.st_mtime_ns + 5_000_000_000))   # only the timestamp changes
     assert t["edit_file"].check(path="cart.py", old_string="qty", new_string="q") is None
     p.write_text(CART + "# edited by the user\n", encoding="utf-8")    # real change
-    assert "changed since you read it" in t["edit_file"].check(path="cart.py", old_string="qty", new_string="q")
+    error = t["edit_file"].check(path="cart.py", old_string="qty", new_string="q")
+    assert "NOT made: 'cart.py' changed since you read it" in error and "# edited by the user" in error
 
 
 def test_crlf_files_keep_their_line_endings(ws, t):
@@ -107,11 +110,11 @@ def test_write_creates_files_and_folders(ws, t):
 
 def test_overwrite_requires_a_read_and_is_destructive(ws, t):
     assert t["write_file"].is_destructive({"path": "cart.py"})
-    assert "haven't read" in t["write_file"].check(path="cart.py", content="")
+    assert "NOT made: you hadn't read" in t["write_file"].check(path="cart.py", content="")
+    ws.reads.clear()
     with pytest.raises(EditError):
-        t["write_file"].fn(path="cart.py", content="")
-    read(t, "cart.py")
-    out = t["write_file"].fn(path="cart.py", content="pass\n")
+        t["write_file"].fn(path="cart.py", content="")       # the tool itself refuses too
+    out = t["write_file"].fn(path="cart.py", content="pass\n")   # the refusal showed the file
     assert out.startswith("Overwrote cart.py (1 line, was 3).")
 
 
@@ -129,4 +132,4 @@ def test_agent_never_asks_to_approve_a_doomed_edit(ws, t):
     agent = Agent(provider, list(t.values()), "s", approve=lambda c, tool: asked.append(c) or True)
     agent.run("edit")
     assert asked == []                                               # the check failed first
-    assert "haven't read" in [m.content for m in agent.messages if m.role == "tool"][0]
+    assert "edit was NOT made" in [m.content for m in agent.messages if m.role == "tool"][0]

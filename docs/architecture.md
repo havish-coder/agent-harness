@@ -157,8 +157,11 @@ harness/
   cli.py            the `harness` command: settings, the input loop, command dispatch
   session.py        one running session: provider with retries, agent, costs, UI
   commands.py       slash commands: built-in and Markdown-defined
+  styles.py         output styles added to the system prompt
+  export.py         /export: chats as Markdown, LaTeX (pandoc) or PDF (pandoc + Tectonic)
   tui/              terminal interfaces: rich (Markdown, diffs, spinner) and plain;
-                    the line editor (prompt.py) and the Esc/type-ahead key watcher (keys.py)
+                    the line editor (prompt.py), the Esc/type-ahead key watcher (keys.py),
+                    LaTeX math to Unicode (latex.py)
   mentions.py       @file mentions attached to messages
   providers/
     base.py         the Provider interface and ProviderError
