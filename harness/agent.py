@@ -5,6 +5,7 @@ around these few lines.
 """
 import inspect
 import json
+import secrets
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
@@ -91,6 +92,7 @@ class Agent:
         self.compact_failures = 0    # failures in a row; automatic compaction stops trying at MAX_FAILURES
         self.compact_error: str | None = None     # why the last compact() did nothing, when the model was the problem
         self.turn_start = 1          # where this turn's messages begin, for rolling it back after an error
+        self.pending_notes: list[str] = []      # told to the model with the next request, then forgotten
 
     def run(self, user_input: str) -> str:
         """Handle one user message. May call the model and tools many times."""
@@ -99,8 +101,12 @@ class Agent:
             if blocked:
                 self.stop_reason = "blocked"
                 return blocked
+        if self.pending_notes:                 # something the user did between turns that the model can't know (Lesson 43)
+            notes = " ".join(self.pending_notes)
+            user_input = f"[Note from the harness: {notes}]\n\n{user_input}"
+            self.pending_notes.clear()
         self.turn_start = len(self.messages)
-        self.add(Message.user(user_input))
+        self.add(Message.user(user_input, checkpoint=secrets.token_hex(4)))
         schemas = self.tools.schemas()
         self.stop_reason = None
         seen: dict[str, tuple[str, int]] = {}   # call → (result, times seen), for note_repeats

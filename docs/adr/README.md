@@ -47,3 +47,4 @@ Copy [the template](template.md) to `NNNN-short-title.md` with the next number.
 | [0038](0038-memory-files-are-instructions-only-from-folders-you-trust.md) | Read HARNESS.md files into the prompt, but as instructions only when they are the user's | Accepted |
 | [0039](0039-agent-notes-record-whether-untrusted-content-was-read.md) | Let the agent save notes for itself, and record in each whether untrusted content had been read | Accepted |
 | [0040](0040-a-project-journal-written-at-checkpoints.md) | Keep a fixed-section project journal, written at checkpoints and checked before it is saved | Accepted |
+| [0041](0041-keep-a-copy-before-the-edit-tools-write.md) | Keep a copy of a file just before an edit tool writes it, and put it back only if nobody has touched it since | Accepted |

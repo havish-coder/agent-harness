@@ -27,14 +27,16 @@ class Message:
     tool_calls: list[ToolCall] = field(default_factory=list)  # assistant messages only
     tool_call_id: str | None = None                            # tool messages only: which call this answers
     tool_name: str | None = None                               # tool messages only
+    # user messages the harness started a turn with: an id the file history and /rewind use to find this request again (Lesson 43)
+    checkpoint: str | None = field(default=None, compare=False)
 
     @classmethod
     def system(cls, text: str) -> "Message":
         return cls("system", text)
 
     @classmethod
-    def user(cls, text: str) -> "Message":
-        return cls("user", text)
+    def user(cls, text: str, checkpoint: str | None = None) -> "Message":
+        return cls("user", text, checkpoint=checkpoint)
 
     @classmethod
     def tool_result(cls, call: ToolCall, content: str) -> "Message":
@@ -83,13 +85,15 @@ def message_to_dict(m: Message) -> dict:
     if m.tool_call_id is not None:
         d["tool_call_id"] = m.tool_call_id
         d["tool_name"] = m.tool_name
+    if m.checkpoint is not None:
+        d["checkpoint"] = m.checkpoint
     return d
 
 
 def message_from_dict(d: dict) -> Message:
     return Message(d["role"], d.get("content", ""),
                    tool_calls=[ToolCall(c["id"], c["name"], c["arguments"]) for c in d.get("tool_calls", [])],
-                   tool_call_id=d.get("tool_call_id"), tool_name=d.get("tool_name"))
+                   tool_call_id=d.get("tool_call_id"), tool_name=d.get("tool_name"), checkpoint=d.get("checkpoint"))
 
 
 def reply_to_dict(r: Reply) -> dict:

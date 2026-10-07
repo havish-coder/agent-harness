@@ -76,6 +76,7 @@ class Settings:
     memory: bool = True                          # read HARNESS.md files into the system prompt (Lesson 41)
     auto_memory: str = "ask"                     # notes the agent saves for itself: ask (each one), on (without asking), off (Lesson 42)
     journal: str = "ask"                         # the project's progress journal: ask (offer it when useful), on, off (Lesson 42b)
+    file_history: bool = True                    # keep a copy of each file before the agent changes it, for /undo and /rewind (Lesson 43)
     chat_retention_days: int = 30                # delete saved chats of a project not used for this many days (0: keep them)
     shell_env_keep: list = field(default_factory=list)   # environment variables commands may see despite looking secret
     sources: dict = field(default_factory=dict, repr=False, compare=False)   # key → where it came from
@@ -102,7 +103,7 @@ TYPES: dict[str, tuple] = {
     "shell": (str, type(None)), "max_retries": (int,), "prices": (dict,),
     "output_style": (str,), "status_line": (str, type(None)), "additional_directories": (list,),
     "permission_mode": (str,), "permissions": (dict,), "shell_env_keep": (list,), "fence_untrusted": (bool,), "web_fetch": (bool,), "hooks": (dict,), "audit_log": (bool,), "sandbox": (str,), "sandbox_network": (bool,), "redact_secrets": (bool,),
-    "limits": (dict,), "web_allow_local": (list,), "microcompact": (bool,), "microcompact_keep": (int,), "auto_compact": (bool,), "save_chats": (bool,), "memory": (bool,), "auto_memory": (str,), "journal": (str,), "chat_retention_days": (int,),
+    "limits": (dict,), "web_allow_local": (list,), "microcompact": (bool,), "microcompact_keep": (int,), "auto_compact": (bool,), "save_chats": (bool,), "memory": (bool,), "auto_memory": (str,), "journal": (str,), "file_history": (bool,), "chat_retention_days": (int,),
 }
 # Settings a project file may not set, and why: a cloned repository could otherwise run its own
 # code on your machine, or give the agent access to your other folders, just by being opened.
@@ -122,6 +123,7 @@ NOT_FROM_PROJECT = {
     "memory": "it could switch off the notes you wrote for every project",
     "auto_memory": "it could let the agent save notes without asking",
     "journal": "it would make every chat write to the project and spend tokens, or hide a journal you want read",
+    "file_history": "it could turn off the copies that /undo and /rewind depend on",
     "chat_retention_days": "it decides which of your saved chats are deleted",
 }
 RULE_ACTIONS = ("allow", "ask", "deny")

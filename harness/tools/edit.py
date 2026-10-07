@@ -39,7 +39,8 @@ def unified_diff(name: str, before: str, after: str) -> str:
     return "\n".join(lines)
 
 
-def make_edit_tools(ws: Workspace) -> list[Tool]:
+def make_edit_tools(ws: Workspace, history=None) -> list[Tool]:
+    """`history` (Lesson 43), when given, is shown each file's exact bytes just before a tool overwrites them, so the change can be undone."""
 
     def check_fresh(p, name: str) -> bytes:
         """The file must have been read in this conversation and not changed since.
@@ -143,6 +144,8 @@ def make_edit_tools(ws: Workspace) -> list[Tool]:
         """
         p, name, before, after, count = plan_edit(path, old_string, new_string, replace_all)
         data = after.encode("utf-8")
+        if history is not None:
+            history.record(p, p.read_bytes(), data, "edit_file")     # the copy is kept before the write, not after
         p.write_bytes(data)          # bytes: keep the file's own line endings exactly
         remember(p, data)
         noun = "replacement" if count == 1 else "replacements"
@@ -191,8 +194,15 @@ def make_edit_tools(ws: Workspace) -> list[Tool]:
         name = ws.display(p)
         existed = p.exists()
         before = p.read_text(encoding="utf-8", errors="replace") if existed else ""
-        p.parent.mkdir(parents=True, exist_ok=True)
         data = content.encode("utf-8")
+        if history is not None:
+            made = []                                 # folders this write creates, so undoing it can remove them again
+            for d in (p.parent, *p.parent.parents):
+                if d.exists():
+                    break
+                made.append(d)
+            history.record(p, p.read_bytes() if existed else None, data, "write_file", made)
+        p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes(data)
         remember(p, data)
         n = len(content.splitlines())

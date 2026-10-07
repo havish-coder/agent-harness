@@ -94,6 +94,7 @@ class Normalizer:
     def message(self, m: Message) -> dict:
         d = message_to_dict(m)
         d["content"] = self(d["content"])
+        d.pop("checkpoint", None)          # a random id for /rewind (Lesson 43): different on every run, and never sent to a model
         return d
 
 

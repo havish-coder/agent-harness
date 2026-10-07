@@ -52,6 +52,10 @@ is below 1.0, minor releases may contain breaking changes.
   Opt-in: the first turn that changes something asks once (yes / not now / never). Then it is updated after changing turns, before the conversation is summarised and when the chat ends, by a model call whose
   answer is checked before it is saved; several chats (terminal or web) share it safely. A journal written after untrusted reading is marked, read fenced and tainting. `update_progress` tool, `/progress`
   command, setting `journal`, flag `--fresh`, start-up line. User guide: [the progress journal](docs/user-guide/journal.md).
+- Undo and rewind (ADR 0041): the edit tools keep a copy of each file, byte for byte, just before they write it, grouped by the request that made the change, in your user folder. `/undo` puts back what the last request
+  changed (and removes files and folders it created); `/rewind` lists the requests and `/rewind N [code|chat|both]` goes back to before one, cutting the conversation at the same point (recorded in the saved chat). A file you changed since is
+  skipped and reported, never overwritten, unless you say `force` (which keeps your version). The model is told with its next request what was put back. Commands run with `run_shell` can't be undone, and are listed as such.
+  Setting `file_history` (default on, not from project settings); `scripts/history_lab.py`. User guide: [undo and rewind](docs/user-guide/undo.md).
 
 ### Changed
 - The status line's context figure is the harness's own estimate of the conversation as it stands, not the last

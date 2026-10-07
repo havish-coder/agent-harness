@@ -187,6 +187,29 @@ def _fork(session, args):
     return f"forked: you are now in '{made.title}'. The chat '{before}' is unchanged: /resume goes back to it"
 
 
+def _undo(session, args):
+    """/undo [show|force]: put back what the last request that changed files changed. Files you have edited since are left alone."""
+    words = args.lower().split()
+    unknown = [w for w in words if w not in ("show", "force")]
+    if unknown:
+        return f"/undo takes show or force, not '{unknown[0]}'"
+    return session.undo(force="force" in words, show="show" in words)
+
+
+def _rewind(session, args):
+    """/rewind [N [code|chat|both] [show|force]]: list this chat's requests, or go back to before request N."""
+    words = args.lower().split()
+    if not words:
+        return session.history_text()
+    if not words[0].isdigit():
+        return "usage: /rewind N [code|chat|both] [show|force]   (/rewind alone lists the requests)"
+    unknown = [w for w in words[1:] if w not in ("code", "chat", "both", "show", "force")]
+    if unknown:
+        return f"/rewind takes code, chat, both, show or force, not '{unknown[0]}'"
+    mode = next((w for w in words[1:] if w in ("code", "chat", "both")), "both")
+    return session.rewind(int(words[0]), mode, force="force" in words, show="show" in words)
+
+
 def _cost(session, args):
     return session.costs.summary()
 
@@ -577,6 +600,9 @@ def builtin_commands() -> list[Command]:
         Command("resume", "go back to a saved chat", run=_resume, argument_hint="NUMBER|WORDS"),
         Command("rename", "name this chat", run=_rename, argument_hint="TITLE"),
         Command("fork", "copy this chat into a new one and carry on there", run=_fork, argument_hint="[TITLE]"),
+        Command("undo", "put back the files the last request changed", run=_undo, argument_hint="[show|force]"),
+        Command("rewind", "list this chat's requests, or go back to before one (files, conversation, or both)", run=_rewind,
+                argument_hint="[N [code|chat|both] [show|force]]"),
         Command("cost", "tokens and cost so far, per model", run=_cost),
         Command("config", "the settings in effect and where each came from", run=_config),
         Command("model", "show the model, or switch to another one", run=_model, argument_hint="[name]"),

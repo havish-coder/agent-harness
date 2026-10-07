@@ -5,7 +5,9 @@ receive it so they can act on the running app (switch the model, show costs, res
 """
 import datetime
 import json
+import shutil
 import subprocess
+import tempfile
 import uuid
 from pathlib import Path
 
@@ -19,6 +21,7 @@ from harness.config import Settings, write_local_setting
 from harness.context.prompt import PROMPT_SHARE, Assembly, Section, assemble, environment_text
 from harness.context.tokens import ContextBudget, estimate_tokens
 from harness.context.windows import window_for
+from harness.filehistory import FileHistory, clean_name, listing, outcome_text, plan_text
 from harness.hooks import Hooks, from_entries
 from harness.journal import Journal, JournalFile, make_journal_tools
 from harness.journal import section_text as journal_section
@@ -73,8 +76,18 @@ class Session:
         self.project = ChatStore(config.USER_DIR, ws.root)          # where this project's saved things live (Lessons 40, 42)
         self.store = self.project if settings.save_chats else None  # saved chats (Lesson 40)
         self.chat: Chat | None = None    # the saved chat this conversation is written to; made on the first message
-        if self.store is not None:
-            self.store.cleanup(settings.chat_retention_days)
+        removed_chats = self.store.cleanup(settings.chat_retention_days) if self.store is not None else 0
+        self.history: FileHistory | None = None          # copies of files before the agent changes them, for /undo and /rewind (Lesson 43)
+        self.history_temp: Path | None = None            # where it lives when chats aren't saved: gone when this session ends
+        self.undo_focus = ""                             # what to tell the next journal update about work that was undone
+        if settings.file_history:
+            if self.store is not None:
+                base = self.project.dir / "history"
+            else:
+                base = self.history_temp = Path(tempfile.mkdtemp(prefix="harness-history-"))
+            self.history = FileHistory(base, ws, on_problem=lambda text: ui.warn(f"warning: {text}"))
+            if removed_chats:
+                self.history.sweep({i.id for i in self.store.infos()})
         self.provider = RetryingProvider(self.make_provider(settings.model), max_retries=settings.max_retries,
                                          fallback=self.make_provider(settings.fallback_model)
                                          if settings.fallback_model else None,
@@ -95,7 +108,7 @@ class Session:
             ui.warn(f"warning: sandbox is \"on\" but this machine has none, so commands are refused ({sandbox_hint()})")
         tools = default_tools(ws, shell=settings.shell, env_keep=settings.shell_env_keep, web=settings.web_fetch,
                               web_allow_local=settings.web_allow_local, sandbox=self.sandbox,
-                              sandbox_network=settings.sandbox_network, sandbox_required=required)
+                              sandbox_network=settings.sandbox_network, sandbox_required=required, history=self.history)
         if self.automemory is not None:
             tools = tools + make_memory_tools(self.automemory, self.permissions.taint)
         if settings.journal != "off":
@@ -155,6 +168,8 @@ class Session:
             self.ws.forget_reads()             # those results left the conversation: reading them again must return the text, not "unchanged"
         if kind in ("message", "rolled_back", "microcompact", "compact"):
             self.save_event(kind, data)
+        if kind == "message" and data.role == "user" and data.checkpoint and self.history is not None:
+            self.history_turn(data)
         self.record(kind, data)
         self.ui(kind, data)
 
@@ -248,10 +263,105 @@ class Session:
             if source not in taint.sources:
                 taint.sources.append(source)
         self.chat = self.store.open(info)
+        if self.history is not None:
+            self.history.bind(self.chat.id)             # what this chat changed earlier can still be undone (Lesson 43)
         self.chat.title = found.title or info.title
         if found.dropped:
             self.chat.rollback(len(found.messages))     # the log agrees with what was restored
         return found
+
+    # --- undo and rewind (Lesson 43) --------------------------------------------------------------
+    def history_turn(self, message) -> None:
+        """A request began: tie the file history to this chat (it exists by now) and open the request's entry in it."""
+        chat_id = self.chat.id if self.chat is not None else "session"
+        if self.history.chat_id != chat_id:
+            self.history.bind(chat_id)
+        self.history.begin_turn(message.checkpoint, message.content)
+
+    def undone(self, out, turns, note: bool) -> None:
+        """Files were put back. The journal may now describe work that is gone; and, when the conversation still shows that work, the model should know."""
+        if not out.changed:
+            return
+        self.unjournaled = True
+        said = "; ".join(f'"{t.prompt}"' for t in turns[:3])
+        self.undo_focus = (f"The user undid the file changes made for: {said}. Take that work out of Done so far and Current state, "
+                           "and say what the files hold now.")
+        if note:
+            files = ", ".join(clean_name(p, 80) for p in out.changed[:6])
+            self.agent.pending_notes.append(f"The user undid your file changes from an earlier request ({files}): they are back as they were "
+                                            "before it. Read a file again before you edit it.")
+
+    def undo(self, force: bool = False, show: bool = False) -> str:
+        """Put back what the last request that changed files changed. A file you have edited since is left alone unless `force`."""
+        h = self.history
+        if h is None:
+            return "file history is off (the file_history setting), so there is nothing to undo"
+        pending = h.pending_turns()
+        if not pending:
+            ran = h.all[-1].commands if h.all else []
+            return "no file changes to undo" + (f" ({len(ran)} shell command(s) ran, and the harness can't undo those)" if ran else "")
+        turn = pending[-1]
+        plan = h.plan([turn])
+        if show:
+            return f'/undo would act on the request "{turn.prompt}":\n{plan_text(plan)}'
+        out = h.apply(plan, force)
+        self.undone(out, [turn], note=True)
+        self.audit("undo", turn=turn.id, restored=len(out.restored), deleted=len(out.deleted), skipped=len(out.skipped),
+                   forced=force or None)
+        return f'undid the changes of the request "{turn.prompt}"\n{outcome_text(out)}'
+
+    def history_text(self) -> str:
+        """The requests of this chat, numbered for /rewind."""
+        h = self.history
+        if h is None:
+            return "file history is off (the file_history setting)"
+        text = listing(h)
+        if not text:
+            return "no requests yet in this chat"
+        return text + "\n\n/rewind N [code|chat|both] [force]: go back to before request N (default both: the files and the conversation)"
+
+    def cut_conversation(self, target, later) -> bool:
+        """Remove the conversation from `target` request on, and record that in the chat's log. False if it isn't in the conversation any more."""
+        messages = self.agent.messages
+        start = next((i for i, m in enumerate(messages) if m.role == "user" and m.checkpoint == target.id), None)
+        if start is None:
+            return False
+        del messages[start:]
+        self.agent.turn_start = min(self.agent.turn_start, len(messages))
+        self.on_event("rolled_back", len(messages) - 1)       # the saved chat undoes the same messages (Lesson 40)
+        self.ws.forget_reads()
+        self.history.drop(later)
+        return True
+
+    def rewind(self, number: int, mode: str = "both", force: bool = False, show: bool = False) -> str:
+        """Go back to before request `number` (as /rewind lists them): put its files and the later ones back, and/or forget the conversation from there."""
+        h = self.history
+        if h is None:
+            return "file history is off (the file_history setting), so there is nothing to rewind"
+        turns = h.listed()
+        if not 1 <= number <= len(turns):
+            return f"there is no request {number}: /rewind lists them"
+        target, later = turns[number - 1], turns[number - 1:]
+        if show:
+            files = plan_text(h.plan([t for t in later if t.pending()])) or "  (no files changed)"
+            return f'/rewind {number} would put these files back (and cut the conversation too, unless you say "code"):\n{files}'
+        lines, out, cut = [f'rewound to before request {number}: "{target.prompt}"'], None, False
+        if mode in ("code", "both"):
+            out = h.apply(h.plan([t for t in later if t.pending()]), force)
+            lines.append(outcome_text(out))
+        if mode in ("chat", "both"):
+            cut = self.cut_conversation(target, later)
+            lines.append("the conversation goes on from before that request" if cut else
+                         "the conversation can't go back that far: that request was summarised away or is no longer in it")
+        if out is not None:
+            self.undone(out, later, note=not cut)
+        left = [clean_name(e.path, 80) for t in later for e in t.pending()]
+        if cut and left:                                  # the model forgot the changes; the files still have them
+            self.agent.pending_notes.append("The conversation was rewound, but these files still hold changes from the part that was removed: "
+                                            f"{', '.join(left[:6])}. Read a file again before you edit it.")
+        self.audit("rewind", to=target.id, mode=mode, conversation=cut, forced=force or None,
+                   restored=len(out.changed) if out else 0)
+        return "\n".join(lines)
 
     def fork(self, title: str | None = None) -> Chat | None:
         """A new chat that starts as a copy of this one; this conversation carries on in the copy."""
@@ -259,6 +369,8 @@ class Session:
             return None
         name = (title or "").strip() or f"{self.chat.title or 'chat'} (fork)"
         self.chat = self.store.fork(self.chat, self.provider.model, name)
+        if self.history is not None:
+            self.history.fork_to(self.chat.id)
         return self.chat
 
     # --- the progress journal (Lesson 42b) ----------------------------------------------------
@@ -291,12 +403,15 @@ class Session:
                 or call.name in ("remember", "forget", "update_progress")):
             return
         self.turn_changed = True
+        if call.name == "run_shell" and self.history is not None:
+            self.history.note_command(str(call.arguments.get("command", "")))   # may have changed files; can't be undone
 
     def checkpoint(self, reason: str, focus: str = "") -> bool:
         """Ask the model for the updated journal and write it (Lesson 42b). Returns whether it was written."""
         if self.settings.journal == "off":
             return False
         self.ui.info(f"updating the progress journal ({reason}) ...")
+        focus = " ".join(x for x in (focus, self.undo_focus) if x)
         result = update_journal(self.provider, self.journal, self.agent.messages, self.permissions.taint, self.who(),
                                 focus=focus, on_reply=lambda reply: self.on_event("model_reply", reply))
         if not result.ok:
@@ -304,6 +419,7 @@ class Session:
             self.audit("journal_failed", why=result.reason)
             return False
         self.unjournaled = False
+        self.undo_focus = ""
         self.audit("journal", reason=reason, tainted=result.journal.tainted)
         if not any(r.source == "journal" for r in self.permissions.rules):
             self.permissions.rules.append(Rule.parse("update_progress", "allow", "journal"))
@@ -338,6 +454,8 @@ class Session:
         cost = self.costs.cost()
         self.audit("end", tool_calls=self.limits.tool_calls, tokens=self.limits.tokens,
                    cost=None if cost is None else round(cost, 6))
+        if self.history_temp is not None:               # chats aren't saved, so neither is what could undo them
+            shutil.rmtree(self.history_temp, ignore_errors=True)
 
     def set_style(self, name: str) -> None:
         """Change how the agent writes, from the next model call on. The conversation is kept."""
@@ -501,6 +619,8 @@ class Session:
     def reset(self) -> None:
         self.agent.reset()
         self.chat = None                 # the next message starts a new saved chat; this one stays as it was
+        if self.history is not None:
+            self.history.unbind()        # a new chat has no changes to undo; the old chat's stay on disk
         self.seen_notes.clear()
         self.limits.reset()
         self.cost_base = self.costs.cost() or 0.0

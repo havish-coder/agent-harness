@@ -54,6 +54,8 @@ and that line is skipped when the chat is resumed.
 - **Old chats are deleted** after 30 days without use (`chat_retention_days`; `0` keeps them for ever). Only the chats of the project you are running in are checked.
 - **Turn it off** with `--no-save` for one run, or `"save_chats": false` in your settings. Nothing is written, and `-c` and `/chats` say so.
 
+To go **back** inside a chat (forget the last few requests, and put the files they changed back), see [undo and rewind](undo.md): `/rewind` is recorded in the chat, so a resumed chat is rewound too.
+
 One chat should be open in one place at a time. Two terminals resuming the same chat would each add their own messages to the same file.
 (Different chats, or the same project from two windows, are fine.)
 

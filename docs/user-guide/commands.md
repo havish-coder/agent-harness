@@ -12,6 +12,8 @@ send a ready-made request to the model.
 | `/remember TEXT` | add a line to this project's `HARNESS.md` (`--local`: just yours, `--user`: every project) |
 | `/init` | have the agent look at the project and write a `HARNESS.md` |
 | `/progress [start\|stop\|update\|clear\|trust]` | the project's progress journal: show it, turn it on or off, update it now ([journal](journal.md)) |
+| `/undo [show\|force]` | put back the files the last request changed; a file you edited since is left alone unless `force` ([undo](undo.md)) |
+| `/rewind [N [code\|chat\|both] [show\|force]]` | list this chat's requests, or go back to before request N: its files, the conversation, or both ([undo](undo.md)) |
 | `/chats` | the saved chats of this project |
 | `/resume N` | go back to a saved chat: its number in `/chats`, a word from its title, or the start of its id |
 | `/rename TITLE` | name this chat |

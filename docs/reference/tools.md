@@ -8,8 +8,8 @@ Tools the model can call. Paths are relative to the workspace root.
 | `read_file` | yes | yes | yes | Return numbered lines from a text file, a page at a time. |
 | `glob` | yes | yes | yes | Find files by name pattern, newest first. |
 | `grep` | yes | yes | yes | Search inside files with a regular expression. |
-| `edit_file` | no | no | no | Replace exact text in a file the model has read. |
-| `write_file` | no | no | no | Create a file, or replace a whole file the model has read. |
+| `edit_file` | no | no | no | Replace exact text in a file the model has read. A copy of the file is kept first ([undo](../user-guide/undo.md)). |
+| `write_file` | no | no | no | Create a file, or replace a whole file the model has read. A copy of an existing file is kept first ([undo](../user-guide/undo.md)). |
 | `run_shell` | no | no | yes | Run a shell command; returns the exit code and output. |
 | `web_fetch` | no | yes | yes | Fetch one web page and return its text. |
 | `remember` | no | no | no | Save a note for later chats in this project (unless `auto_memory` is `off`). |

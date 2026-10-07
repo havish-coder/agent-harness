@@ -168,6 +168,8 @@ These remain even with every defense in place. Know them before you approve thin
   dedicated user account for untrusted projects. Those sandboxes are tested here as command lines only.
 - **Prompt injection can't be fully prevented**, only made visible and less effective. Be most
   careful right after the agent has read web pages or files you didn't write.
+- **Undo is the user's command, and only covers the edit tools.** The model has no tool that undoes or rewinds, the copies are in your user folder outside the paths its tools can reach, and a restore never overwrites a file you have
+  changed since (`force` does, and keeps your version). Files changed by `run_shell` are not copied and can't be undone; rewinding the conversation does not clear the "read untrusted content" state ([undo](user-guide/undo.md)).
 - **The progress journal is read by every later chat.** One written after untrusted content was read is marked, loaded fenced and tainting until you check it (`/progress trust`), and in a
   folder you haven't trusted the whole file, even a shipped one, is read as information ([journal](user-guide/journal.md)).
 - **Notes the agent saves are a way to make an attack last.** Each records whether the chat had read untrusted content when it was written; a note saved then is loaded fenced,
