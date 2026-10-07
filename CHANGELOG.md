@@ -8,6 +8,14 @@ is below 1.0, minor releases may contain breaking changes.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-07
+
+The context release. The agent now knows how big its conversation is and keeps it inside the model's window (clearing old results, then summarising),
+saves every chat so it can be resumed or forked, reads project notes (`HARNESS.md`) and keeps notes of its own, starts a new chat from a project journal
+of where the last one stopped, and can put back what it changed (`/undo`, `/rewind`). Each of those that persists something the agent wrote records
+whether untrusted content had been read, and treats it as untrusted if so. 1,231 tests.
+Start with [the context window](docs/user-guide/context.md) and [undo and rewind](docs/user-guide/undo.md).
+
 ### Added
 - The context window (ADR 0033): the harness estimates the conversation's size before every model call
   (character kinds fitted to a real tokenizer, calibrated against the server's reports) and **stops instead of
@@ -303,7 +311,9 @@ Start with [the security model](docs/security.md).
   the system prompt.
 - Terminal chat (`harness`) with tool-call display, `/reset`, `/bye` and per-turn token counts.
 
-[Unreleased]: https://github.com/havish-coder/agent-harness/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/havish-coder/agent-harness/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/havish-coder/agent-harness/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/havish-coder/agent-harness/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/havish-coder/agent-harness/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/havish-coder/agent-harness/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/havish-coder/agent-harness/compare/lesson-07...v0.2.0

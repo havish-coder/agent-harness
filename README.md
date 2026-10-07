@@ -5,13 +5,15 @@ written from scratch in Python, without agent frameworks. It talks to a local mo
 [Ollama](https://ollama.com) or to a cloud API, inspects and edits files, runs commands, and
 explains every step it takes.
 
-> **Status: v0.5, pre-release.** The agent reads, searches and edits code, runs commands and
+> **Status: v0.6, pre-release.** The agent reads, searches and edits code, runs commands and
 > fetches web pages, and what it may do is decided by code, not by the model: a workspace
 > boundary, permission modes and rules, command analysis, untrusted-content handling, hooks,
-> secret redaction, an audit log and limits (and an OS sandbox on Linux and macOS). It streams
-> its answers and runs on Ollama, Claude or any OpenAI-compatible service, in a terminal app with
-> Markdown rendering, slash commands, output styles and typeset math. Memory, sub-agents and a
-> web UI are on the [roadmap](#roadmap).
+> secret redaction, an audit log and limits (and an OS sandbox on Linux and macOS). It keeps its
+> conversation inside the model's window, saves every chat so you can resume or fork it, reads
+> your project notes, remembers where the last chat stopped, and can undo what it changed. It
+> streams its answers and runs on Ollama, Claude or any OpenAI-compatible service, in a terminal
+> app with Markdown rendering, slash commands, output styles and typeset math. Sub-agents,
+> skills and a web UI are on the [roadmap](#roadmap).
 > See the [changelog](CHANGELOG.md) for what changed in each release.
 
 ![The agent fixing a bug: it reads the file, proposes a diff, runs the tests](docs/images/demo.svg)
@@ -59,6 +61,12 @@ plus [`httpx`](https://www.python-httpx.org/). Every design decision is written 
 | ✅ | `web_fetch` with an address guard against private networks | v0.5 |
 | ✅ | Hooks, secret redaction, a hash-chained audit log, per-chat limits | v0.5 |
 | ✅ | Command sandbox on Linux and macOS; an attack lab with 66 tested attacks | v0.5 |
+| ✅ | The conversation is measured before every call, never sent if it won't fit; old results cleared, then summarised (`/context`, `/compact`) | v0.6 |
+| ✅ | The system prompt built from ordered, budgeted sections (`/prompt`) | v0.6 |
+| ✅ | Every chat saved; `-c`, `-r`, `/resume`, `/fork`; rolled-back and cleared steps replayed exactly | v0.6 |
+| ✅ | Project memory (`HARNESS.md`), notes the agent saves for itself, both trust-aware | v0.6 |
+| ✅ | A project journal: a new chat starts from where the last one stopped | v0.6 |
+| ✅ | `/undo` and `/rewind`: a copy of each file before it is changed; never overwrites your own edits | v0.6 |
 
 ## Quickstart
 Requirements: Python 3.10+, [Ollama](https://ollama.com/download), about 3 GB of disk.
@@ -94,7 +102,7 @@ Then ask something like *"How many TODOs are in my notes?"*. Full walkthrough:
 | Release | Theme |
 |---|---|
 | v0.5 ✅ | Security: path jail, permission modes and rules, shell hardening, hooks, audit log |
-| v0.6 | Context: token budgets, compaction, sessions, project and auto memory, undo |
+| v0.6 ✅ | Context: token budgets, compaction, sessions, project and auto memory, journal, undo |
 | v0.7 | Workflows: todo list, plan mode, sub-agents, skills, background tasks, MCP |
 | v0.8 | Web UI with streaming, approvals and settings |
 | v1.0 | Evals, tracing, packaging, CI |
