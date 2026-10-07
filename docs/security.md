@@ -168,6 +168,9 @@ These remain even with every defense in place. Know them before you approve thin
   dedicated user account for untrusted projects. Those sandboxes are tested here as command lines only.
 - **Prompt injection can't be fully prevented**, only made visible and less effective. Be most
   careful right after the agent has read web pages or files you didn't write.
+- **A poisoned how-to in a project's notes is followed by the model**, fenced or not (a small model ran a planted command in 6 of 6 runs). What stops the harm is that an
+  untrusted folder's notes taint the chat, so the command asks you in every mode ([memory](user-guide/memory.md)). Read the command when asked, and `/trust` only folders whose
+  instructions you would run.
 - **Saved chats hold what the agent read**: file contents and command output, on your disk, kept 30 days by default. Secrets are hidden by shape and the files are
   private to your user where the system allows, but a secret with no recognisable shape is not hidden. Delete them, or run with `--no-save`, for work that must leave no trace
   ([chats](user-guide/chats.md)).

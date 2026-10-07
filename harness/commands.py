@@ -267,11 +267,58 @@ def _trust_command(trusting: bool):
         session.audit("trust", folder=str(session.ws.root), trusted=trusting)
         session.permissions.taint.trusted = trusting
         session.refresh_hooks()
+        had_memory = bool(session.memory)
+        session.reload_memory()                       # the folder's HARNESS.md files are yours now (or aren't any more)
+        note = " Its HARNESS.md files are now read as your instructions." if trusting and had_memory else ""
         if trusting:
             return (f"trusted: {session.ws.root}. Files you read here no longer count as untrusted content "
-                    "(web pages still do)")
+                    f"(web pages still do).{note}")
         return f"no longer trusted: {session.ws.root}. File text and command output now count as untrusted content"
     return run
+
+
+def _memory(session, args):
+    """/memory · /memory reload: the HARNESS.md files the agent was given, and whose words they are."""
+    from harness.memory import LOCAL_NAME, PROJECT_NAMES, SCOPES
+    if args.strip() == "reload":
+        session.reload_memory()
+        return f"read again: {len(session.memory)} file{'s' if len(session.memory) != 1 else ''}"
+    if not session.settings.memory:
+        return "project memory is off (\"memory\": false in your settings)"
+    if not session.memory:
+        return (f"no memory files. Write {PROJECT_NAMES[0]} in this folder (or /init: the agent writes one), {LOCAL_NAME} for notes that stay "
+                f"yours, or ~/.harness/{PROJECT_NAMES[0]} for every project. /remember TEXT adds a line.")
+    rows = [f"{SCOPES[f.scope]:<28} {f.label:<26} {f.tokens:>6,} tokens  "
+            + ("yours" if f.trusted else "NOT trusted: shown as information only (/trust if you wrote it)")
+            + ("  (only the start is read)" if f.cut else "") for f in session.memory]
+    shown = f"\nfolder notes shown in this chat: {len(session.seen_notes)}" if session.seen_notes else ""
+    return "\n".join(["memory in the system prompt (general first, specific last):", *rows]) + shown
+
+
+def _remember(session, args):
+    """/remember [--user|--local] TEXT: add a line to your memory files."""
+    from harness import config
+    from harness.memory import LOCAL_NAME, PROJECT_NAMES, USER_NAME, project_file
+    words = args.split()
+    scope = "project"
+    if words and words[0] in ("--user", "--local"):
+        scope, words = words[0][2:], words[1:]
+    text = " ".join(words)
+    if not text:
+        return "usage: /remember [--user|--local] TEXT"
+    if scope == "user":
+        target = config.USER_DIR / USER_NAME
+    elif scope == "local":
+        target = session.ws.root / LOCAL_NAME
+    else:
+        target = project_file(session.ws.root) or session.ws.root / PROJECT_NAMES[0]
+    target.parent.mkdir(parents=True, exist_ok=True)
+    existing = target.read_text(encoding="utf-8", errors="replace") if target.exists() else ""
+    sep = "" if not existing or existing.endswith("\n") else "\n"
+    target.write_text(existing + sep + f"- {text}\n", encoding="utf-8")
+    session.reload_memory()
+    where = {"user": "your notes for every project", "local": "your notes for this project", "project": "this project's memory"}[scope]
+    return f"added to {where} ({target.name}). The agent has it from now on."
 
 
 def _hooks(session, args):
@@ -443,6 +490,14 @@ FIX_TESTS = """Fix the failing tests. Follow these steps exactly:
 4. Repeat until every test passes (at most 3 rounds), then say in a few lines what you changed.
 $ARGUMENTS"""
 
+INIT = """Write a HARNESS.md for this project: notes for a coding agent that will work here later.
+1. Look at the project first: list_dir the root, then read the README and the build or config files (pyproject.toml, package.json, Makefile ...).
+2. Write HARNESS.md in the project root with write_file. Plain Markdown, under 40 lines, concrete, and checked against what you read:
+   - how to run the tests and the linter: the exact commands, and which folder to run them from
+   - the layout: which folder holds what
+   - the conventions the code follows, and anything that must not be touched
+Do not write a command you did not see in the project. $ARGUMENTS"""
+
 EXPLAIN = """Explain $ARGUMENTS: what it does, how the main parts fit together, and anything surprising.
 Read the code first; quote line numbers."""
 
@@ -464,6 +519,9 @@ def builtin_commands() -> list[Command]:
         Command("trust", "trust this folder: its files are yours, not untrusted content", run=_trust_command(True)),
         Command("untrust", "stop trusting this folder", run=_trust_command(False)),
         Command("context", "where the conversation's tokens go, against the model's window", run=_context),
+        Command("memory", "the HARNESS.md notes the agent was given; `reload` reads them again", run=_memory, argument_hint="[reload]"),
+        Command("remember", "add a line to this project's HARNESS.md (--user: for every project, --local: just yours)", run=_remember,
+                argument_hint="[--user|--local] TEXT"),
         Command("compact", "replace the older conversation with a summary, to make room", run=_compact,
                 argument_hint="[what to keep in mind]"),
         Command("prompt", "the system prompt's sections and what each costs", run=_prompt, argument_hint="[full]"),
@@ -479,6 +537,7 @@ def builtin_commands() -> list[Command]:
         Command("fix-tests", "run the tests, fix failures, repeat until they pass", kind="prompt",
                 template=FIX_TESTS, argument_hint="[what to focus on]"),
         Command("explain", "explain a file or folder", kind="prompt", template=EXPLAIN, argument_hint="@path"),
+        Command("init", "have the agent write a HARNESS.md for this project", kind="prompt", template=INIT, argument_hint="[what to cover]"),
     ]
 
 

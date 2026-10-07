@@ -163,6 +163,10 @@ def main(argv=None):
     if broad and not session.permissions.taint.trusted:
         ui.warn("this folder isn't trusted: after the agent reads files or runs commands here, only rules "
                 "with a pattern run without asking. /trust if the files are yours.")
+    if any(not f.trusted for f in session.memory):
+        names = ", ".join(f.label for f in session.memory if not f.trusted)
+        ui.warn(f"{names} found, but this folder isn't trusted, so the agent reads it as information and not as your "
+                "instructions. /trust if you wrote it; /memory shows what was read.")
 
     while True:
         try:

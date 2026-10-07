@@ -45,6 +45,9 @@ PROTECTED_DIRS = {
     ".github/workflows": "CI runs it, often with secrets",
 }
 PROTECTED_FILES = {
+    "harness.md": "it is read as instructions in every later chat",
+    "harness.local.md": "it is read as instructions in every later chat",
+    "agents.md": "it is read as instructions in every later chat",
     ".pre-commit-config.yaml": "it runs on every commit",
     ".envrc": "direnv runs it when you enter the folder",
     ".gitattributes": "it can make git run filter programs",

@@ -40,6 +40,11 @@ is below 1.0, minor releases may contain breaking changes.
   exactly as it stood (clearing, summaries and rolled-back turns included), keeps its "read untrusted content" state, and drops a step that never finished. Secrets are hidden before
   writing, files are private where the OS allows, chats unused for 30 days are deleted (`chat_retention_days`), and `--no-save` or `save_chats: false` turn it off. `message`
   and `rolled_back` events. User guide: [chats and projects](docs/user-guide/chats.md).
+- Project memory (ADR 0038): `HARNESS.md` files (or `AGENTS.md`) in your user folder, the project and its subfolders, and `HARNESS.local.md`, are read into
+  the system prompt, general first and specific last; a folder's own notes are shown the first time the agent works in it. The notes of a folder you haven't
+  trusted are fenced as untrusted content and taint the chat from the start (so a command they lead to asks you, even in `bypass`); `/trust` makes them yours.
+  Memory files are protected paths. `/memory`, `/memory reload`, `/remember [--local|--user] TEXT`, `/init`; setting `memory`. A start-up banner says when notes are untrusted.
+  User guide: [project memory](docs/user-guide/memory.md).
 
 ### Changed
 - The status line's context figure is the harness's own estimate of the conversation as it stands, not the last

@@ -36,6 +36,7 @@ class Section:
     stability: int = 2                                # 0 never, 1 settings, 2 session (see the module docstring)
     required: bool = True                             # False: may be dropped when the prompt is over budget
     shrink: Callable[[int], str] | None = None        # a smaller version for a token budget (the workspace listing)
+    priority: int = 0                                 # among optional sections of the same stability, higher is dropped later
 
     @property
     def tokens(self) -> int:
@@ -81,7 +82,7 @@ def _smaller(section: Section, target: int) -> str | None:
 def assemble(sections: list[Section], budget: int | None = None) -> Assembly:
     """Join the sections, most stable first, within `budget` tokens (None: no limit)."""
     ordered = sorted((s for s in sections if s.text.strip()), key=lambda s: s.stability)   # stable sort: keeps the given order
-    current = [Section(s.name, s.text, s.stability, s.required, s.shrink) for s in ordered]
+    current = [Section(s.name, s.text, s.stability, s.required, s.shrink, s.priority) for s in ordered]
     notes: dict[str, str] = {}
     original = {s.name: s.tokens for s in current}
 
@@ -105,7 +106,7 @@ def assemble(sections: list[Section], budget: int | None = None) -> Assembly:
         optional = [s for s in current if not s.required]
         if not optional:
             break                                             # only required parts are left; report the overshoot
-        victim = max(optional, key=lambda s: (s.stability, s.tokens))
+        victim = max(optional, key=lambda s: (s.stability, -s.priority, s.tokens))
         current.remove(victim)
         notes[victim.name] = "dropped: over budget"
     parts = [Part(s.name, s.tokens, s.stability, notes.get(s.name, "")) for s in current]

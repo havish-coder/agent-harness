@@ -55,7 +55,8 @@ class Agent:
                  permissions: Permissions | None = None, fence_untrusted: bool = False,
                  hooks: Hooks | None = None, redact_results: bool = False,
                  limit_check: Callable[[], str | None] | None = None, context: ContextBudget | None = None,
-                 microcompact: bool = False, keep_recent: int = 2, auto_compact: bool = False):
+                 microcompact: bool = False, keep_recent: int = 2, auto_compact: bool = False,
+                 call_notes: Callable[[ToolCall], str] | None = None):
         self.provider = provider
         self.tools = tools if isinstance(tools, ToolRegistry) else ToolRegistry(tools)
         self.system_prompt = system_prompt
@@ -71,6 +72,7 @@ class Agent:
         self.microcompact = microcompact   # clear old results when the window fills (Lesson 38) ...
         self.keep_recent = max(1, keep_recent)   # ... but not the newest this many (at least the newest one)
         self.auto_compact = auto_compact   # summarise the older conversation when clearing isn't enough (Lesson 39)
+        self.call_notes = call_notes       # text to show beside a result: a folder's own notes (Lesson 41)
         self.hooks = hooks          # the user's scripts at fixed points (Lesson 33)
         self.fence_untrusted = fence_untrusted   # wrap outside content in <untrusted> tags (Lesson 31)
         self.usage = Usage()
@@ -150,7 +152,8 @@ class Agent:
                         result = self.note_repeats(seen, call, result)
                         from_hooks = self.post_hooks(call, result) if ran else ""     # the user's own words: not fenced
                         self.on_event("tool_result", (call, result + from_hooks))
-                        self.add(Message.tool_result(call, self.mark_untrusted(call, result, ran) + from_hooks))
+                        note = self.call_notes(call) if self.call_notes and ran and not result.startswith("Error") else ""
+                        self.add(Message.tool_result(call, self.mark_untrusted(call, result, ran) + from_hooks + note))
 
             self.stop_reason = "max_steps"
             return f"(stopped: reached the limit of {self.max_steps} steps without a final answer)"

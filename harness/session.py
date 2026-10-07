@@ -7,6 +7,7 @@ import datetime
 import json
 import subprocess
 import uuid
+from pathlib import Path
 
 from harness import config
 from harness.agent import Agent
@@ -18,6 +19,7 @@ from harness.context.tokens import ContextBudget, estimate_tokens
 from harness.context.windows import window_for
 from harness.hooks import Hooks, from_entries
 from harness.limits import Limits
+from harness.memory import MIN_FILE_TOKENS, MemoryFile, load_memory, nested_files, note_text, section_text
 from harness.providers.factory import make_provider
 from harness.providers.retry import RetryingProvider
 from harness.security.permissions import MODES, Permissions
@@ -65,6 +67,9 @@ class Session:
         self.costs = CostTracker(settings.provider, self.provider.model, settings.prices)
         self.permissions = Permissions.from_settings(ws, settings.permission_mode, settings.permissions)
         self.permissions.taint.trusted = is_trusted(ws.root, config.USER_DIR)
+        self.memory: list[MemoryFile] = []          # HARNESS.md files read into the prompt (Lesson 41)
+        self.seen_notes: set[Path] = set()           # folder notes already shown in this chat
+        self.load_memory()
         self.sandbox = detect_sandbox() if settings.sandbox != "off" else None
         required = settings.sandbox == "on" and self.sandbox is None
         if required:
@@ -94,7 +99,8 @@ class Session:
                            permissions=self.permissions, fence_untrusted=settings.fence_untrusted,
                            hooks=self.hooks, redact_results=settings.redact_secrets, limit_check=self.limit_reason,
                            context=self.context, microcompact=settings.microcompact,
-                           keep_recent=settings.microcompact_keep, auto_compact=settings.auto_compact)
+                           keep_recent=settings.microcompact_keep, auto_compact=settings.auto_compact,
+                           call_notes=self.folder_notes)
         self._status_error_shown = False
         self.audit("session", workspace=str(ws.root), provider=settings.provider, model=self.provider.model,
                    mode=self.permissions.mode, trusted=self.permissions.taint.trusted, tools=[t.name for t in tools],
@@ -250,11 +256,49 @@ class Session:
             sections.append(Section("untrusted content", SYSTEM_RULE, 1))
         if self.settings.microcompact:
             sections.append(Section("clearing rule", CLEARING_RULE, 1))
+        if self.memory:
+            fenced = self.settings.fence_untrusted
+
+            def shrink_memory(max_tokens: int) -> str:
+                return section_text(self.memory, fenced, max(MIN_FILE_TOKENS, max_tokens // len(self.memory)))
+            sections.append(Section("project memory", section_text(self.memory, fenced), 1, required=False, shrink=shrink_memory,
+                                    priority=1))
         if self.style.prompt:
             sections.append(Section("output style", f"# Output style: {self.style.name}\n{self.style.prompt}", 1, required=False))
         sections.append(Section("environment", environment_text(ws.root, self.shell_name), 2, required=False))
         sections.append(Section("workspace files", files, 2, required=False, shrink=listing))
         return assemble(sections, budget=max(600, int(self.context.window * PROMPT_SHARE)))
+
+    # --- project memory (Lesson 41) -------------------------------------------------------------
+    def load_memory(self) -> None:
+        """Read the HARNESS.md files. Those of a folder that isn't trusted are someone else's words: they count as untrusted content."""
+        taint = self.permissions.taint
+        taint.sources[:] = [s for s in taint.sources if not s.startswith("memory ")]
+        self.memory = load_memory(self.ws, config.USER_DIR, taint.trusted, self.ui.warn) if self.settings.memory else []
+        for f in self.memory:
+            if not f.trusted and f.label not in " ".join(taint.sources):
+                taint.sources.append(f"memory {f.label}")
+
+    def reload_memory(self) -> None:
+        """Read the files again and rebuild the prompt (after an edit, or /trust). The start of the prompt changes, so the
+        server reads the conversation again once."""
+        self.load_memory()
+        self.rebuild_prompt()
+
+    def folder_notes(self, call) -> str:
+        """The notes of a folder the agent has just started working in, to show beside the result of the call that went there."""
+        tool = self.agent.tools.get(call.name)
+        if not self.settings.memory or tool is None or tool.subject != "path" or not isinstance(call.arguments.get("path"), str):
+            return ""
+        try:
+            target = self.ws.path(call.arguments["path"])
+        except (OSError, ValueError):
+            return ""
+        found = nested_files(self.ws, target, self.permissions.taint.trusted, self.seen_notes)
+        for f in found:
+            if not f.trusted:
+                self.permissions.taint.sources.append(f"memory {f.label}")
+        return note_text(found, self.settings.fence_untrusted)
 
     def rebuild_prompt(self) -> None:
         """Assemble the prompt again (after a style change) and put it in the running conversation."""
@@ -336,6 +380,7 @@ class Session:
     def reset(self) -> None:
         self.agent.reset()
         self.chat = None                 # the next message starts a new saved chat; this one stays as it was
+        self.seen_notes.clear()
         self.limits.reset()
         self.cost_base = self.costs.cost() or 0.0
         self.permissions.taint.clear()   # a new conversation has read nothing yet

@@ -8,6 +8,9 @@ send a ready-made request to the model.
 |---|---|
 | `/help` | list all commands, including your own |
 | `/reset` (`/new`, `/clear`) | start a new chat; the one you were in stays saved ([chats](chats.md)) |
+| `/memory` | the HARNESS.md notes the agent was given, and whether they count as yours; `/memory reload` reads them again ([memory](memory.md)) |
+| `/remember TEXT` | add a line to this project's `HARNESS.md` (`--local`: just yours, `--user`: every project) |
+| `/init` | have the agent look at the project and write a `HARNESS.md` |
 | `/chats` | the saved chats of this project |
 | `/resume N` | go back to a saved chat: its number in `/chats`, a word from its title, or the start of its id |
 | `/rename TITLE` | name this chat |
