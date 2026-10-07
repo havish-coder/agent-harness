@@ -109,6 +109,8 @@ class Session:
             self.limits.tokens += data.usage.input_tokens + data.usage.output_tokens
         elif kind == "tool_call":
             self.limits.tool_calls += 1        # every call the model asks for, run or refused
+        elif kind in ("microcompact", "compact"):
+            self.ws.forget_reads()             # those results left the conversation: reading them again must return the text, not "unchanged"
         self.record(kind, data)
         self.ui(kind, data)
 

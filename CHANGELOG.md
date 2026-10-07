@@ -40,6 +40,10 @@ is below 1.0, minor releases may contain breaking changes.
 - The status line's context figure is the harness's own estimate of the conversation as it stands, not the last
   request's reported size.
 
+### Fixed
+- Reading a file again after its earlier result was cleared or summarised away answered "unchanged since you read these lines", which was
+  no longer true; it now returns the text.
+
 ## [0.5.0] - 2026-10-06
 
 The security release. The agent still reads, searches, edits and runs commands, but what it may do is now decided by

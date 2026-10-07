@@ -422,3 +422,19 @@ def test_a_task_that_reads_then_acts_is_cleared_and_never_needs_a_summary(ws):
     kinds = [k for k, _ in events]
     assert agent.stop_reason == "completed" and agent.compactions == 0 and "compacting" not in kinds
     assert agent.cleared_results >= 3
+
+
+def test_a_file_read_again_after_its_result_was_cleared_returns_its_text(tmp_path, monkeypatch):
+    """Reading the same lines twice normally says "unchanged since you read these earlier". Once the first result has been
+    replaced by a note (or summarised away), that is no longer true and the model needs the text."""
+    from harness.context.micro import MicroResult
+    s = make_session(tmp_path, monkeypatch)
+    read = next(t for t in s.agent.tools if t.name == "read_file")
+    first = s.agent.tools.invoke(read, {"path": "part0.txt"})
+    assert "row 000" in first and "unchanged since you read" in s.agent.tools.invoke(read, {"path": "part0.txt"})
+    s.on_event("microcompact", MicroResult())
+    assert "row 000" in s.agent.tools.invoke(read, {"path": "part0.txt"})
+    assert "unchanged since you read" in s.agent.tools.invoke(read, {"path": "part0.txt"})       # and it is tracked again
+    from harness.context.compact import Compaction
+    s.on_event("compact", Compaction("Done: x", 3, 900, 300))
+    assert "row 000" in s.agent.tools.invoke(read, {"path": "part0.txt"})
