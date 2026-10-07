@@ -133,5 +133,10 @@ class ContextBudget:
                  else "warn" if decided >= self.warn * self.limit else "ok")
         return ContextStatus(estimated, raw, self.limit, self.window, level, parts)
 
+    def to_free(self, status: ContextStatus, share: float) -> int:
+        """How many (uncalibrated) estimate tokens to remove for the decision figure to fall to `share` of the limit."""
+        scale = self.calibrator.ratio * self.margin
+        return max(0, round(status.raw - share * status.limit / scale))
+
     def observe(self, status: ContextStatus, reported_input_tokens: int) -> None:
         self.calibrator.observe(status.raw, reported_input_tokens)

@@ -43,6 +43,10 @@ class Tool:
     # Where the text this tool returns comes from, when someone else may have written it (Lesson 31):
     # "file", "command", "web" or "external". None: the result is made by the harness itself.
     content_kind: str | None = None
+    # True when calling the tool again gives the model the same information back (a read, a search, a fetch,
+    # a command's output), so an old result may be replaced by a short note when the window fills (Lesson 38).
+    # Fail-closed like the other flags: a tool that doesn't say so is never cleared.
+    clearable: bool = False
 
     def schema(self) -> dict:
         """The provider-neutral description sent to the model."""
@@ -73,7 +77,7 @@ SUBJECTS = ("path", "command", "url")
 def tool(fn: Callable | None = None, *, name: str | None = None, read_only: Flag = False,
          concurrency_safe: Flag = False, destructive: Flag = False,
          max_result_chars: int = DEFAULT_MAX_RESULT_CHARS, subject: str | None = "auto",
-         content_kind: str | None = None) -> Any:
+         content_kind: str | None = None, clearable: bool = False) -> Any:
     """Turn a function into a `Tool`. Use as `@tool` or `@tool(read_only=True, ...)`.
 
     - name: the function name (or `name=`)
@@ -83,6 +87,7 @@ def tool(fn: Callable | None = None, *, name: str | None = None, read_only: Flag
     - subject: by default the `path`, `command` or `url` argument, if the function has one
     - content_kind: "file", "command", "web" or "external" when the result carries text someone
       else wrote; it gets fenced as untrusted and may taint the conversation (Lesson 31)
+    - clearable: an old result may be replaced by a note when the window fills; the model can call the tool again
     """
     def build(f: Callable) -> Tool:
         description, arg_docs = parse_docstring(f)
@@ -103,6 +108,7 @@ def tool(fn: Callable | None = None, *, name: str | None = None, read_only: Flag
             destructive=destructive,
             max_result_chars=max_result_chars,
             content_kind=content_kind,
+            clearable=clearable,
         )
 
     return build(fn) if fn is not None else build

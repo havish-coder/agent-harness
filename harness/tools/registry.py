@@ -38,6 +38,10 @@ class ToolRegistry:
     def __len__(self):
         return len(self._tools)
 
+    def clearable_names(self) -> set[str]:
+        """The tools whose old results may be replaced by a note (Lesson 38)."""
+        return {t.name for t in self._tools.values() if t.clearable}
+
     def schemas(self) -> list[dict]:
         return [t.schema() for t in self._tools.values()]
 

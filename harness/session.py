@@ -38,6 +38,9 @@ To find where something is defined or used, grep for a likely word (e.g. grep 't
 Paths are relative to the workspace root. Be concise."""
 WORKSPACE_HEADER = "Workspace files (snapshot at session start; may have changed since):"
 LISTING_LINES = 50            # the longest workspace listing in the prompt; a small window shrinks it
+# Said only when old results may be cleared (Lesson 38): what a note means, and the one thing the model can do about it.
+CLEARING_RULE = ("When the window fills, old tool results are replaced by a note starting '[cleared to save space'. "
+                 "Before you move on from a result you will need later, write down what you need from it in your reply.")
 SYSTEM_PROMPT = ROLE + "\n\n" + WORKSPACE_HEADER + "\n{snapshot}"   # the whole prompt in one string: for scripts and recordings
 
 
@@ -85,7 +88,8 @@ class Session:
                            on_event=self.on_event, approve=approver, stream=settings.stream,
                            permissions=self.permissions, fence_untrusted=settings.fence_untrusted,
                            hooks=self.hooks, redact_results=settings.redact_secrets, limit_check=self.limit_reason,
-                           context=self.context)
+                           context=self.context, microcompact=settings.microcompact,
+                           keep_recent=settings.microcompact_keep)
         self._status_error_shown = False
         self.audit("session", workspace=str(ws.root), provider=settings.provider, model=self.provider.model,
                    mode=self.permissions.mode, trusted=self.permissions.taint.trusted, tools=[t.name for t in tools],
@@ -151,6 +155,8 @@ class Session:
                        output_tokens=data.usage.output_tokens, stop=data.stop_reason)
         elif kind == "limit":
             self.audit("limit", why=data)
+        elif kind == "microcompact":
+            self.audit("microcompact", tools=[c.tool for c in data.cleared], saved_tokens=data.saved)
 
     def close(self) -> None:
         """The chat is over: record the totals."""
@@ -176,6 +182,8 @@ class Session:
         sections = [Section("role", ROLE, 0)]
         if self.settings.fence_untrusted:
             sections.append(Section("untrusted content", SYSTEM_RULE, 1))
+        if self.settings.microcompact:
+            sections.append(Section("clearing rule", CLEARING_RULE, 1))
         if self.style.prompt:
             sections.append(Section("output style", f"# Output style: {self.style.name}\n{self.style.prompt}", 1, required=False))
         sections.append(Section("environment", environment_text(ws.root, self.shell_name), 2, required=False))

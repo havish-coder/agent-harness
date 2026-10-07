@@ -234,6 +234,9 @@ def _context(session, args):
              row("your messages", parts.user), row("assistant", parts.assistant),
              row("tool results", sum(parts.results.values()),
                  "  (" + " · ".join(f"{n} {t:,}" for n, t in results[:4]) + ")" if results else "")]
+    if session.agent.cleared_results:
+        lines.append(f"{session.agent.cleared_results} old tool result{'s' if session.agent.cleared_results != 1 else ''} "
+                     f"cleared to make room (~{session.agent.cleared_tokens:,} tokens): the model can call the tool again")
     if session.reported_tokens:
         lines.append(f"the model server last reported reading {session.reported_tokens:,} tokens"
                      + (f" (our estimate is calibrated by {status.estimated / max(status.raw, 1):.2f}x)"

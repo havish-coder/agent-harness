@@ -69,6 +69,8 @@ class Settings:
     web_fetch: bool = True                       # give the agent the web_fetch tool (Lesson 32)
     web_allow_local: list = field(default_factory=list)   # "host" or "host:port" entries web_fetch may reach on this machine
     fence_untrusted: bool = True                 # wrap file text, command output, web pages in <untrusted> tags (Lesson 31)
+    microcompact: bool = True                    # replace old tool results by notes when the window fills (Lesson 38)
+    microcompact_keep: int = 2                   # ... but always keep the newest this many results
     shell_env_keep: list = field(default_factory=list)   # environment variables commands may see despite looking secret
     sources: dict = field(default_factory=dict, repr=False, compare=False)   # key → where it came from
 
@@ -94,7 +96,7 @@ TYPES: dict[str, tuple] = {
     "shell": (str, type(None)), "max_retries": (int,), "prices": (dict,),
     "output_style": (str,), "status_line": (str, type(None)), "additional_directories": (list,),
     "permission_mode": (str,), "permissions": (dict,), "shell_env_keep": (list,), "fence_untrusted": (bool,), "web_fetch": (bool,), "hooks": (dict,), "audit_log": (bool,), "sandbox": (str,), "sandbox_network": (bool,), "redact_secrets": (bool,),
-    "limits": (dict,), "web_allow_local": (list,),
+    "limits": (dict,), "web_allow_local": (list,), "microcompact": (bool,), "microcompact_keep": (int,),
 }
 # Settings a project file may not set, and why: a cloned repository could otherwise run its own
 # code on your machine, or give the agent access to your other folders, just by being opened.

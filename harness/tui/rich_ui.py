@@ -105,6 +105,11 @@ class RichUI:
             self.console.print(line)
         elif kind == "tool_denied":
             self.console.print(Text("  └ denied", style="yellow"))
+        elif kind == "microcompact":
+            self.stop_spinner()
+            self.stop_live()
+            self.console.print(Text(f"  ↺ the window is filling: cleared {len(data.cleared)} old result"
+                                    f"{'s' if len(data.cleared) != 1 else ''} (~{data.saved:,} tokens)", style="dim"))
         elif kind == "tool_result":
             call, result = data
             lines = result.splitlines() or ["(empty)"]

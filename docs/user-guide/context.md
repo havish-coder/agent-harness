@@ -57,6 +57,7 @@ sections, **most stable first**:
 |---|---|---|
 | role | what the agent is, how to use its tools | never |
 | untrusted content | the rule for text wrapped in `<untrusted>` tags ([details](untrusted-content.md)) | with the `fence_untrusted` setting |
+| clearing rule | what a `[cleared to save space ...]` note means (only while `microcompact` is on) | with the `microcompact` setting |
 | output style | the style chosen with `/style` (none for `default`) | with `/style` |
 | environment | today's date, the system, the shell `run_shell` uses, the git branch and how many files changed | per session |
 | workspace files | a listing of the folder, taken at session start | per session |
@@ -64,10 +65,11 @@ sections, **most stable first**:
 `/prompt` lists them with their cost:
 
 ```text
-system prompt: ~229 tokens of a 2,048 budget (8,192-token window, 25% allowed)
+system prompt: ~273 tokens of a 2,048 budget (8,192-token window, 25% allowed)
   role                   73  changes: never
   untrusted content      65  changes: with a setting
-  environment            48  changes: per session
+  clearing rule          42  changes: with a setting
+  environment            50  changes: per session
   workspace files        43  changes: per session
 ```
 
@@ -83,3 +85,33 @@ or in a folder with thousands of files the harness first **shrinks the file list
 sections, the most volatile first. `/prompt` marks them, for example `workspace files  310  [shrunk from 1,240]`.
 The role and the untrusted-content rule are never dropped. If a listing is cut, ask the agent to use `glob` or
 `list_dir` to see the rest, or raise `context_window`.
+
+## When the window fills: clearing old results
+Most of a long conversation is tool results: whole files, search hits, test output. A result matters while
+the agent works on it and rarely afterwards, and for a read or a search the agent can simply ask again. So when the
+conversation passes 70% of what the window allows, the harness **replaces the oldest results with short notes**:
+
+```text
+[cleared to save space: read_file(path='src/cart.py'), about 2,698 tokens, 133 lines. Call the tool again if you still need it.]
+```
+
+and the line `↺ the window is filling: cleared 3 old results (~7,900 tokens)` appears in the terminal. No model call is
+involved, nothing is summarised, and the messages keep their place in the history; only the text of the result is gone.
+
+- **Which results.** Only those of tools that can be asked again: `read_file`, `grep`, `glob`, `list_dir`, `run_shell`
+  (its output) and `web_fetch`. Edits and writes are never cleared. The **newest two** results are kept whole
+  (`microcompact_keep`), and if the conversation still doesn't fit the harness keeps only the newest one.
+- **How far.** Oldest first, until the conversation is at half of what it may use, so it doesn't start again on the very
+  next call. A result too small to be worth a note is left alone.
+- **What a note says.** The call, its size and its length, never the result's own words: a cleared file or web page may
+  have contained text written by someone else, and a note sits outside the `<untrusted>` fence.
+- **Seeing it.** `/context` adds a line (`4 old tool results cleared to make room (~8,100 tokens)`), and the
+  [audit log](audit-and-limits.md) records which tools and how many tokens.
+- **Turning it off.** `"microcompact": false` in your settings. The agent then stops with `context_full` as before.
+
+**What you lose.** Anything the agent saw only in a cleared result and did not use or write down. A task that *uses*
+each result as it goes (read a file, change it, run the tests) loses nothing. A task that *collects* from many sources
+for an answer at the end can lose what it collected; the system prompt asks the model to write down what it needs from
+a result before moving on, but small models do not always do it. If a long collecting task matters, split it into steps,
+or ask the agent to write its findings to a file as it goes. To go further than clearing can, `/reset` starts a fresh chat;
+summarising a long conversation (compaction) is planned for the same release.

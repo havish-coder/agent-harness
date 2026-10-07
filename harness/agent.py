@@ -9,7 +9,8 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
-from harness.context.tokens import ContextBudget
+from harness.context.micro import TARGET_SHARE, MicroResult, clear_old_results
+from harness.context.tokens import ContextBudget, ContextStatus
 from harness.hooks import Hooks
 from harness.messages import Message, Reply, ToolCall, Usage
 from harness.providers.base import Provider, ProviderError, StreamingProvider, TextDelta, ThinkingDelta
@@ -41,7 +42,8 @@ class Agent:
                  approve: Approver | None = None, stream: bool = True,
                  permissions: Permissions | None = None, fence_untrusted: bool = False,
                  hooks: Hooks | None = None, redact_results: bool = False,
-                 limit_check: Callable[[], str | None] | None = None, context: ContextBudget | None = None):
+                 limit_check: Callable[[], str | None] | None = None, context: ContextBudget | None = None,
+                 microcompact: bool = False, keep_recent: int = 2):
         self.provider = provider
         self.tools = tools if isinstance(tools, ToolRegistry) else ToolRegistry(tools)
         self.system_prompt = system_prompt
@@ -54,6 +56,8 @@ class Agent:
         self.redact_results = redact_results     # hide secrets in tool results (Lesson 34)
         self.limit_check = limit_check           # returns why the session must stop, or None (Lesson 34)
         self.context = context      # measures the conversation against the model's window (Lesson 36)
+        self.microcompact = microcompact   # clear old results when the window fills (Lesson 38) ...
+        self.keep_recent = max(1, keep_recent)   # ... but not the newest this many (at least the newest one)
         self.hooks = hooks          # the user's scripts at fixed points (Lesson 33)
         self.fence_untrusted = fence_untrusted   # wrap outside content in <untrusted> tags (Lesson 31)
         self.usage = Usage()
@@ -64,6 +68,8 @@ class Agent:
     def reset(self):
         """Forget the conversation (the model itself never remembered anything)."""
         self.messages = [Message.system(self.system_prompt)]
+        self.cleared_results = 0     # results replaced by notes in this conversation, and the tokens that gave back
+        self.cleared_tokens = 0
 
     def run(self, user_input: str) -> str:
         """Handle one user message. May call the model and tools many times."""
@@ -87,6 +93,8 @@ class Agent:
                     return (f"(stopped: {why}. /limits shows the limits; raise one in your settings, "
                             "or /reset to start a new chat)")
                 status = self.context.check(self.messages, schemas) if self.context else None
+                if status and self.microcompact and status.level != "ok":
+                    status = self.free_space(status, schemas)      # before giving up: clear old results (Lesson 38)
                 if status:
                     self.on_event("context", status)
                     if status.level == "full":      # stop condition #4: never send what won't fit (Lesson 36)
@@ -126,6 +134,24 @@ class Agent:
             del self.messages[turn_start:]
             self.stop_reason = "cancelled" if isinstance(e, KeyboardInterrupt) else "error"
             raise
+
+    def free_space(self, status: ContextStatus, schemas: list[dict]) -> ContextStatus:
+        """The window is filling: replace old results of clearable tools with notes, oldest first, down to half
+        the limit (so this doesn't run again on the very next call). If the conversation still doesn't fit, go on
+        keeping only the newest result: in a small window "keep the last two" can be the whole window.
+        Returns the status afterwards."""
+        total = MicroResult()
+        for keep in sorted({self.keep_recent, 1}, reverse=True):
+            total.cleared += clear_old_results(self.messages, self.tools.clearable_names(), keep,
+                                               need=self.context.to_free(status, TARGET_SHARE)).cleared
+            status = self.context.check(self.messages, schemas)
+            if status.level != "full":
+                break
+        if total:
+            self.cleared_results += len(total.cleared)
+            self.cleared_tokens += total.saved
+            self.on_event("microcompact", total)
+        return status
 
     def call_model(self, schemas: list[dict]) -> Reply:
         """One model call. Streams text out as events when the provider can (Lesson 16)."""

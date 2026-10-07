@@ -100,7 +100,7 @@ def make_fs_tools(workspace: Path | Workspace) -> list[Tool]:
     """Build the read-only file tools bound to one workspace."""
     ws = as_workspace(workspace)
 
-    @tool(read_only=True, concurrency_safe=True)
+    @tool(read_only=True, concurrency_safe=True, clearable=True)
     def list_dir(path: str = ".") -> str:
         """List the files and folders inside a workspace folder. Folders end with '/'.
 
@@ -117,7 +117,7 @@ def make_fs_tools(workspace: Path | Workspace) -> list[Tool]:
                  else f"{p.name}/" if p.is_dir() else f"{p.name}  ({p.stat().st_size:,} bytes)" for p in entries]
         return "\n".join(lines) or "(empty folder)"
 
-    @tool(read_only=True, concurrency_safe=True, content_kind="file")
+    @tool(read_only=True, concurrency_safe=True, content_kind="file", clearable=True)
     def read_file(path: str, offset: int = 1, limit: int = READ_LIMIT) -> str:
         """Read a text file from the workspace. Lines come back numbered, like `cat -n`.
 

@@ -20,6 +20,7 @@ agent = Agent(provider, tools, system_prompt, on_event=on_event)
 | `redacted` | `(ToolCall, [kinds])` | secrets were found and hidden in a tool result |
 | `limit` | `str` | a session limit was reached; the string says which |
 | `context` | `ContextStatus` | before each model call: the estimated size of the conversation, the limit, and `level` (`ok`, `warn`, `critical`, `full`) |
+| `microcompact` | `MicroResult` | the window was filling and old tool results were replaced by notes; `.cleared` lists them and `.saved` is the estimated tokens given back ([context](../user-guide/context.md#when-the-window-fills-clearing-old-results)) |
 | `tool_refused` | `(ToolCall, str)` | the permissions denied a call (a deny rule, plan mode, a path outside the workspace); the string is the reason |
 | `tool_denied` | `ToolCall` | the user answered no; the model receives a denial message instead of a result |
 | `tool_result` | `(ToolCall, str)` | after every call, run or not; the string is exactly what the model will read |

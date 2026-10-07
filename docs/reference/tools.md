@@ -2,22 +2,24 @@
 
 Tools the model can call. Paths are relative to the workspace root.
 
-| Tool | Read-only | Parallel-safe | Description |
-|---|---|---|---|
-| `list_dir` | yes | yes | List a folder. Folders end with `/`; files show their size. |
-| `read_file` | yes | yes | Return numbered lines from a text file, a page at a time. |
-| `glob` | yes | yes | Find files by name pattern, newest first. |
-| `grep` | yes | yes | Search inside files with a regular expression. |
-| `edit_file` | no | no | Replace exact text in a file the model has read. |
-| `write_file` | no | no | Create a file, or replace a whole file the model has read. |
-| `run_shell` | no | no | Run a shell command; returns the exit code and output. |
-| `web_fetch` | no | yes | Fetch one web page and return its text. |
+| Tool | Read-only | Parallel-safe | Clearable | Description |
+|---|---|---|---|---|
+| `list_dir` | yes | yes | yes | List a folder. Folders end with `/`; files show their size. |
+| `read_file` | yes | yes | yes | Return numbered lines from a text file, a page at a time. |
+| `glob` | yes | yes | yes | Find files by name pattern, newest first. |
+| `grep` | yes | yes | yes | Search inside files with a regular expression. |
+| `edit_file` | no | no | no | Replace exact text in a file the model has read. |
+| `write_file` | no | no | no | Create a file, or replace a whole file the model has read. |
+| `run_shell` | no | no | yes | Run a shell command; returns the exit code and output. |
+| `web_fetch` | no | yes | yes | Fetch one web page and return its text. |
 
 Results longer than a tool's limit (8,000 characters by default) are shortened: the agent
 keeps the first 80% and the last 20% and says how much was cut in the middle.
 
 *Read-only* tools never change anything and run without approval. *Parallel-safe* tools may
-run at the same time as other parallel-safe calls. See
+run at the same time as other parallel-safe calls. *Clearable* tools return something the model can get again by calling
+the tool again, so when the window fills their old results may be replaced by a short note
+([details](../user-guide/context.md#when-the-window-fills-clearing-old-results)). See
 [Writing a tool](../developer-guide/writing-tools.md#safety-flags) for what the flags mean.
 
 ## `list_dir`

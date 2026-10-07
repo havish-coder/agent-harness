@@ -53,6 +53,10 @@ class PlainUI:
             print(f"{CYAN}  → {data.name}({args}){RESET}")
         elif kind == "tool_denied":
             print(f"{DIM}    (denied){RESET}")
+        elif kind == "microcompact":
+            self.end_line()
+            print(f"{DIM}  (the window is filling: cleared {len(data.cleared)} old result"
+                  f"{'s' if len(data.cleared) != 1 else ''}, ~{data.saved:,} tokens){RESET}")
         elif kind == "tool_result":
             _, result = data
             preview = result if len(result) <= 300 else result[:300] + " …"
