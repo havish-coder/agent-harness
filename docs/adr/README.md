@@ -40,3 +40,4 @@ Copy [the template](template.md) to `NNNN-short-title.md` with the next number.
 | [0031](0031-redact-audit-and-limit.md) | Redact secrets by shape, keep a hash-chained audit log, and limit a session | Accepted |
 | [0032](0032-optional-os-sandbox-for-commands.md) | Run commands in an OS sandbox where the system offers one | Accepted |
 | [0033](0033-estimate-context-and-refuse-overflow.md) | Estimate the conversation's size ourselves, and refuse to send what won't fit | Accepted |
+| [0034](0034-system-prompt-from-ordered-sections.md) | Build the system prompt from sections ordered by how often they change, within a budget | Accepted |

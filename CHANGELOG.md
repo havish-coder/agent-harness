@@ -16,6 +16,13 @@ is below 1.0, minor releases may contain breaking changes.
   and the line after each answer show the estimate, marked `~`. Windows for cloud models are known by name.
   `context` event; `context_full` stop reason. User guide: [the context window](docs/user-guide/context.md).
 
+- The system prompt is built from named sections, most stable first, within a quarter of the window (ADR 0034):
+  role, the untrusted-content rule, the output style, an **environment** section (date, system, the shell commands
+  run in, the git branch and number of changed files) and the workspace listing. An oversized listing is shrunk,
+  then optional sections are dropped, and what happened is recorded. `/prompt` shows each section's cost and
+  `/prompt full` the text. `scripts/prefix_cache.py` measures the server's prompt cache. User guide:
+  [the system prompt](docs/user-guide/context.md#the-system-prompt).
+
 ### Changed
 - The status line's context figure is the harness's own estimate of the conversation as it stands, not the last
   request's reported size.

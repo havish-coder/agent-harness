@@ -243,6 +243,25 @@ def _context(session, args):
     return "\n".join(lines)
 
 
+def _prompt(session, args):
+    """/prompt · /prompt full: the system prompt's sections, what each costs, and what was shrunk or dropped."""
+    from harness.context.prompt import PROMPT_SHARE, STABILITY_NAMES
+    built = session.prompt
+    if args == "full":
+        return built.text
+    budget = f"{built.budget:,}" if built.budget else "no limit"
+    lines = [f"system prompt: ~{built.tokens:,} tokens of a {budget} budget "
+             f"({session.context.window:,}-token window, {int(PROMPT_SHARE * 100)}% allowed)"]
+    for part in built.parts:
+        lines.append(f"  {part.name:<18} {part.tokens:>6,}  changes: {STABILITY_NAMES.get(part.stability, part.stability):<16}"
+                     + (f"  [{part.note}]" if part.note else ""))
+    if built.over_budget:
+        lines.append("over budget: only required sections are left. A bigger window (context_window) gives it room")
+    lines.append("Sections are ordered by how often they change, so a model server can reuse its work on the start of the prompt. "
+                 "/prompt full prints it.")
+    return "\n".join(lines)
+
+
 def _audit(session, args):
     """/audit [N] · /audit verify"""
     from harness.audit import format_entry, verify
@@ -358,6 +377,7 @@ def builtin_commands() -> list[Command]:
         Command("trust", "trust this folder: its files are yours, not untrusted content", run=_trust_command(True)),
         Command("untrust", "stop trusting this folder", run=_trust_command(False)),
         Command("context", "where the conversation's tokens go, against the model's window", run=_context),
+        Command("prompt", "the system prompt's sections and what each costs", run=_prompt, argument_hint="[full]"),
         Command("audit", "the audit log: recent entries, or `verify` to check it wasn't altered", run=_audit, argument_hint="[N|verify]"),
         Command("limits", "what this chat has used against its limits", run=_limits),
         Command("hooks", "the hooks in your settings, and whether each runs", run=_hooks),

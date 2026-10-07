@@ -48,3 +48,38 @@ check that the model still fits your GPU (see [choosing a model](models.md)).
 For cloud models the harness knows the window by model name (Claude 200K, GPT-4o 128K, Gemini 1M, ...);
 a model it doesn't know is planned as 32,000 tokens, so it errs on the side of stopping early. The
 `context_window` setting overrides all of it.
+
+## The system prompt
+The system prompt is the standing instruction at the start of every request. The harness builds it from named
+sections, **most stable first**:
+
+| Section | Holds | Changes |
+|---|---|---|
+| role | what the agent is, how to use its tools | never |
+| untrusted content | the rule for text wrapped in `<untrusted>` tags ([details](untrusted-content.md)) | with the `fence_untrusted` setting |
+| output style | the style chosen with `/style` (none for `default`) | with `/style` |
+| environment | today's date, the system, the shell `run_shell` uses, the git branch and how many files changed | per session |
+| workspace files | a listing of the folder, taken at session start | per session |
+
+`/prompt` lists them with their cost:
+
+```text
+system prompt: ~229 tokens of a 2,048 budget (8,192-token window, 25% allowed)
+  role                   73  changes: never
+  untrusted content      65  changes: with a setting
+  environment            48  changes: per session
+  workspace files        43  changes: per session
+```
+
+`/prompt full` prints exactly what the model reads.
+
+**Why this order.** A model server keeps the computed state of the start of the last prompt and reuses it up to
+the first character that differs. The harness never changes the system prompt between turns, so each turn only
+costs the new messages: on `qwen3:4b-instruct` about 250 ms, against 1,100 to 1,300 ms when the system prompt
+differs from the last request. Changing it mid-session (`/style`) is allowed and costs that second once.
+
+**The budget.** The system prompt may use a quarter of the window (never less than 600 tokens). On a small window
+or in a folder with thousands of files the harness first **shrinks the file listing** to fit, then drops optional
+sections, the most volatile first. `/prompt` marks them, for example `workspace files  310  [shrunk from 1,240]`.
+The role and the untrusted-content rule are never dropped. If a listing is cut, ask the agent to use `glob` or
+`list_dir` to see the rest, or raise `context_window`.

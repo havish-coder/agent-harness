@@ -16,6 +16,7 @@ send a ready-made request to the model.
 | `/mode [name]` | show the [permission modes](permissions.md), or switch to one |
 | `/trust`, `/untrust` | trust this folder, or stop: [untrusted content](untrusted-content.md) |
 | `/context` | where the conversation's tokens go, against the model's window ([details](context.md)) |
+| `/prompt [full]` | the system prompt's sections and what each costs; `full` prints the text the model reads ([details](context.md#the-system-prompt)) |
 | `/audit [N\|verify]` | the [audit log](audit-and-limits.md): recent entries, or check the chain |
 | `/limits` | what this chat has used against its [limits](audit-and-limits.md#limits) |
 | `/hooks` | the [hooks](hooks.md) in your settings and whether each runs |

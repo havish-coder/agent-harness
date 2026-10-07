@@ -12,6 +12,7 @@ from harness import config
 from harness.agent import Agent
 from harness.audit import AuditLog
 from harness.config import Settings
+from harness.context.prompt import PROMPT_SHARE, Assembly, Section, assemble, environment_text
 from harness.context.tokens import ContextBudget
 from harness.context.windows import window_for
 from harness.hooks import Hooks, from_entries
@@ -23,20 +24,20 @@ from harness.security.sandbox import detect as detect_sandbox
 from harness.security.sandbox import hint as sandbox_hint
 from harness.security.taint import SYSTEM_RULE
 from harness.security.trust import is_trusted
-from harness.styles import BUILTIN, Style, apply_style
+from harness.styles import BUILTIN, Style
 from harness.tools import default_tools
 from harness.tools.fs import workspace_snapshot
+from harness.tools.shell import detect_shell
 from harness.usage import CostTracker, format_cost
 from harness.workspace import Workspace
 
 # Short and direct works best for small models (see course/07-first-tools-and-repl.md).
-SYSTEM_PROMPT = """You are a helpful agent. Use tools to inspect the workspace; never guess file contents.
+ROLE = """You are a helpful agent. Use tools to inspect the workspace; never guess file contents.
 Find files with glob, search inside them with grep, explore folders with list_dir.
 To find where something is defined or used, grep for a likely word (e.g. grep 'timeout' to find a timeout setting).
-Paths are relative to the workspace root. Be concise.
-
-Workspace files (snapshot at session start; may have changed since):
-{snapshot}"""
+Paths are relative to the workspace root. Be concise."""
+WORKSPACE_HEADER = "Workspace files (snapshot at session start; may have changed since):"
+SYSTEM_PROMPT = ROLE + "\n\n" + WORKSPACE_HEADER + "\n{snapshot}"   # the whole prompt in one string: for scripts and recordings
 
 
 class Session:
@@ -47,9 +48,6 @@ class Session:
             ui.warn(f"warning: unknown output style '{settings.output_style}'; using default")
             settings.output_style = "default"
         self.style = self.styles[settings.output_style]
-        self.base_prompt = SYSTEM_PROMPT.format(snapshot=workspace_snapshot(ws))
-        if settings.fence_untrusted:
-            self.base_prompt += "\n\n" + SYSTEM_RULE
         self.reported_tokens = 0         # what the model server last said it read
         self.provider = RetryingProvider(self.make_provider(settings.model), max_retries=settings.max_retries,
                                          fallback=self.make_provider(settings.fallback_model)
@@ -79,8 +77,10 @@ class Session:
         window = window_for(settings.provider, self.provider.model, settings.context_window,
                             settings.sources.get("context_window", "default") != "default")
         self.context = ContextBudget(window, reserve=min(settings.max_output_tokens, window // 4))
+        self.shell_name = detect_shell(settings.shell).name
+        self.prompt = self.build_prompt()
         self.agent = Agent(self.provider, tools,
-                           apply_style(self.base_prompt, self.style), max_steps=settings.max_steps,
+                           self.prompt.text, max_steps=settings.max_steps,
                            on_event=self.on_event, approve=approver, stream=settings.stream,
                            permissions=self.permissions, fence_untrusted=settings.fence_untrusted,
                            hooks=self.hooks, redact_results=settings.redact_secrets, limit_check=self.limit_reason,
@@ -162,8 +162,29 @@ class Session:
         self.style = self.styles[name]
         self.settings.output_style = name
         self.settings.sources["output_style"] = "command"
-        self.agent.system_prompt = apply_style(self.base_prompt, self.style)
-        self.agent.messages[0].content = self.agent.system_prompt
+        self.rebuild_prompt()
+
+    def build_prompt(self) -> Assembly:
+        """The system prompt from its sections, most stable first, within a share of the window (Lesson 37)."""
+        ws, limit_lines = self.ws, 50
+
+        def listing(max_tokens: int) -> str:
+            return f"{WORKSPACE_HEADER}\n{workspace_snapshot(ws, limit=max(5, max_tokens // 6))}"
+        sections = [Section("role", ROLE, 0)]
+        if self.settings.fence_untrusted:
+            sections.append(Section("untrusted content", SYSTEM_RULE, 1))
+        if self.style.prompt:
+            sections.append(Section("output style", f"# Output style: {self.style.name}\n{self.style.prompt}", 1, required=False))
+        sections.append(Section("environment", environment_text(ws.root, self.shell_name), 2, required=False))
+        sections.append(Section("workspace files", f"{WORKSPACE_HEADER}\n{workspace_snapshot(ws, limit=limit_lines)}", 2,
+                                required=False, shrink=listing))
+        return assemble(sections, budget=max(600, int(self.context.window * PROMPT_SHARE)))
+
+    def rebuild_prompt(self) -> None:
+        """Assemble the prompt again (after a style change) and put it in the running conversation."""
+        self.prompt = self.build_prompt()
+        self.agent.system_prompt = self.prompt.text
+        self.agent.messages[0].content = self.prompt.text
 
     def refresh_hooks(self, announce: bool = False) -> None:
         """Choose the hooks that run (Lesson 33). A project's hooks run only in a trusted folder; when
