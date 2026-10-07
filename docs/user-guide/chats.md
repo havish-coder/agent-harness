@@ -28,8 +28,9 @@ The conversation is rebuilt exactly as it stood: your messages, the agent's repl
 What does **not** come back:
 - **The system prompt**: you get today's (the date, the git state, the file listing, your current settings), not the old one.
 - **Which files the agent has read.** Before it edits a file it must read it again, which is the safe direction.
-- **The model server's memory of the conversation.** The first reply after a resume reads the whole conversation again, which takes a few seconds
-  on a local model.
+- **The model server's memory of the conversation**, once it has forgotten it (a local server does after a few minutes idle, a hosted one after its cache
+  time-out). The first reply after that reads the whole conversation again, which takes a few seconds on a local model. Resuming within a minute or two of
+  quitting usually still finds it cached.
 - **A step that never finished.** If the terminal was closed while the agent was in the middle of a tool call, the unfinished call is dropped
   (you are told how many messages), because the model can't continue from a call with no result.
 - **Permissions you granted for the session** (`/permissions allow ...`, "always allow") and `/mode` changes: they are decisions about *this* run.
