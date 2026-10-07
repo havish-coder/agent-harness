@@ -160,6 +160,18 @@ class RichUI:
     def warn(self, text: str):
         self.console.print(Text(text, style="yellow"))
 
+    def ask_choice(self, question: str, options: dict[str, str]) -> str:
+        """Ask once; returns the key of the option chosen, or "" for Enter or the end of input."""
+        self.stop_spinner()
+        self.stop_live()
+        self.console.print(Text(question, style="yellow"))
+        labels = " / ".join(f"[{k}] {v}" for k, v in options.items())
+        try:
+            answer = self.console.input(Text(f"  {labels}: ", style="yellow")).strip().lower()
+        except EOFError:
+            return ""
+        return answer[:1] if answer[:1] in options else ""
+
     def error(self, text: str):
         self.stop_spinner()
         self.stop_live()

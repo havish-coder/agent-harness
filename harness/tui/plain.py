@@ -88,6 +88,15 @@ class PlainUI:
     def info(self, text: str):
         print(f"{DIM}{text}{RESET}")
 
+    def ask_choice(self, question: str, options: dict[str, str]) -> str:
+        """Ask once; returns the key of the option chosen, or "" for Enter or the end of input."""
+        labels = " / ".join(f"[{k}] {v}" for k, v in options.items())
+        try:
+            answer = input(f"{YELLOW}{question}\n  {labels}: {RESET}").strip().lower()
+        except EOFError:
+            return ""
+        return answer[:1] if answer[:1] in options else ""
+
     def warn(self, text: str):
         self.end_line()
         print(f"{YELLOW}{text}{RESET}")

@@ -19,6 +19,7 @@ variable `HARNESS_<NAME>` (upper case) and most as a flag. How the layers combin
 | `chat_retention_days` | integer | `30` | | Delete this project's saved chats not used for this many days when a session starts; `0` keeps them. Not accepted from project settings. |
 | `memory` | boolean | `true` | | Read `HARNESS.md` / `AGENTS.md` / `HARNESS.local.md` files into the system prompt ([memory](../user-guide/memory.md)). Not accepted from project settings. |
 | `auto_memory` | string | `"ask"` | | Notes the agent saves for itself ([notes](../user-guide/auto-memory.md)): `ask` asks each time, `on` saves without asking while the chat has read no untrusted content, `off` removes the tools. Not accepted from project settings. |
+| `journal` | string | `"ask"` | | The project's progress journal ([journal](../user-guide/journal.md)): `ask` offers one the first time a turn changes something, `on` keeps one without asking, `off` neither reads nor writes it. `"never"` in the question writes `off` to `.harness/settings.local.json`. Not accepted from project settings. |
 | `max_output_tokens` | integer | `4096` | | Longest reply the model may write, in tokens. Stops a model that keeps repeating itself; a reply cut off here ends with a note. |
 | `max_steps` | integer | `20` | `--max-steps` | Maximum model calls per request. |
 | `stream` | boolean | `true` | `--no-stream` | Show answers as they are generated. |

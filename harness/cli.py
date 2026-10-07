@@ -51,6 +51,7 @@ def parse_args(argv=None):
                    help="carry on with a saved chat: its number in /chats, a word from its title, or the start of its id "
                         "(with no value: choose from a list)")
     p.add_argument("--no-save", action="store_true", help="don't save this conversation")
+    p.add_argument("--fresh", action="store_true", help="don't read the project's progress journal this time")
     return p.parse_args(argv)
 
 
@@ -108,6 +109,7 @@ def run_turn(session: Session, watcher: KeyWatcher, message: str) -> None:
     window = info["context_window"]
     context = f" · context ~{100 * info['context_tokens'] // window}%" if window else ""
     ui.usage_line(f"{turn.input_tokens:,} input{cached} + {turn.output_tokens:,} output tokens · {money}{context}")
+    session.after_turn(getattr(ui, "ask_choice", None))        # keep the progress journal up to date, or offer one (Lesson 42b)
 
 
 def main(argv=None):
@@ -139,7 +141,7 @@ def main(argv=None):
         return
 
     try:
-        session = Session(settings, ws, ui, approver, styles)
+        session = Session(settings, ws, ui, approver, styles, interface="terminal", fresh=args.fresh)
     except ProviderError as e:
         sys.exit(f"error: {e}")
     session.commands = commands
@@ -150,6 +152,9 @@ def main(argv=None):
     stop_keys = "Esc or Ctrl+C stops a running task" if watcher.available else "Ctrl+C stops a running task"
     ui.banner("Agent harness", f"{settings.provider} · {session.provider.model} · {workspace}")
     ui.info(f"/help commands · @file attaches a file · {stop_keys}")
+    banner = session.journal_banner()
+    if banner:
+        ui.info(banner)
     if args.continue_chat or args.resume is not None:
         info = choose_chat(session, args.resume, args.continue_chat, ui)
         if info is not None:

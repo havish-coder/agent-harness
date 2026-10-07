@@ -1,7 +1,7 @@
 # CLI reference
 
 ```text
-harness [--provider NAME] [--model MODEL] [--base-url URL] [--fallback-model MODEL] [--workspace PATH] [--max-steps N] [--mode MODE] [--yes] [--no-stream] [--think] [--plain] [--show-config] [-c] [-r [CHAT]] [--no-save]
+harness [--provider NAME] [--model MODEL] [--base-url URL] [--fallback-model MODEL] [--workspace PATH] [--max-steps N] [--mode MODE] [--yes] [--no-stream] [--think] [--plain] [--show-config] [-c] [-r [CHAT]] [--no-save] [--fresh]
 ```
 
 | Flag | Default | Description |
@@ -19,6 +19,7 @@ harness [--provider NAME] [--model MODEL] [--base-url URL] [--fallback-model MOD
 | `--show-config` | | Print the effective settings and which layer each came from, then exit. |
 | `-c`, `--continue` | off | Carry on with the most recent chat in this folder ([chats](../user-guide/chats.md)). |
 | `-r`, `--resume [CHAT]` | | Carry on with a saved chat: its number in `/chats`, a word from its title, or the start of its id. With no value, choose from a list. |
+| `--fresh` | off | Don't read the project's progress journal this time ([journal](../user-guide/journal.md)). |
 | `--no-save` | off | Don't save this conversation (the `save_chats` setting, for one run). |
 | `--think` | off | For thinking models (e.g. `qwen3:4b`): ask for reasoning in a separate field and show it dimmed. |
 

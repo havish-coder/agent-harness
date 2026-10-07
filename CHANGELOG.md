@@ -48,6 +48,10 @@ is below 1.0, minor releases may contain breaking changes.
 - Notes the agent saves for itself (ADR 0039): tools `remember`, `recall` and `forget`; the notes' one-line descriptions go in the next chats' prompts (within 800 tokens), kept in your folder per
   project, never in the repository. Setting `auto_memory`: `ask` (default), `on` (no questions while the chat has read no untrusted content) or `off`. Each note records whether untrusted content
   had been read when it was written; such a note is loaded fenced and taints later chats until `/memory trust NAME` or `/memory forget NAME`. User guide: [saved notes](docs/user-guide/auto-memory.md).
+- The project journal (ADR 0040): `.harness/progress.md`, six fixed sections (Goal, Done so far, Issues & approaches, Current state, Next steps, Key files), so a new chat starts from where the last stopped.
+  Opt-in: the first turn that changes something asks once (yes / not now / never). Then it is updated after changing turns, before the conversation is summarised and when the chat ends, by a model call whose
+  answer is checked before it is saved; several chats (terminal or web) share it safely. A journal written after untrusted reading is marked, read fenced and tainting. `update_progress` tool, `/progress`
+  command, setting `journal`, flag `--fresh`, start-up line. User guide: [the progress journal](docs/user-guide/journal.md).
 
 ### Changed
 - The status line's context figure is the harness's own estimate of the conversation as it stands, not the last

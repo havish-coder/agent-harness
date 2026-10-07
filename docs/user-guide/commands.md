@@ -11,6 +11,7 @@ send a ready-made request to the model.
 | `/memory` | the HARNESS.md notes the agent was given and the notes it saved, and whether each counts as yours; `/memory reload`, `/memory forget NAME`, `/memory trust NAME` ([memory](memory.md), [saved notes](auto-memory.md)) |
 | `/remember TEXT` | add a line to this project's `HARNESS.md` (`--local`: just yours, `--user`: every project) |
 | `/init` | have the agent look at the project and write a `HARNESS.md` |
+| `/progress [start\|stop\|update\|clear\|trust]` | the project's progress journal: show it, turn it on or off, update it now ([journal](journal.md)) |
 | `/chats` | the saved chats of this project |
 | `/resume N` | go back to a saved chat: its number in `/chats`, a word from its title, or the start of its id |
 | `/rename TITLE` | name this chat |

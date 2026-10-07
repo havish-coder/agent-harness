@@ -384,6 +384,48 @@ def _context(session, args):
     return "\n".join(lines)
 
 
+def _progress(session, args):
+    """/progress [show|start|stop|update [FOCUS]|clear|trust]: the project's progress journal."""
+    from harness.config import write_local_setting
+    word, _, rest = args.strip().partition(" ")
+    jf, root = session.journal, session.ws.root
+    if word in ("", "show"):
+        doc = jf.read()
+        mode = session.settings.journal
+        if doc is None:
+            return ("no progress journal in this project. /progress start begins one: later chats then start from where this one stopped."
+                    + (" (it is turned off: \"journal\": \"off\")" if mode == "off" else ""))
+        status = {"off": "off: not read or updated", "on": "on", "ask": "on (the file exists)"}[mode]
+        trust = "untrusted: written after untrusted content was read (/progress trust once you have checked it)" if doc.tainted else "yours"
+        return "\n".join([f"{jf.path}  [{status}]", f"last updated {doc.updated or '?'} by {doc.updated_by or '?'} · {trust}", "", doc.body])
+    if word == "start":
+        write_local_setting(root, "journal", "on")
+        session.settings.journal = "on"
+        ok = session.checkpoint("started")
+        return "the progress journal is on: later chats start from it" if ok else "the journal is on, but the first update didn't work (see above); /progress update tries again"
+    if word == "stop":
+        write_local_setting(root, "journal", "off")
+        session.settings.journal = "off"
+        return f"the progress journal is off: it is no longer read or updated. {jf.path.name} is kept; /progress start turns it on again"
+    if word == "update":
+        if session.settings.journal == "off":
+            return "the progress journal is off. /progress start turns it on"
+        return "updated" if session.checkpoint("asked for", rest) else "not updated (see above)"
+    if word == "clear":
+        return "deleted the progress journal" if jf.delete() else "there is no progress journal to delete"
+    if word == "trust":
+        doc = jf.read()
+        if doc is None:
+            return "there is no progress journal"
+        if not doc.tainted:
+            return "the journal is already yours"
+        doc.trust, doc.sources = "clean", []
+        jf.write(doc)
+        session.reload_memory()
+        return "the journal is now yours: it no longer counts as untrusted (in a folder you haven't trusted it is still read as information)"
+    return "usage: /progress [show|start|stop|update [what to stress]|clear|trust]"
+
+
 def _compact(session, args):
     """/compact [what to keep in mind]: replace the older conversation with a summary, now."""
     from harness.context.tokens import estimate_tokens
@@ -547,6 +589,8 @@ def builtin_commands() -> list[Command]:
         Command("memory", "the HARNESS.md notes the agent was given; `reload` reads them again", run=_memory, argument_hint="[reload]"),
         Command("remember", "add a line to this project's HARNESS.md (--user: for every project, --local: just yours)", run=_remember,
                 argument_hint="[--user|--local] TEXT"),
+        Command("progress", "the project's progress journal: show, start, stop, update, clear, trust", run=_progress,
+                argument_hint="[show|start|stop|update|clear|trust]"),
         Command("compact", "replace the older conversation with a summary, to make room", run=_compact,
                 argument_hint="[what to keep in mind]"),
         Command("prompt", "the system prompt's sections and what each costs", run=_prompt, argument_hint="[full]"),

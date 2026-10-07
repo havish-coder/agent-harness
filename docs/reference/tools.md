@@ -15,6 +15,7 @@ Tools the model can call. Paths are relative to the workspace root.
 | `remember` | no | no | no | Save a note for later chats in this project (unless `auto_memory` is `off`). |
 | `recall` | yes | yes | yes | Show a saved note, or list them. |
 | `forget` | no | no | no | Delete a saved note. |
+| `update_progress` | no | no | no | Write one section of the project's progress journal (unless `journal` is `off`). |
 
 Results longer than a tool's limit (8,000 characters by default) are shortened: the agent
 keeps the first 80% and the last 20% and says how much was cut in the middle.

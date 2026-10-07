@@ -15,11 +15,14 @@ from harness.audit import AuditLog
 from harness.automemory import RULE as NOTES_RULE
 from harness.automemory import AutoMemory, Note, index_text, make_memory_tools
 from harness.chats import Chat, ChatInfo, ChatStore, Replay, replay, title_from
-from harness.config import Settings
+from harness.config import Settings, write_local_setting
 from harness.context.prompt import PROMPT_SHARE, Assembly, Section, assemble, environment_text
 from harness.context.tokens import ContextBudget, estimate_tokens
 from harness.context.windows import window_for
 from harness.hooks import Hooks, from_entries
+from harness.journal import Journal, JournalFile, make_journal_tools
+from harness.journal import section_text as journal_section
+from harness.journal import update as update_journal
 from harness.limits import Limits
 from harness.memory import MIN_FILE_TOKENS, MemoryFile, load_memory, nested_files, note_text, section_text
 from harness.providers.factory import make_provider
@@ -50,8 +53,17 @@ SYSTEM_PROMPT = ROLE + "\n\n" + WORKSPACE_HEADER + "\n{snapshot}"   # the whole 
 
 
 class Session:
-    def __init__(self, settings: Settings, ws: Workspace, ui, approver, styles: dict[str, Style] | None = None):
+    def __init__(self, settings: Settings, ws: Workspace, ui, approver, styles: dict[str, Style] | None = None,
+                 interface: str = "terminal", fresh: bool = False):
         self.settings, self.ws, self.ui, self.approver = settings, ws, ui, approver
+        self.interface = interface       # "terminal" or "web": named in the progress journal's stamp (Lesson 42b)
+        self.fresh = fresh               # don't read the progress journal this run
+        self.journal = JournalFile(ws.root)
+        self.journal_doc: Journal | None = None      # what the journal said when this chat started
+        self.turn_changed = False        # did a tool change something in this turn?
+        self.unjournaled = False         # changes made since the journal was last updated
+        self.journal_declined = False    # the user said "not now" in this chat
+        self.not_run: set[str] = set()   # calls that were refused or denied: their results don't count as changes
         self.styles = styles or {s.name: s for s in BUILTIN}
         if settings.output_style not in self.styles:
             ui.warn(f"warning: unknown output style '{settings.output_style}'; using default")
@@ -86,6 +98,10 @@ class Session:
                               sandbox_network=settings.sandbox_network, sandbox_required=required)
         if self.automemory is not None:
             tools = tools + make_memory_tools(self.automemory, self.permissions.taint)
+        if settings.journal != "off":
+            tools = tools + make_journal_tools(self.journal, self.permissions.taint, self.who)
+            if self.journal.exists() or settings.journal == "on":
+                self.permissions.rules.append(Rule.parse("update_progress", "allow", "journal"))   # blanket: ends with untrusted reading
         for warning in self.permissions.unknown_tools([t.name for t in tools]):
             ui.warn(f"warning: {warning}")
         self.hooks = Hooks([], ws.root, self.permissions, settings.shell_env_keep)
@@ -129,6 +145,12 @@ class Session:
             self.limits.tokens += data.usage.input_tokens + data.usage.output_tokens
         elif kind == "tool_call":
             self.limits.tool_calls += 1        # every call the model asks for, run or refused
+        elif kind in ("tool_denied", "tool_refused"):
+            self.not_run.add((data if kind == "tool_denied" else data[0]).id)
+        elif kind == "tool_result":
+            self.note_change(*data)
+        elif kind == "compacting" and self.unjournaled and self.journal_active():
+            self.checkpoint("before the conversation is summarised")
         elif kind in ("microcompact", "compact"):
             self.ws.forget_reads()             # those results left the conversation: reading them again must return the text, not "unchanged"
         if kind in ("message", "rolled_back", "microcompact", "compact"):
@@ -239,8 +261,80 @@ class Session:
         self.chat = self.store.fork(self.chat, self.provider.model, name)
         return self.chat
 
+    # --- the progress journal (Lesson 42b) ----------------------------------------------------
+    def who(self) -> str:
+        """Which chat is writing, for the journal's stamp: the interface and the chat's title (or its first request)."""
+        title = self.chat.title if self.chat is not None else ""
+        title = title or title_from(next((m.content for m in self.agent.messages if m.role == "user" and not m.content.startswith("[Summary")), ""))
+        return f'{self.interface} chat "{title or "new chat"}"'
+
+    def journal_fenced(self) -> bool:
+        """Is the journal someone else's words? Yes in a folder that isn't trusted, and when it was written after untrusted reading."""
+        return not self.permissions.taint.trusted or (self.journal_doc is not None and self.journal_doc.tainted)
+
+    def journal_active(self) -> bool:
+        return self.settings.journal != "off" and (self.journal.exists() or self.settings.journal == "on")
+
+    def journal_banner(self) -> str | None:
+        """One line for the start of a chat that is resuming from a journal."""
+        doc = self.journal_doc
+        if doc is None:
+            return None
+        state = doc.current_state()
+        words = "as information" if self.journal_fenced() else "to pick up from"
+        return f"progress journal read {words} (updated {doc.updated or 'earlier'})" + (f": {state}" if state else "")
+
+    def note_change(self, call, result: str) -> None:
+        """Remember that a tool changed something this turn (the journal is updated after a turn that did)."""
+        tool = self.agent.tools.get(call.name)
+        if (tool is None or call.id in self.not_run or result.startswith("Error") or tool.is_read_only(call.arguments)
+                or call.name in ("remember", "forget", "update_progress")):
+            return
+        self.turn_changed = True
+
+    def checkpoint(self, reason: str, focus: str = "") -> bool:
+        """Ask the model for the updated journal and write it (Lesson 42b). Returns whether it was written."""
+        if self.settings.journal == "off":
+            return False
+        self.ui.info(f"updating the progress journal ({reason}) ...")
+        result = update_journal(self.provider, self.journal, self.agent.messages, self.permissions.taint, self.who(),
+                                focus=focus, on_reply=lambda reply: self.on_event("model_reply", reply))
+        if not result.ok:
+            self.ui.warn(f"the progress journal wasn't updated: {result.reason}")
+            self.audit("journal_failed", why=result.reason)
+            return False
+        self.unjournaled = False
+        self.audit("journal", reason=reason, tainted=result.journal.tainted)
+        if not any(r.source == "journal" for r in self.permissions.rules):
+            self.permissions.rules.append(Rule.parse("update_progress", "allow", "journal"))
+        return True
+
+    def after_turn(self, ask=None) -> None:
+        """A turn ended. If it changed something: update the journal, or (once) offer to start one. `ask(question, options)` -> key."""
+        changed, self.turn_changed = self.turn_changed, False
+        mode = self.settings.journal
+        if changed:
+            self.unjournaled = True
+        if mode == "off" or not changed:
+            return
+        if self.journal.exists() or mode == "on":
+            self.checkpoint("after changes")
+        elif mode == "ask" and ask is not None and not self.journal_declined:
+            choice = ask("Keep a progress journal for this project, so later chats can pick up where this one stopped?",
+                         {"y": "yes", "n": "not now", "v": "never for this project"})
+            if choice == "y":
+                self.checkpoint("started")
+            elif choice == "v":
+                write_local_setting(self.ws.root, "journal", "off")
+                self.settings.journal = "off"
+                self.ui.info("the progress journal is off for this project (/progress start turns it on)")
+            else:
+                self.journal_declined = True
+
     def close(self) -> None:
-        """The chat is over: record the totals."""
+        """The chat is over: update the journal if there is one and things changed, and record the totals."""
+        if self.unjournaled and self.journal_active():
+            self.checkpoint("chat ended")
         cost = self.costs.cost()
         self.audit("end", tool_calls=self.limits.tool_calls, tokens=self.limits.tokens,
                    cost=None if cost is None else round(cost, 6))
@@ -272,6 +366,8 @@ class Session:
                 return section_text(self.memory, fenced, max(MIN_FILE_TOKENS, max_tokens // len(self.memory)))
             sections.append(Section("project memory", section_text(self.memory, fenced), 1, required=False, shrink=shrink_memory,
                                     priority=1))
+        if self.journal_doc is not None:
+            sections.append(Section("progress journal", journal_section(self.journal_doc, self.journal_fenced()), 2, required=False, priority=1))
         if self.automemory is not None:
             sections.append(Section("notes rule", NOTES_RULE, 1, required=False, priority=1))
             if self.notes:
@@ -292,6 +388,13 @@ class Session:
         for f in self.memory:
             if not f.trusted and f.label not in " ".join(taint.sources):
                 taint.sources.append(f"memory {f.label}")
+        self.journal_doc = None
+        if self.settings.journal != "off" and not self.fresh:
+            doc = self.journal.read()
+            if doc is not None and doc.body.strip():
+                self.journal_doc = doc
+                if self.journal_fenced():
+                    taint.sources.append("memory progress journal")
         self.notes = self.automemory.notes() if self.automemory is not None else []
         for n in self.notes:                              # saved after untrusted content was read: still counts as having read it
             if n.tainted:
