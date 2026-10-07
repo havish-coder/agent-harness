@@ -8,6 +8,7 @@ you haven't installed it yet.
 - [The workspace and its boundary](workspace.md): which files the agent can use, and allowing more folders
 - [Permissions: modes and rules](permissions.md): what runs without asking, what asks, what's refused
 - [Reading web pages](web.md): `web_fetch`, where it can connect, and your own servers
+- [Chats and projects](chats.md): every conversation is saved; `-c` and `/resume` carry on, `/fork` copies
 - [The context window](context.md): what fills it, `/context`, and what happens when it is full
 - [The command sandbox](sandbox.md): confine what commands can write (Linux, macOS)
 - [Secrets, the audit log and limits](audit-and-limits.md): what's hidden from the model, what is recorded, what stops a runaway chat

@@ -24,6 +24,8 @@ agent = Agent(provider, tools, system_prompt, on_event=on_event)
 | `compacting` | `int` | the harness is about to ask the model to summarise this many older messages ([context](../user-guide/context.md#summarising-the-conversation-compact)) |
 | `compact` | `Compaction` | the older messages were replaced by a summary; `.removed`, `.before` and `.after` (estimated tokens), `.fenced` (marked untrusted) |
 | `compact_failed` | `str` | the model could not write a summary (an error, or an empty one); the conversation is unchanged |
+| `message` | `Message` | a message was added to the conversation (your request, the model's reply, a tool result), after it was added; a saved chat writes it down ([chats](../user-guide/chats.md)) |
+| `rolled_back` | `int` | a turn that failed was undone; the conversation now has this many messages after the system prompt |
 | `tool_refused` | `(ToolCall, str)` | the permissions denied a call (a deny rule, plan mode, a path outside the workspace); the string is the reason |
 | `tool_denied` | `ToolCall` | the user answered no; the model receives a denial message instead of a result |
 | `tool_result` | `(ToolCall, str)` | after every call, run or not; the string is exactly what the model will read |

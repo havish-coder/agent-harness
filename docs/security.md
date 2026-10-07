@@ -57,6 +57,7 @@ flowchart LR
 | **Secrets** | API keys in environment variables or `.env`, tokens in files |
 | **The computer** | processes, startup items, installed software |
 | **Your network position** | services on `localhost`, your home network, cloud metadata addresses |
+| **Your saved conversations** | what you asked and what the agent read, in `~/.harness/projects/` |
 | **Money** | cloud API spending |
 | **Your attention** | approval prompts you have learned to click through protect nothing |
 
@@ -167,6 +168,9 @@ These remain even with every defense in place. Know them before you approve thin
   dedicated user account for untrusted projects. Those sandboxes are tested here as command lines only.
 - **Prompt injection can't be fully prevented**, only made visible and less effective. Be most
   careful right after the agent has read web pages or files you didn't write.
+- **Saved chats hold what the agent read**: file contents and command output, on your disk, kept 30 days by default. Secrets are hidden by shape and the files are
+  private to your user where the system allows, but a secret with no recognisable shape is not hidden. Delete them, or run with `--no-save`, for work that must leave no trace
+  ([chats](user-guide/chats.md)).
 - **Cloud providers see what the agent sees.** Use a local model for code that must not leave
   your machine.
 

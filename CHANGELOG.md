@@ -35,6 +35,11 @@ is below 1.0, minor releases may contain breaking changes.
   three failures in a row. `/compact [what to keep in mind]` does it on demand; setting `auto_compact` (default on);
   `compacting`, `compact` and `compact_failed` events; `/context`, `/export` and the audit log know about it. User guide:
   [summarising](docs/user-guide/context.md#summarising-the-conversation-compact).
+- Chats (ADR 0037): every conversation is saved as it happens, in your user folder, one file per chat, grouped by project. `-c` carries on with the latest chat,
+  `-r` with one you choose; `/chats`, `/resume`, `/rename`, `/fork` do the same from inside; `/reset` starts a new chat and leaves the old one saved. A resumed chat is rebuilt
+  exactly as it stood (clearing, summaries and rolled-back turns included), keeps its "read untrusted content" state, and drops a step that never finished. Secrets are hidden before
+  writing, files are private where the OS allows, chats unused for 30 days are deleted (`chat_retention_days`), and `--no-save` or `save_chats: false` turn it off. `message`
+  and `rolled_back` events. User guide: [chats and projects](docs/user-guide/chats.md).
 
 ### Changed
 - The status line's context figure is the harness's own estimate of the conversation as it stands, not the last

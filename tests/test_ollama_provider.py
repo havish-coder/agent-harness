@@ -119,8 +119,9 @@ def test_agent_streams_deltas_before_tool_calls_and_answer():
     events = []
     agent = Agent(provider, [look], "s", on_event=lambda k, d: events.append(k))
     assert agent.run("go") == "Done"
-    assert events == ["model_call", "text_delta", "model_reply", "tool_call", "permission", "tool_result",
-                      "model_call", "text_delta", "model_reply"]
+    assert [k for k in events if k != "message"] == ["model_call", "text_delta", "model_reply", "tool_call", "permission",
+                                                      "tool_result", "model_call", "text_delta", "model_reply"]
+    assert events.count("message") == 4                  # the request, the reply with the call, its result, the answer (Lesson 40)
 
 
 def test_stream_can_be_turned_off():

@@ -10,7 +10,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from harness.commands import load_commands
+from harness.commands import load_commands, resume_text
 from harness.config import USER_DIR, ConfigError, describe, load_dotenv, load_settings
 from harness.mentions import expand_mentions
 from harness.providers.base import ProviderError
@@ -45,7 +45,42 @@ def parse_args(argv=None):
     p.add_argument("--think", action="store_true", help="for thinking models: show their reasoning separately")
     p.add_argument("--plain", action="store_true", help="plain text output (no colours, Markdown or spinners)")
     p.add_argument("--show-config", action="store_true", help="print the effective settings and where each came from")
+    p.add_argument("-c", "--continue", dest="continue_chat", action="store_true",
+                   help="carry on with the most recent chat in this folder")
+    p.add_argument("-r", "--resume", nargs="?", const="", default=None, metavar="CHAT",
+                   help="carry on with a saved chat: its number in /chats, a word from its title, or the start of its id "
+                        "(with no value: choose from a list)")
+    p.add_argument("--no-save", action="store_true", help="don't save this conversation")
     return p.parse_args(argv)
+
+
+def choose_chat(session: Session, ref: str | None, latest: bool, ui):
+    """The chat the user asked to resume at start-up, or None (with a message saying why)."""
+    store = session.store
+    if store is None:
+        ui.warn("chats aren't being saved, so there is nothing to resume")
+        return None
+    if latest:
+        info = store.latest()
+        if info is None:
+            ui.info("no earlier chat in this folder; starting a new one")
+        return info
+    if ref:
+        info = store.find(ref)
+        if info is None:
+            ui.warn(f"no single saved chat matches '{ref}'; starting a new one. /chats lists them")
+        return info
+    infos = store.infos()
+    if not infos:
+        ui.info("no earlier chat in this folder; starting a new one")
+        return None
+    for n, i in enumerate(infos[:15], 1):
+        ui.info(f"  {n:>2}  {i.age():<12} {i.messages:>4} msgs  {i.title or '(no title)'}")
+    try:
+        picked = input("resume which chat? (number, or Enter for a new one) ").strip()
+    except EOFError:
+        return None
+    return store.find(picked) if picked else None
 
 
 def run_turn(session: Session, watcher: KeyWatcher, message: str) -> None:
@@ -87,7 +122,7 @@ def main(argv=None):
     flags = {"provider": args.provider, "model": args.model, "base_url": args.base_url,
              "fallback_model": args.fallback_model, "max_steps": args.max_steps,
              "stream": False if args.no_stream else None, "think": True if args.think else None,
-             "permission_mode": "bypass" if args.yes else args.mode}
+             "permission_mode": "bypass" if args.yes else args.mode, "save_chats": False if args.no_save else None}
     try:
         _, env_warnings = load_dotenv(workspace)
         settings, warnings = load_settings(workspace, flags)
@@ -115,6 +150,10 @@ def main(argv=None):
     stop_keys = "Esc or Ctrl+C stops a running task" if watcher.available else "Ctrl+C stops a running task"
     ui.banner("Agent harness", f"{settings.provider} · {session.provider.model} · {workspace}")
     ui.info(f"/help commands · @file attaches a file · {stop_keys}")
+    if args.continue_chat or args.resume is not None:
+        info = choose_chat(session, args.resume, args.continue_chat, ui)
+        if info is not None:
+            ui.info(resume_text(session, info))
     if session.sandbox is not None:
         ui.info(session.sandbox.describe(settings.sandbox_network))
     if settings.permission_mode != "default":

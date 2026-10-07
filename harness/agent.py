@@ -98,7 +98,7 @@ class Agent:
                 self.stop_reason = "blocked"
                 return blocked
         self.turn_start = len(self.messages)
-        self.messages.append(Message.user(user_input))
+        self.add(Message.user(user_input))
         schemas = self.tools.schemas()
         self.stop_reason = None
         seen: dict[str, tuple[str, int]] = {}   # call → (result, times seen), for note_repeats
@@ -131,7 +131,7 @@ class Agent:
                 if status:
                     self.context.observe(status, reply.usage.input_tokens)
                 self.usage += reply.usage
-                self.messages.append(reply.message)
+                self.add(reply.message)
                 self.on_event("model_reply", reply)
 
                 if not reply.message.tool_calls:  # stop condition #1: no tools wanted = final answer
@@ -150,7 +150,7 @@ class Agent:
                         result = self.note_repeats(seen, call, result)
                         from_hooks = self.post_hooks(call, result) if ran else ""     # the user's own words: not fenced
                         self.on_event("tool_result", (call, result + from_hooks))
-                        self.messages.append(Message.tool_result(call, self.mark_untrusted(call, result, ran) + from_hooks))
+                        self.add(Message.tool_result(call, self.mark_untrusted(call, result, ran) + from_hooks))
 
             self.stop_reason = "max_steps"
             return f"(stopped: reached the limit of {self.max_steps} steps without a final answer)"
@@ -158,8 +158,14 @@ class Agent:
             # Error or Ctrl+C mid-turn: roll back this turn so the history stays consistent
             # (e.g. no assistant tool_calls left without their results).
             del self.messages[self.turn_start:]
+            self.on_event("rolled_back", len(self.messages) - 1)    # a saved chat undoes the same messages (Lesson 40)
             self.stop_reason = "cancelled" if isinstance(e, KeyboardInterrupt) else "error"
             raise
+
+    def add(self, message: Message) -> None:
+        """Add to the conversation, and tell whoever is saving it (Lesson 40)."""
+        self.messages.append(message)
+        self.on_event("message", message)
 
     def acts(self, call: ToolCall) -> bool:
         """Does this call change something? A model that has made one has used what it read before (Lesson 39)."""

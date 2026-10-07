@@ -7,7 +7,11 @@ send a ready-made request to the model.
 | Command | Does |
 |---|---|
 | `/help` | list all commands, including your own |
-| `/reset` (`/clear`) | forget the conversation and start fresh |
+| `/reset` (`/new`, `/clear`) | start a new chat; the one you were in stays saved ([chats](chats.md)) |
+| `/chats` | the saved chats of this project |
+| `/resume N` | go back to a saved chat: its number in `/chats`, a word from its title, or the start of its id |
+| `/rename TITLE` | name this chat |
+| `/fork [TITLE]` | copy this chat into a new one and carry on there |
 | `/cost` | tokens and cost so far, per model |
 | `/config` | the settings in effect and which file each came from |
 | `/model [name]` | show the model, or switch to another one; the conversation is kept |

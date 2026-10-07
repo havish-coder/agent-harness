@@ -96,4 +96,4 @@ def test_session_commands(home, tmp_path, monkeypatch):
     assert "m1: 1 call" in run("/cost")
     assert "read_file" in run("/tools") and "can change things" in run("/tools")
     assert "model" in run("/config") and "command" in run("/config")      # the source of the switched model
-    assert run("/reset") == "(conversation cleared)" and len(session.agent.messages) == 1
+    assert run("/reset").startswith("(new chat started; the one you were in is saved") and len(session.agent.messages) == 1

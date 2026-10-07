@@ -11,6 +11,7 @@ import uuid
 from harness import config
 from harness.agent import Agent
 from harness.audit import AuditLog
+from harness.chats import Chat, ChatInfo, ChatStore, Replay, replay, title_from
 from harness.config import Settings
 from harness.context.prompt import PROMPT_SHARE, Assembly, Section, assemble, environment_text
 from harness.context.tokens import ContextBudget, estimate_tokens
@@ -53,6 +54,10 @@ class Session:
             settings.output_style = "default"
         self.style = self.styles[settings.output_style]
         self.reported_tokens = 0         # what the model server last said it read
+        self.store = ChatStore(config.USER_DIR, ws.root) if settings.save_chats else None    # saved chats (Lesson 40)
+        self.chat: Chat | None = None    # the saved chat this conversation is written to; made on the first message
+        if self.store is not None:
+            self.store.cleanup(settings.chat_retention_days)
         self.provider = RetryingProvider(self.make_provider(settings.model), max_retries=settings.max_retries,
                                          fallback=self.make_provider(settings.fallback_model)
                                          if settings.fallback_model else None,
@@ -111,6 +116,8 @@ class Session:
             self.limits.tool_calls += 1        # every call the model asks for, run or refused
         elif kind in ("microcompact", "compact"):
             self.ws.forget_reads()             # those results left the conversation: reading them again must return the text, not "unchanged"
+        if kind in ("message", "rolled_back", "microcompact", "compact"):
+            self.save_event(kind, data)
         self.record(kind, data)
         self.ui(kind, data)
 
@@ -163,6 +170,59 @@ class Session:
             self.audit("compact", removed=data.removed, tokens_before=data.before, tokens_after=data.after, fenced=data.fenced)
         elif kind == "compact_failed":
             self.audit("compact_failed", why=data)
+
+    # --- saved chats (Lesson 40) -----------------------------------------------------------------
+    def save_event(self, kind: str, data) -> None:
+        """Write what just happened to this chat's log: a message, or a change made to the conversation."""
+        if self.store is None:
+            return
+        try:
+            if kind == "message":
+                if self.chat is None:
+                    self.chat = self.store.new(self.provider.model)
+                    self.store.register()
+                if not self.chat.title and data.role == "user":
+                    self.chat.rename(title_from(data.content))
+                self.chat.message(data)
+            elif self.chat is not None:
+                if kind == "rolled_back":
+                    self.chat.rollback(data)
+                elif kind == "microcompact":
+                    self.chat.clear([c.call_id for c in data.cleared])
+                elif kind == "compact":
+                    self.chat.compact(data.removed, self.agent.messages[1])
+        except OSError as e:
+            self.store = None
+            self.ui.warn(f"warning: this chat can't be saved ({e}); the agent keeps working")
+
+    def chats(self) -> list[ChatInfo]:
+        return self.store.infos() if self.store is not None else []
+
+    def resume(self, info: ChatInfo) -> Replay:
+        """Continue a saved chat: the conversation is rebuilt from its log, and new messages are added to the same log."""
+        assert self.store is not None
+        found = replay(info.path)
+        self.reset()
+        self.agent.messages[1:] = found.messages
+        self.agent.archive = list(found.archive)
+        self.agent.compactions = found.compactions
+        taint = self.permissions.taint
+        for source in found.untrusted:                  # it read untrusted content before: it still counts (Lesson 31)
+            if source not in taint.sources:
+                taint.sources.append(source)
+        self.chat = self.store.open(info)
+        self.chat.title = found.title or info.title
+        if found.dropped:
+            self.chat.rollback(len(found.messages))     # the log agrees with what was restored
+        return found
+
+    def fork(self, title: str | None = None) -> Chat | None:
+        """A new chat that starts as a copy of this one; this conversation carries on in the copy."""
+        if self.store is None or self.chat is None or not self.chat.path.exists():
+            return None
+        name = (title or "").strip() or f"{self.chat.title or 'chat'} (fork)"
+        self.chat = self.store.fork(self.chat, self.provider.model, name)
+        return self.chat
 
     def close(self) -> None:
         """The chat is over: record the totals."""
@@ -275,6 +335,7 @@ class Session:
 
     def reset(self) -> None:
         self.agent.reset()
+        self.chat = None                 # the next message starts a new saved chat; this one stays as it was
         self.limits.reset()
         self.cost_base = self.costs.cost() or 0.0
         self.permissions.taint.clear()   # a new conversation has read nothing yet

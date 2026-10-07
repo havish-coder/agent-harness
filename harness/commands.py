@@ -120,8 +120,71 @@ def _help(session, args):
 
 
 def _reset(session, args):
+    kept = session.chat is not None and session.chat.path.exists()
     session.reset()
-    return "(conversation cleared)"
+    return "(new chat started" + ("; the one you were in is saved: /chats lists it, /resume goes back)" if kept else ")")
+
+
+def _chats(session, args):
+    """/chats: the saved chats of this project, newest first."""
+    if session.store is None:
+        return "chats aren't being saved (\"save_chats\" is off, or --no-save was given)"
+    infos = session.chats()
+    if not infos:
+        return "no saved chats in this project yet: the first message you send starts one"
+    current = session.chat.id if session.chat is not None else None
+    rows = [f"{'*' if i.id == current else ' '} {n:>2}  {i.age():<12} {i.messages:>4} msgs  {i.title or '(no title)'}"
+            + (" · fork" if i.parent else "") for n, i in enumerate(infos, 1)]
+    return "\n".join(["saved chats in this project (* is this one):", *rows,
+                      "/resume N goes back to one · /rename TITLE names this one · /fork copies this one"])
+
+
+def _resume(session, args):
+    """/resume NUMBER|WORDS|ID: go back to a saved chat."""
+    if session.store is None:
+        return "chats aren't being saved (\"save_chats\" is off, or --no-save was given)"
+    if not args.strip():
+        return "usage: /resume NUMBER (see /chats), or a word from its title, or the start of its id"
+    info = session.store.find(args)
+    if info is None:
+        return f"no single chat matches '{args.strip()}'. /chats lists them"
+    return resume_text(session, info)
+
+
+def resume_text(session, info) -> str:
+    """Resume a saved chat and say what was restored, what was lost and what to remember. Used by /resume and --resume."""
+    from harness.chats import recap
+    found = session.resume(info)
+    notes = []
+    if found.dropped:
+        notes.append(f"the last {found.dropped} message{'s' if found.dropped != 1 else ''} (a tool call that never finished) were dropped")
+    if found.damaged:
+        notes.append(f"{found.damaged} unreadable line{'s' if found.damaged != 1 else ''} in the saved file were skipped")
+    if found.untrusted:
+        notes.append("this chat read content you may not trust, and still counts as having done so")
+    head = f"resumed: {found.title} ({len(found.messages)} messages" + (f", summarised {found.compactions}x" if found.compactions else "") + ")"
+    return "\n".join([head, recap(found.messages), *notes,
+                      "Files you read before are not remembered as read: the agent reads a file again before editing it."])
+
+
+def _rename(session, args):
+    """/rename TITLE: name this chat."""
+    title = " ".join(args.split())
+    if not title:
+        return "usage: /rename TITLE"
+    if session.chat is None:
+        return "this chat has no messages yet: send one first, then name it"
+    session.chat.rename(title)
+    return f"this chat is now called: {title}"
+
+
+def _fork(session, args):
+    """/fork [TITLE]: copy this chat into a new one and carry on there; the original stays as it is."""
+    before = session.chat.title if session.chat is not None else ""
+    made = session.fork(args)
+    if made is None:
+        return "nothing to fork yet: this chat has no saved messages" if session.store is not None else "chats aren't being saved"
+    return f"forked: you are now in '{made.title}'. The chat '{before}' is unchanged: /resume goes back to it"
 
 
 def _cost(session, args):
@@ -387,7 +450,11 @@ Read the code first; quote line numbers."""
 def builtin_commands() -> list[Command]:
     return [
         Command("help", "list the commands", run=_help),
-        Command("reset", "forget the conversation and start fresh", run=_reset, aliases=("clear",)),
+        Command("reset", "start a new chat (the old one stays saved)", run=_reset, aliases=("clear", "new")),
+        Command("chats", "the saved chats of this project", run=_chats),
+        Command("resume", "go back to a saved chat", run=_resume, argument_hint="NUMBER|WORDS"),
+        Command("rename", "name this chat", run=_rename, argument_hint="TITLE"),
+        Command("fork", "copy this chat into a new one and carry on there", run=_fork, argument_hint="[TITLE]"),
         Command("cost", "tokens and cost so far, per model", run=_cost),
         Command("config", "the settings in effect and where each came from", run=_config),
         Command("model", "show the model, or switch to another one", run=_model, argument_hint="[name]"),

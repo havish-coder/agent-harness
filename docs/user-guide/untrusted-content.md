@@ -43,6 +43,7 @@ with a pattern run without asking. /trust if the files are yours.
 | `/taint` | what untrusted content this chat has read, and whether the folder is trusted |
 | `/taint clear` | "I've looked at it, carry on": broad approvals apply again for this chat |
 | `/reset` | a new conversation has read nothing, so it clears the taint too |
+| `/resume` | a resumed chat is tainted again if it had read untrusted content (found from its saved fences) |
 
 In `default` mode nothing changes: every change already asks. Taint matters to people who have
 turned some questions off.
