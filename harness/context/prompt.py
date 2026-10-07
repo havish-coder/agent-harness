@@ -74,7 +74,7 @@ def _smaller(section: Section, target: int) -> str | None:
         text = section.shrink(target)
         if estimate_tokens(text) < section.tokens:
             return text
-        target = int(target * 0.8)
+        target = min(int(target * 0.9), target - 1)         # a little less each time: a coarse step cuts more than needed
     return None
 
 

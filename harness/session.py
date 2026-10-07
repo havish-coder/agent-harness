@@ -13,7 +13,7 @@ from harness.agent import Agent
 from harness.audit import AuditLog
 from harness.config import Settings
 from harness.context.prompt import PROMPT_SHARE, Assembly, Section, assemble, environment_text
-from harness.context.tokens import ContextBudget
+from harness.context.tokens import ContextBudget, estimate_tokens
 from harness.context.windows import window_for
 from harness.hooks import Hooks, from_entries
 from harness.limits import Limits
@@ -37,6 +37,7 @@ Find files with glob, search inside them with grep, explore folders with list_di
 To find where something is defined or used, grep for a likely word (e.g. grep 'timeout' to find a timeout setting).
 Paths are relative to the workspace root. Be concise."""
 WORKSPACE_HEADER = "Workspace files (snapshot at session start; may have changed since):"
+LISTING_LINES = 50            # the longest workspace listing in the prompt; a small window shrinks it
 SYSTEM_PROMPT = ROLE + "\n\n" + WORKSPACE_HEADER + "\n{snapshot}"   # the whole prompt in one string: for scripts and recordings
 
 
@@ -166,18 +167,19 @@ class Session:
 
     def build_prompt(self) -> Assembly:
         """The system prompt from its sections, most stable first, within a share of the window (Lesson 37)."""
-        ws, limit_lines = self.ws, 50
+        ws = self.ws
+        files = f"{WORKSPACE_HEADER}\n{workspace_snapshot(ws, limit=LISTING_LINES)}"
+        per_line = max(1.0, estimate_tokens(files) / max(1, files.count("\n")))    # long names cost more per line
 
         def listing(max_tokens: int) -> str:
-            return f"{WORKSPACE_HEADER}\n{workspace_snapshot(ws, limit=max(5, max_tokens // 6))}"
+            return f"{WORKSPACE_HEADER}\n{workspace_snapshot(ws, limit=max(5, int(max_tokens / per_line)))}"
         sections = [Section("role", ROLE, 0)]
         if self.settings.fence_untrusted:
             sections.append(Section("untrusted content", SYSTEM_RULE, 1))
         if self.style.prompt:
             sections.append(Section("output style", f"# Output style: {self.style.name}\n{self.style.prompt}", 1, required=False))
         sections.append(Section("environment", environment_text(ws.root, self.shell_name), 2, required=False))
-        sections.append(Section("workspace files", f"{WORKSPACE_HEADER}\n{workspace_snapshot(ws, limit=limit_lines)}", 2,
-                                required=False, shrink=listing))
+        sections.append(Section("workspace files", files, 2, required=False, shrink=listing))
         return assemble(sections, budget=max(600, int(self.context.window * PROMPT_SHARE)))
 
     def rebuild_prompt(self) -> None:

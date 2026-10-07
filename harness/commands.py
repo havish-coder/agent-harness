@@ -253,8 +253,8 @@ def _prompt(session, args):
     lines = [f"system prompt: ~{built.tokens:,} tokens of a {budget} budget "
              f"({session.context.window:,}-token window, {int(PROMPT_SHARE * 100)}% allowed)"]
     for part in built.parts:
-        lines.append(f"  {part.name:<18} {part.tokens:>6,}  changes: {STABILITY_NAMES.get(part.stability, part.stability):<16}"
-                     + (f"  [{part.note}]" if part.note else ""))
+        lines.append((f"  {part.name:<18} {part.tokens:>6,}  changes: {STABILITY_NAMES.get(part.stability, part.stability):<16}"
+                      + (f"  [{part.note}]" if part.note else "")).rstrip())
     if built.over_budget:
         lines.append("over budget: only required sections are left. A bigger window (context_window) gives it room")
     lines.append("Sections are ordered by how often they change, so a model server can reuse its work on the start of the prompt. "
