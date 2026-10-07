@@ -42,3 +42,4 @@ Copy [the template](template.md) to `NNNN-short-title.md` with the next number.
 | [0033](0033-estimate-context-and-refuse-overflow.md) | Estimate the conversation's size ourselves, and refuse to send what won't fit | Accepted |
 | [0034](0034-system-prompt-from-ordered-sections.md) | Build the system prompt from sections ordered by how often they change, within a budget | Accepted |
 | [0035](0035-clear-old-tool-results-before-anything-else.md) | Clear old results of re-runnable tools when the window fills, before anything else | Accepted |
+| [0036](0036-summarise-when-clearing-is-not-enough.md) | Summarise the older conversation when clearing is not enough, and clear only what the model has used | Accepted |

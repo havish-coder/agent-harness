@@ -105,6 +105,17 @@ class RichUI:
             self.console.print(line)
         elif kind == "tool_denied":
             self.console.print(Text("  └ denied", style="yellow"))
+        elif kind == "compacting":
+            self.stop_spinner()
+            self.stop_live()
+            self.console.print(Text(f"  ↺ the window is nearly full: summarising {data} older messages ...", style="dim"))
+            self.start_spinner()
+        elif kind == "compact":
+            self.stop_spinner()
+            self.console.print(Text(f"  ↺ summarised {data.removed} messages (~{data.before:,} -> ~{data.after:,} tokens)", style="dim"))
+        elif kind == "compact_failed":
+            self.stop_spinner()
+            self.console.print(Text(f"  ! couldn't summarise: {data}", style="yellow"))
         elif kind == "microcompact":
             self.stop_spinner()
             self.stop_live()

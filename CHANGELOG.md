@@ -24,9 +24,17 @@ is below 1.0, minor releases may contain breaking changes.
 - Clearing old tool results (ADR 0035): when the conversation passes 70% of what the window allows, the oldest results of
   tools that can be asked again (`read_file`, `grep`, `glob`, `list_dir`, `run_shell`, `web_fetch`) are replaced by short
   notes, oldest first down to half the limit, keeping the newest two whole, instead of stopping with `context_full`. A note
-  names the call and its size and repeats none of the result's text. Settings `microcompact` (default on) and
+  names the call and its size and repeats none of the result's text. Only results the agent has used (it wrote something, or made a
+  call that changes things, since reading them) are cleared first; the rest are left for the summary, and cleared only as a last resort. Settings `microcompact` (default on) and
   `microcompact_keep`; tools declare `clearable`; `microcompact` event; `/context` and the audit log report it. User guide:
   [clearing old results](docs/user-guide/context.md#when-the-window-fills-clearing-old-results).
+- Summarising the conversation (ADR 0036): when the conversation no longer fits the window (and clearing results the agent has used isn't enough), the harness asks the
+  model, once and without tools, to summarise the older messages (Request / Done / Open), keeps the newest 30% of the budget and
+  always the last exchange as they were, keeps your current request word for word, and carries on. The summary is marked
+  untrusted when the chat read untrusted content, a failed or empty summary changes nothing, and automatic summaries stop after
+  three failures in a row. `/compact [what to keep in mind]` does it on demand; setting `auto_compact` (default on);
+  `compacting`, `compact` and `compact_failed` events; `/context`, `/export` and the audit log know about it. User guide:
+  [summarising](docs/user-guide/context.md#summarising-the-conversation-compact).
 
 ### Changed
 - The status line's context figure is the harness's own estimate of the conversation as it stands, not the last

@@ -47,7 +47,7 @@ Every chat leaves a record of what the agent did, in your own settings folder, o
 It records: the session start (folder, model, mode, whether the folder is trusted, the tools), every permission
 decision and the reason, your answers to questions (`approved`, `user_denied`), results (size and whether they
 failed, never the text), hooks, secrets that were hidden, model calls with token counts, mode and trust changes,
-limits reached, old tool results cleared to make room (which tools, how many tokens), and the end of the chat with totals. Values are redacted and cut to 500 characters.
+limits reached, old tool results cleared to make room (which tools, how many tokens), conversation summaries (how many messages, tokens before and after), and the end of the chat with totals. Values are redacted and cut to 500 characters.
 
 **Tamper-evident, not tamper-proof.** Each line carries a hash of the line before it, so `/audit verify` finds a
 line that was changed, removed or reordered. Someone with write access to the file can rewrite all of it; if that

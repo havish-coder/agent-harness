@@ -237,6 +237,9 @@ def _context(session, args):
     if session.agent.cleared_results:
         lines.append(f"{session.agent.cleared_results} old tool result{'s' if session.agent.cleared_results != 1 else ''} "
                      f"cleared to make room (~{session.agent.cleared_tokens:,} tokens): the model can call the tool again")
+    if session.agent.compactions:
+        lines.append(f"the older conversation was summarised {session.agent.compactions} time"
+                     f"{'s' if session.agent.compactions != 1 else ''} ({len(session.agent.archive)} messages replaced by summaries)")
     if session.reported_tokens:
         lines.append(f"the model server last reported reading {session.reported_tokens:,} tokens"
                      + (f" (our estimate is calibrated by {status.estimated / max(status.raw, 1):.2f}x)"
@@ -244,6 +247,18 @@ def _context(session, args):
     lines.append({"ok": "plenty of room", "warn": "getting full: long file reads and command output are what fills it",
                   "critical": "nearly full: the next big result may not fit", "full": "does not fit: /reset to start a new chat"}[status.level])
     return "\n".join(lines)
+
+
+def _compact(session, args):
+    """/compact [what to keep in mind]: replace the older conversation with a summary, now."""
+    from harness.context.tokens import estimate_tokens
+    done = session.agent.compact(args.strip() or None)
+    if done is None:
+        error = session.agent.compact_error
+        return f"couldn't summarise: {error}" if error else "nothing to summarise yet: the conversation is still short"
+    return (f"summarised {done.removed} messages into ~{estimate_tokens(done.summary):,} tokens: the conversation went from "
+            f"~{done.before:,} to ~{done.after:,} tokens" + (" (the summary is marked untrusted: this chat read content you may not trust)"
+                                                                if done.fenced else ""))
 
 
 def _prompt(session, args):
@@ -315,6 +330,7 @@ def _export(session, args):
     """/export [md|tex|pdf] [file] [--last]"""
     import datetime
 
+    from harness.context.compact import is_summary
     from harness.export import ExportError, chat_markdown, export
     words = args.split()
     last = "--last" in words
@@ -324,12 +340,13 @@ def _export(session, args):
         return "usage: /export [md|tex|pdf] [file] [--last]"
     stamp = datetime.datetime.now().strftime("%Y-%m-%d-%H%M%S")
     target = session.ws.path(words[1]) if len(words) > 1 else session.ws.root / ".harness" / "exports" / f"chat-{stamp}"
-    first = next((m.content for m in session.agent.messages if m.role == "user"), "Agent Harness chat")
+    everything = [session.agent.messages[0], *session.agent.archive, *session.agent.messages[1:]]   # summarised messages too
+    first = next((m.content for m in everything if m.role == "user" and not is_summary(m)), "Agent Harness chat")
     title = first.splitlines()[0][:70].replace('"', "'")
     if fmt == "pdf":
         session.ui.info("building the PDF (the first time can take a minute)...")
     try:
-        written = export(chat_markdown(session.agent.messages, title, session.provider.model, last), fmt, target)
+        written = export(chat_markdown(everything, title, session.provider.model, last), fmt, target)
     except ExportError as e:
         return str(e)
     return f"wrote {written}"
@@ -380,6 +397,8 @@ def builtin_commands() -> list[Command]:
         Command("trust", "trust this folder: its files are yours, not untrusted content", run=_trust_command(True)),
         Command("untrust", "stop trusting this folder", run=_trust_command(False)),
         Command("context", "where the conversation's tokens go, against the model's window", run=_context),
+        Command("compact", "replace the older conversation with a summary, to make room", run=_compact,
+                argument_hint="[what to keep in mind]"),
         Command("prompt", "the system prompt's sections and what each costs", run=_prompt, argument_hint="[full]"),
         Command("audit", "the audit log: recent entries, or `verify` to check it wasn't altered", run=_audit, argument_hint="[N|verify]"),
         Command("limits", "what this chat has used against its limits", run=_limits),

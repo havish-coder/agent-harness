@@ -89,7 +89,7 @@ class Session:
                            permissions=self.permissions, fence_untrusted=settings.fence_untrusted,
                            hooks=self.hooks, redact_results=settings.redact_secrets, limit_check=self.limit_reason,
                            context=self.context, microcompact=settings.microcompact,
-                           keep_recent=settings.microcompact_keep)
+                           keep_recent=settings.microcompact_keep, auto_compact=settings.auto_compact)
         self._status_error_shown = False
         self.audit("session", workspace=str(ws.root), provider=settings.provider, model=self.provider.model,
                    mode=self.permissions.mode, trusted=self.permissions.taint.trusted, tools=[t.name for t in tools],
@@ -157,6 +157,10 @@ class Session:
             self.audit("limit", why=data)
         elif kind == "microcompact":
             self.audit("microcompact", tools=[c.tool for c in data.cleared], saved_tokens=data.saved)
+        elif kind == "compact":
+            self.audit("compact", removed=data.removed, tokens_before=data.before, tokens_after=data.after, fenced=data.fenced)
+        elif kind == "compact_failed":
+            self.audit("compact_failed", why=data)
 
     def close(self) -> None:
         """The chat is over: record the totals."""

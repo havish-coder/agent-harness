@@ -99,8 +99,11 @@ and the line `↺ the window is filling: cleared 3 old results (~7,900 tokens)` 
 involved, nothing is summarised, and the messages keep their place in the history; only the text of the result is gone.
 
 - **Which results.** Only those of tools that can be asked again: `read_file`, `grep`, `glob`, `list_dir`, `run_shell`
-  (its output) and `web_fetch`. Edits and writes are never cleared. The **newest two** results are kept whole
-  (`microcompact_keep`), and if the conversation still doesn't fit the harness keeps only the newest one.
+  (its output) and `web_fetch`. Edits and writes are never cleared. The **newest two** results big enough to matter are kept whole
+  (`microcompact_keep`), and if the conversation is still nearly full the harness keeps only the newest one. And only results
+  the agent has **used**: since it read them, it wrote something or made a call that changes things. What it has only read, and
+  gone on reading, exists nowhere else, so it is left for the [summary](#summarising-the-conversation-compact); the
+  agent clears those too only when nothing else made room.
 - **How far.** Oldest first, until the conversation is at half of what it may use, so it doesn't start again on the very
   next call. A result too small to be worth a note is left alone.
 - **What a note says.** The call, its size and its length, never the result's own words: a cleared file or web page may
@@ -111,7 +114,38 @@ involved, nothing is summarised, and the messages keep their place in the histor
 
 **What you lose.** Anything the agent saw only in a cleared result and did not use or write down. A task that *uses*
 each result as it goes (read a file, change it, run the tests) loses nothing. A task that *collects* from many sources
-for an answer at the end can lose what it collected; the system prompt asks the model to write down what it needs from
-a result before moving on, but small models do not always do it. If a long collecting task matters, split it into steps,
-or ask the agent to write its findings to a file as it goes. To go further than clearing can, `/reset` starts a fresh chat;
-summarising a long conversation (compaction) is planned for the same release.
+for an answer at the end is protected by the rule above (results the agent has only read are summarised, not cleared), but if
+you turn summaries off (`"auto_compact": false`) the agent clears them anyway rather than stop, and what it collected can be lost:
+the system prompt asks the model to write down what it needs, but small models do not always do it. When clearing isn't enough, or the task needs what was in the cleared results,
+[summarising](#summarising-the-conversation-compact) is the next step.
+
+## Summarising the conversation: `/compact`
+When the conversation **no longer fits** the window (and clearing old results has not made enough room), the harness asks the
+model, once and without tools, to **summarise the older part of the conversation**, and carries on from the summary:
+
+```text
+  ↺ the window is nearly full: summarising 14 older messages ...
+  ↺ summarised 14 messages (~6,200 -> ~2,100 tokens)
+```
+
+What the conversation looks like afterwards: your system prompt, **one message holding the summary**, and the most recent
+messages exactly as they were. The summary has three headings: *Request*, *Done* (files read or changed, commands run, what was
+found, with the exact names and values that matter) and *Open* (what is left, what failed). Your **current request is kept word for
+word** in that message, because a summary can drop a requirement.
+
+- **Kept as they were.** About the newest 30% of the window's budget, and always the last exchange (the newest tool call and its
+  result), because the model is about to act on it. The cut never falls between a call and its results.
+- **`/compact`** does it now, whenever you like. `/compact the discount rules` tells the summary what to pay attention to.
+  `/context` says how many times it has happened.
+- **`"auto_compact": false`** in your settings turns the automatic summary off; `/compact` still works. The agent then stops with
+  `context_full` when the window is full.
+- **What it costs.** One model call (counted in `/cost` and the limits), and the next request is read from scratch by the
+  model server because the start of the conversation changed.
+- **It can be wrong.** A summary is the model's own account, written by a small model from shortened results (each result is cut to
+  a few hundred characters for the summary request). Check what it says if the task depends on a detail. `/export` writes the
+  whole chat, summarised messages included, and leaves the summary text out.
+- **Untrusted content stays untrusted.** If this chat has read a web page, or a file from a folder you haven't trusted, the
+  summary is wrapped in `<untrusted>` tags like the content it came from, so a page's instructions don't become instructions of
+  the harness's own by being summarised. (`/trust` and the [untrusted content](untrusted-content.md) page explain the rule.)
+- **If the summary fails** (the model is unreachable, or writes nothing) the conversation is left as it was and the agent
+  carries on, or stops if the window is full.

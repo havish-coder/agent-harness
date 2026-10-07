@@ -53,6 +53,13 @@ class PlainUI:
             print(f"{CYAN}  → {data.name}({args}){RESET}")
         elif kind == "tool_denied":
             print(f"{DIM}    (denied){RESET}")
+        elif kind == "compacting":
+            self.end_line()
+            print(f"{DIM}  (the window is nearly full: summarising {data} older messages ...){RESET}")
+        elif kind == "compact":
+            print(f"{DIM}  (summarised {data.removed} messages: ~{data.before:,} -> ~{data.after:,} tokens){RESET}")
+        elif kind == "compact_failed":
+            print(f"{YELLOW}  (couldn't summarise: {data}){RESET}")
         elif kind == "microcompact":
             self.end_line()
             print(f"{DIM}  (the window is filling: cleared {len(data.cleared)} old result"

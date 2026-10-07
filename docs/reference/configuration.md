@@ -13,7 +13,8 @@ variable `HARNESS_<NAME>` (upper case) and most as a flag. How the layers combin
 | `temperature` | number or null | `null` (model default) | | Sampling temperature. |
 | `context_window` | integer | `8192` | | Context size requested from Ollama (`num_ctx`), and the window the harness plans for. For other providers it overrides the window the harness knows from the model name ([context](../user-guide/context.md)). |
 | `microcompact` | boolean | `true` | | When the conversation fills the window, replace the oldest results of re-runnable tools (`read_file`, `grep`, `glob`, `list_dir`, `run_shell`, `web_fetch`) with short notes instead of stopping ([context](../user-guide/context.md#when-the-window-fills-clearing-old-results)). |
-| `microcompact_keep` | integer | `2` | | The newest this many results of those tools are kept whole (at least 1). |
+| `microcompact_keep` | integer | `2` | | The newest this many results of those tools that are big enough to be worth a note (about 150 tokens) are kept whole (at least 1). |
+| `auto_compact` | boolean | `true` | | When clearing old results isn't enough and the conversation no longer fits the window, ask the model to summarise the older messages and carry on from the summary ([context](../user-guide/context.md#summarising-the-conversation-compact)). `/compact` works either way. |
 | `max_output_tokens` | integer | `4096` | | Longest reply the model may write, in tokens. Stops a model that keeps repeating itself; a reply cut off here ends with a note. |
 | `max_steps` | integer | `20` | `--max-steps` | Maximum model calls per request. |
 | `stream` | boolean | `true` | `--no-stream` | Show answers as they are generated. |

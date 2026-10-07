@@ -12,10 +12,11 @@ from harness.context.micro import (
     MicroResult,
     clear_old_results,
     describe_call,
+    digested_after,
     is_stub,
 )
 from harness.context.tokens import ContextBudget, estimate_tokens
-from harness.messages import Message, ToolCall
+from harness.messages import Message, Reply, ToolCall, Usage
 from harness.providers.fake import ScriptedProvider, text, tool_calls
 from harness.session import CLEARING_RULE, Session
 from harness.tools import default_tools
@@ -245,13 +246,68 @@ def test_a_conversation_that_fits_is_left_alone(ws):
     assert not [k for k, _ in events if k == "microcompact"]
 
 
+def noting_reads(count: int):
+    """Reads where the model says something before each one, so what it read earlier counts as used."""
+    return [Reply(Message("assistant", f"noted part{n}", tool_calls=[ToolCall(f"r{n}", "read_file", {"path": f"part{n}.txt"})]),
+                  "tool_calls", Usage()) for n in range(count)]
+
+
 def test_a_bigger_keep_is_honoured_while_there_is_room(ws):
     """In a 16K window clearing starts when the conversation is 70% full, and it keeps the newest two results."""
-    agent, _ = make_agent(ws, [*reads(3), text("done")], microcompact=True, keep_recent=2)
+    agent, _ = make_agent(ws, [*noting_reads(3), text("done")], microcompact=True, keep_recent=2)
     agent.context = ContextBudget(16_000, 2_000)
     agent.run("read three")
     results = [m for m in agent.messages if m.role == "tool"]
     assert agent.stop_reason == "completed" and [is_stub(m) for m in results] == [True, False, False]
+
+
+# --- only results the model has used --------------------------------------------------------
+
+def acts(call: ToolCall) -> bool:
+    return call.name == "write_file"
+
+
+def test_digested_after_marks_what_the_model_has_done_since():
+    c = ToolCall("a", "read_file", {})
+    w = ToolCall("w", "write_file", {})
+    messages = [Message.system("s"), Message.user("go"),
+                Message("assistant", "", tool_calls=[c]), Message.tool_result(c, "x"),       # 2, 3: a read
+                Message("assistant", "", tool_calls=[c]), Message.tool_result(c, "y"),       # 4, 5: another read
+                Message("assistant", "", tool_calls=[w]), Message.tool_result(w, "ok"),      # 6, 7: a change
+                Message("assistant", "all done")]                                            # 8: words
+    flags = digested_after(messages, acts)
+    assert flags == [True, True, True, True, True, True, True, True, False]       # all of it was followed by a change or words
+    assert digested_after(messages[:6], acts) == [False] * 6                        # only reading: nothing was used
+
+
+def test_results_that_were_only_read_are_not_cleared_when_asked_for_used_ones_only():
+    messages = conversation(5)
+    assert not clear_old_results(messages, CLEARABLE, keep_recent=1, is_action=acts) and stubs(messages) == []
+
+
+def test_results_followed_by_words_or_a_change_are_cleared():
+    messages = conversation(2)
+    messages.insert(4, Message("assistant", "the first file defines the cart"))        # said something after the first read
+    messages += exchange(7, name="write_file") + exchange(8) + exchange(9)
+    result = clear_old_results(messages, CLEARABLE, keep_recent=1, is_action=acts)
+    assert [c.call_id for c in result.cleared] == ["c0", "c1", "c8"][:len(result.cleared)] and result.cleared[0].call_id == "c0"
+    assert "c9" not in [c.call_id for c in result.cleared]                          # the newest is kept
+
+
+def test_a_task_that_only_reads_is_left_for_the_summary_not_for_clearing(ws):
+    first, second, third = reads(3)             # the window holds two results: a summary is needed before the third and after it
+    agent, events = make_agent(ws, [first, second, text("Request: read.\nDone: read two."), third,
+                                    text("Request: read.\nDone: read three."), text("done")], microcompact=True, auto_compact=True)
+    agent.run("read three")
+    kinds = [k for k, _ in events]
+    assert agent.stop_reason == "completed" and agent.compactions == 2 and "microcompact" not in kinds
+
+
+def test_when_the_summary_cant_be_written_unused_results_are_cleared_as_a_last_resort(ws):
+    agent, events = make_agent(ws, [*reads(5), text("done")], microcompact=True, auto_compact=True)
+    agent.run("read them all")                                    # the provider has no reply for a summary: it fails
+    kinds = [k for k, _ in events]
+    assert agent.stop_reason == "completed" and "compact_failed" in kinds and "microcompact" in kinds and agent.compactions == 0
 
 
 def test_results_of_tools_that_cant_be_cleared_still_stop_the_agent(ws):
@@ -344,3 +400,25 @@ def test_both_terminals_say_when_results_were_cleared(capsys):
     console = Console(file=io.StringIO(), record=True, force_terminal=True, width=100, color_system=None, legacy_windows=False)
     RichUI(console, spinner=False)("microcompact", MicroResult([Cleared("a", "read_file", 2_000, 1_950)]))
     assert "cleared 1 old result (~1,950 tokens)" in console.export_text()
+
+
+def test_small_results_do_not_use_up_the_recent_ones():
+    """A one-line command result between two file reads must not make the older read look like one of 'the newest'."""
+    clearable = {"read_file", "run_shell"}
+    messages = [Message.system("s"), Message.user("go"), *exchange(0), *exchange(1, "run_shell", tokens=20),
+                *exchange(2), *exchange(3, "run_shell", tokens=20)]
+    result = clear_old_results(messages, clearable, keep_recent=1)
+    assert [c.call_id for c in result.cleared] == ["c0"]          # the newest big result (c2) is kept, not c3's one line
+
+
+def test_a_task_that_reads_then_acts_is_cleared_and_never_needs_a_summary(ws):
+    """The work task of the lab, scripted: read a file, change something, repeat. Each read has been used by the next change."""
+    script = []
+    for n in range(5):
+        script.append(tool_calls(ToolCall(f"r{n}", "read_file", {"path": f"part{n}.txt"})))
+        script.append(tool_calls(ToolCall(f"w{n}", "write_file", {"path": "summary.txt", "content": f"part{n}"})))
+    agent, events = make_agent(ws, [*script, text("done")], microcompact=True, auto_compact=True, max_steps=20)
+    agent.run("do the five")
+    kinds = [k for k, _ in events]
+    assert agent.stop_reason == "completed" and agent.compactions == 0 and "compacting" not in kinds
+    assert agent.cleared_results >= 3

@@ -14,7 +14,7 @@ Rules this module keeps:
 - the note says what was cleared and how big it was, and **repeats none of its text**: a cleared
   result may have been untrusted content, and the note is not inside the fence (Lesson 31).
 """
-from collections.abc import Container
+from collections.abc import Callable, Container
 from dataclasses import dataclass, field
 
 from harness.context.tokens import estimate_tokens
@@ -71,20 +71,41 @@ def make_stub(call: ToolCall | None, message: Message) -> str:
             f"{lines:,} lines. Call the tool again if you still need it.]")
 
 
+def digested_after(messages: list[Message], is_action: Callable[[ToolCall], bool]) -> list[bool]:
+    """For each message: has the model done something since it, that would have used what it said?
+
+    The model has *used* a result when, later in the conversation, it wrote something (a reply with text) or made a call
+    that changes things (`is_action`). A model that only went on reading has not: what it read exists nowhere else."""
+    flags = [False] * len(messages)
+    acted = False
+    for i in range(len(messages) - 1, -1, -1):
+        flags[i] = acted
+        m = messages[i]
+        if m.role == "assistant" and (m.content.strip() or any(is_action(c) for c in m.tool_calls)):
+            acted = True
+    return flags
+
+
 def clear_old_results(messages: list[Message], clearable: Container[str], keep_recent: int = 2,
-                      need: int | None = None, min_tokens: int = MIN_TOKENS) -> MicroResult:
+                      need: int | None = None, min_tokens: int = MIN_TOKENS,
+                      is_action: Callable[[ToolCall], bool] | None = None) -> MicroResult:
     """Replace old results of `clearable` tools with notes, oldest first, in place in `messages`.
 
-    keep_recent: the newest this many results of clearable tools are never touched.
+    keep_recent: the newest this many results of clearable tools that are big enough to be worth a note are never touched.
     need: stop once this many tokens are freed; None clears everything that may be cleared.
+    is_action: when given, only results the model has used since (see `digested_after`) are cleared.
     """
     calls = {c.id: c for m in messages for c in m.tool_calls}
     positions = [i for i, m in enumerate(messages) if m.role == "tool" and m.tool_name in clearable]
-    protected = set(positions[-keep_recent:]) if keep_recent > 0 else set()
+    # "the newest results" are the ones worth clearing: a small result (or a note) is no use to protect, and counting it would
+    # leave a big, older one unprotectable by the same rule (a one-line command result between two file reads)
+    weighty = [i for i in positions if not is_stub(messages[i]) and estimate_tokens(messages[i].content) >= min_tokens]
+    protected = set(weighty[-keep_recent:]) if keep_recent > 0 else set()
+    used = digested_after(messages, is_action) if is_action is not None else None
     result = MicroResult()
     for i in positions:
         message = messages[i]
-        if i in protected or is_stub(message) or (need is not None and result.saved >= need):
+        if i in protected or is_stub(message) or (need is not None and result.saved >= need) or (used is not None and not used[i]):
             continue
         before = estimate_tokens(message.content)
         if before < min_tokens:

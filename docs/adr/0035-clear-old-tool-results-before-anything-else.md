@@ -1,6 +1,6 @@
 # 0035. Clear old results of re-runnable tools when the window fills, before anything else
 
-- **Status:** Accepted
+- **Status:** Accepted; refined by [ADR 0036](0036-summarise-when-clearing-is-not-enough.md) (only results the model has used are cleared first)
 - **Date:** 2026-10-07
 
 ## Context

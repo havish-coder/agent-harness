@@ -11,6 +11,7 @@ import subprocess
 from pathlib import Path
 
 from harness.config import USER_DIR
+from harness.context.compact import is_summary
 from harness.messages import Message
 from harness.security.redact import redacted
 from harness.tui.latex import tighten
@@ -41,7 +42,7 @@ def find_tool(name: str) -> Path | None:
 def chat_markdown(messages: list[Message], title: str, model: str, last_only: bool = False) -> str:
     """The conversation as a Markdown document: your messages, the agent's answers, and a
     one-line note for each tool it used. Tool results and attached files are left out."""
-    turns = [m for m in messages if m.role in ("user", "assistant", "tool")]
+    turns = [m for m in messages if m.role in ("user", "assistant", "tool") and not is_summary(m)]   # a summary is not something anyone said
     if last_only:
         answers = [m for m in turns if m.role == "assistant" and m.content.strip()]
         turns = answers[-1:]

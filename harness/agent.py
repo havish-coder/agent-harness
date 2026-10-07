@@ -9,8 +9,20 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
+from harness.context.compact import (
+    FALLBACK_BUDGET,
+    KEEP_SHARE,
+    MAX_FAILURES,
+    MIN_GAP,
+    MIN_HEAD_TOKENS,
+    Compaction,
+    current_request,
+    rebuild,
+    split,
+    summarise,
+)
 from harness.context.micro import TARGET_SHARE, MicroResult, clear_old_results
-from harness.context.tokens import ContextBudget, ContextStatus
+from harness.context.tokens import ContextBudget, ContextStatus, message_tokens
 from harness.hooks import Hooks
 from harness.messages import Message, Reply, ToolCall, Usage
 from harness.providers.base import Provider, ProviderError, StreamingProvider, TextDelta, ThinkingDelta
@@ -43,7 +55,7 @@ class Agent:
                  permissions: Permissions | None = None, fence_untrusted: bool = False,
                  hooks: Hooks | None = None, redact_results: bool = False,
                  limit_check: Callable[[], str | None] | None = None, context: ContextBudget | None = None,
-                 microcompact: bool = False, keep_recent: int = 2):
+                 microcompact: bool = False, keep_recent: int = 2, auto_compact: bool = False):
         self.provider = provider
         self.tools = tools if isinstance(tools, ToolRegistry) else ToolRegistry(tools)
         self.system_prompt = system_prompt
@@ -58,6 +70,7 @@ class Agent:
         self.context = context      # measures the conversation against the model's window (Lesson 36)
         self.microcompact = microcompact   # clear old results when the window fills (Lesson 38) ...
         self.keep_recent = max(1, keep_recent)   # ... but not the newest this many (at least the newest one)
+        self.auto_compact = auto_compact   # summarise the older conversation when clearing isn't enough (Lesson 39)
         self.hooks = hooks          # the user's scripts at fixed points (Lesson 33)
         self.fence_untrusted = fence_untrusted   # wrap outside content in <untrusted> tags (Lesson 31)
         self.usage = Usage()
@@ -70,6 +83,12 @@ class Agent:
         self.messages = [Message.system(self.system_prompt)]
         self.cleared_results = 0     # results replaced by notes in this conversation, and the tokens that gave back
         self.cleared_tokens = 0
+        self.compactions = 0         # times the older conversation was replaced by a summary (Lesson 39)
+        self.archive: list[Message] = []     # the messages those summaries replaced, oldest first
+        self.calls_since_compact = MIN_GAP
+        self.compact_failures = 0    # failures in a row; automatic compaction stops trying at MAX_FAILURES
+        self.compact_error: str | None = None     # why the last compact() did nothing, when the model was the problem
+        self.turn_start = 1          # where this turn's messages begin, for rolling it back after an error
 
     def run(self, user_input: str) -> str:
         """Handle one user message. May call the model and tools many times."""
@@ -78,7 +97,7 @@ class Agent:
             if blocked:
                 self.stop_reason = "blocked"
                 return blocked
-        turn_start = len(self.messages)
+        self.turn_start = len(self.messages)
         self.messages.append(Message.user(user_input))
         schemas = self.tools.schemas()
         self.stop_reason = None
@@ -94,7 +113,13 @@ class Agent:
                             "or /reset to start a new chat)")
                 status = self.context.check(self.messages, schemas) if self.context else None
                 if status and self.microcompact and status.level != "ok":
-                    status = self.free_space(status, schemas)      # before giving up: clear old results (Lesson 38)
+                    status = self.free_space(status, schemas)      # clear results the model has used (Lesson 38)
+                # a summary answers "this doesn't fit", not "this is getting full": in a small window one big result is already 90%
+                if (status and self.auto_compact and status.level == "full"
+                        and self.calls_since_compact >= MIN_GAP and self.compact_failures < MAX_FAILURES and self.compact()):
+                    status = self.context.check(self.messages, schemas)      # summarised: measure again (Lesson 39)
+                if status and self.microcompact and status.level == "full":
+                    status = self.free_space(status, schemas, last_resort=True)   # nothing else worked: clear unused results too
                 if status:
                     self.on_event("context", status)
                     if status.level == "full":      # stop condition #4: never send what won't fit (Lesson 36)
@@ -102,6 +127,7 @@ class Agent:
                         return (f"(stopped: the conversation is about {status.estimated:,} tokens and the model's window "
                                 f"leaves room for {status.limit:,}. /context shows where they go; /reset starts a new chat)")
                 reply = self.call_model(schemas)
+                self.calls_since_compact += 1
                 if status:
                     self.context.observe(status, reply.usage.input_tokens)
                 self.usage += reply.usage
@@ -131,19 +157,28 @@ class Agent:
         except BaseException as e:
             # Error or Ctrl+C mid-turn: roll back this turn so the history stays consistent
             # (e.g. no assistant tool_calls left without their results).
-            del self.messages[turn_start:]
+            del self.messages[self.turn_start:]
             self.stop_reason = "cancelled" if isinstance(e, KeyboardInterrupt) else "error"
             raise
 
-    def free_space(self, status: ContextStatus, schemas: list[dict]) -> ContextStatus:
+    def acts(self, call: ToolCall) -> bool:
+        """Does this call change something? A model that has made one has used what it read before (Lesson 39)."""
+        tool = self.tools.get(call.name)
+        return tool is not None and not tool.is_read_only(call.arguments)
+
+    def free_space(self, status: ContextStatus, schemas: list[dict], last_resort: bool = False) -> ContextStatus:
         """The window is filling: replace old results of clearable tools with notes, oldest first, down to half
         the limit (so this doesn't run again on the very next call). If the conversation still doesn't fit, go on
         keeping only the newest result: in a small window "keep the last two" can be the whole window.
-        Returns the status afterwards."""
+
+        Only results the model has *used* are cleared (it wrote something, or made a call that changes things, after
+        reading them): what a model has only read, and gone on reading, exists nowhere else, and a summary can keep it.
+        `last_resort` clears the unused ones too, when nothing else made room. Returns the status afterwards."""
         total = MicroResult()
         for keep in sorted({self.keep_recent, 1}, reverse=True):
             total.cleared += clear_old_results(self.messages, self.tools.clearable_names(), keep,
-                                               need=self.context.to_free(status, TARGET_SHARE)).cleared
+                                               need=self.context.to_free(status, TARGET_SHARE),
+                                               is_action=None if last_resort else self.acts).cleared
             status = self.context.check(self.messages, schemas)
             if status.level != "full":
                 break
@@ -152,6 +187,46 @@ class Agent:
             self.cleared_tokens += total.saved
             self.on_event("microcompact", total)
         return status
+
+    def compact(self, focus: str | None = None) -> Compaction | None:
+        """Replace all but the newest messages with a model-written summary (Lesson 39). Returns what was done, or None
+        when there was nothing worth summarising or the model couldn't write a summary: the conversation is then unchanged."""
+        self.compact_error = None
+        limit = self.context.limit if self.context else FALLBACK_BUDGET
+        head, tail = split(self.messages, int(limit * KEEP_SHARE))
+        if sum(message_tokens(m) for m in head) < MIN_HEAD_TOKENS:
+            return None
+        self.on_event("compacting", len(head))
+        try:
+            summary, reply = summarise(self.provider, head, limit, focus)
+        except ProviderError as e:
+            self.compact_failures += 1
+            self.compact_error = str(e)
+            self.on_event("compact_failed", self.compact_error)
+            return None
+        self.usage += reply.usage
+        self.on_event("model_reply", reply)          # it was a model call: costs and limits count it
+        if not summary:
+            self.compact_failures += 1
+            self.compact_error = "the model wrote an empty summary"
+            self.on_event("compact_failed", self.compact_error)
+            return None
+        self.compact_failures = 0
+        taint = getattr(self.permissions, "taint", None)
+        untrusted = bool(self.fence_untrusted and taint is not None and taint.active)
+        before = sum(message_tokens(m) for m in self.messages)
+        cut = len(self.messages) - len(tail)
+        rebuilt = rebuild(self.messages[0], summary, current_request(head, tail), tail, untrusted)
+        # the kept messages now start at index 2 (after the system prompt and the summary); a turn that began in the
+        # summarised part is rolled back to just after the summary
+        self.turn_start = 2 + self.turn_start - cut if self.turn_start >= cut else 2
+        self.messages[:] = rebuilt
+        self.archive.extend(head)
+        self.compactions += 1
+        self.calls_since_compact = 0
+        done = Compaction(summary, len(head), before, sum(message_tokens(m) for m in rebuilt), head, untrusted)
+        self.on_event("compact", done)
+        return done
 
     def call_model(self, schemas: list[dict]) -> Reply:
         """One model call. Streams text out as events when the provider can (Lesson 16)."""
