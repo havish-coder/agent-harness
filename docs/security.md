@@ -168,6 +168,8 @@ These remain even with every defense in place. Know them before you approve thin
   dedicated user account for untrusted projects. Those sandboxes are tested here as command lines only.
 - **Prompt injection can't be fully prevented**, only made visible and less effective. Be most
   careful right after the agent has read web pages or files you didn't write.
+- **Notes the agent saves are a way to make an attack last.** Each records whether the chat had read untrusted content when it was written; a note saved then is loaded fenced,
+  flagged and tainting every later chat until you check it (`/memory trust`) or delete it, and saving asks you by default ([saved notes](user-guide/auto-memory.md)).
 - **A poisoned how-to in a project's notes is followed by the model**, fenced or not (a small model ran a planted command in 6 of 6 runs). What stops the harm is that an
   untrusted folder's notes taint the chat, so the command asks you in every mode ([memory](user-guide/memory.md)). Read the command when asked, and `/trust` only folders whose
   instructions you would run.

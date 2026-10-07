@@ -277,22 +277,47 @@ def _trust_command(trusting: bool):
     return run
 
 
+def _notes_text(session) -> str:
+    """The notes the agent saved for itself, one a line, with whose words each counts as."""
+    if session.automemory is None:
+        return "notes the agent saves for itself are off (\"auto_memory\": \"off\")"
+    if not session.notes:
+        return "no saved notes yet: the agent saves one when you tell it something lasting (auto_memory is " + session.settings.auto_memory + ")"
+    rows = [f"  {n.title} ({n.kind}, {n.saved}): {n.description}"
+            + ("  [UNTRUSTED: saved after untrusted content was read; /memory trust " + n.name + " once you have checked it]" if n.tainted else "")
+            for n in session.notes]
+    return "\n".join(["notes the agent saved in earlier chats (/memory forget NAME deletes one):", *rows])
+
+
 def _memory(session, args):
-    """/memory · /memory reload: the HARNESS.md files the agent was given, and whose words they are."""
+    """/memory · /memory reload · /memory trust NAME · /memory forget NAME: what the agent was given and saved."""
     from harness.memory import LOCAL_NAME, PROJECT_NAMES, SCOPES
-    if args.strip() == "reload":
+    word, _, rest = args.strip().partition(" ")
+    if word == "reload":
         session.reload_memory()
-        return f"read again: {len(session.memory)} file{'s' if len(session.memory) != 1 else ''}"
+        return f"read again: {len(session.memory)} file{'s' if len(session.memory) != 1 else ''}, {len(session.notes)} saved note{'s' if len(session.notes) != 1 else ''}"
+    if word in ("trust", "forget"):
+        if session.automemory is None:
+            return "notes the agent saves for itself are off (\"auto_memory\": \"off\")"
+        existing = session.automemory.get(rest)
+        if word == "trust" and existing is not None and not existing.tainted:
+            return f"'{existing.title}' is already yours"
+        note = (session.automemory.vouch if word == "trust" else session.automemory.forget)(rest)
+        if note is None:
+            return f"no single saved note matches '{rest.strip()}'. /memory lists them"
+        session.reload_memory()
+        return f"'{note.title}' is now yours: it no longer counts as untrusted" if word == "trust" else f"deleted the note '{note.title}'"
+    notes = _notes_text(session)
     if not session.settings.memory:
-        return "project memory is off (\"memory\": false in your settings)"
+        return "project memory is off (\"memory\": false in your settings)\n" + notes
     if not session.memory:
         return (f"no memory files. Write {PROJECT_NAMES[0]} in this folder (or /init: the agent writes one), {LOCAL_NAME} for notes that stay "
-                f"yours, or ~/.harness/{PROJECT_NAMES[0]} for every project. /remember TEXT adds a line.")
+                f"yours, or ~/.harness/{PROJECT_NAMES[0]} for every project. /remember TEXT adds a line.\n" + notes)
     rows = [f"{SCOPES[f.scope]:<28} {f.label:<26} {f.tokens:>6,} tokens  "
             + ("yours" if f.trusted else "NOT trusted: shown as information only (/trust if you wrote it)")
             + ("  (only the start is read)" if f.cut else "") for f in session.memory]
     shown = f"\nfolder notes shown in this chat: {len(session.seen_notes)}" if session.seen_notes else ""
-    return "\n".join(["memory in the system prompt (general first, specific last):", *rows]) + shown
+    return "\n".join(["memory in the system prompt (general first, specific last):", *rows]) + shown + "\n" + notes
 
 
 def _remember(session, args):

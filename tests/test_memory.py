@@ -256,7 +256,7 @@ def trust(session, monkeypatch):
 def test_the_prompt_gets_a_memory_section_after_the_rules_and_before_the_style(tmp_path, monkeypatch):
     s = make_session(tmp_path, monkeypatch, {"HARNESS.md": "run pytest"}, user_text="be brief", output_style="concise")
     names = [p.name for p in s.prompt.parts]
-    assert names == ["role", "untrusted content", "clearing rule", "project memory", "output style", "environment", "workspace files"]
+    assert names == ["role", "untrusted content", "clearing rule", "project memory", "notes rule", "output style", "environment", "workspace files"]
     assert "run pytest" in s.agent.messages[0].content and "be brief" in s.agent.messages[0].content
     assert "project memory" in run(s, "/prompt")
 
@@ -309,7 +309,7 @@ def test_memory_reload_picks_up_an_edit(tmp_path, monkeypatch):
     run(s, "/trust")
     (s.ws.root / "HARNESS.md").write_text("new rule", encoding="utf-8")
     assert "old rule" in s.agent.messages[0].content
-    assert run(s, "/memory reload") == "read again: 1 file" and "new rule" in s.agent.messages[0].content
+    assert run(s, "/memory reload") == "read again: 1 file, 0 saved notes" and "new rule" in s.agent.messages[0].content
 
 
 def test_remember_adds_a_line_and_the_agent_has_it_at_once(tmp_path, monkeypatch):

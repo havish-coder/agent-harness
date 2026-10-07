@@ -194,7 +194,7 @@ def session(tmp_path, monkeypatch):
 
 def test_the_session_builds_its_prompt_from_sections(session):
     names = [p.name for p in session.prompt.parts]
-    assert names == ["role", "untrusted content", "clearing rule", "environment", "workspace files"]
+    assert names == ["role", "untrusted content", "clearing rule", "notes rule", "environment", "workspace files"]
     assert [p.stability for p in session.prompt.parts] == sorted(p.stability for p in session.prompt.parts)
     text = session.agent.messages[0].content
     assert text == session.prompt.text and text.startswith(ROLE)
@@ -215,7 +215,7 @@ def test_a_style_goes_between_the_rules_and_the_session_facts(session):
     session.set_style("pirate") if "pirate" in session.styles else session.set_style("concise")
     after = session.prompt.text
     names = [p.name for p in session.prompt.parts]
-    assert names == ["role", "untrusted content", "clearing rule", "output style", "environment", "workspace files"]
+    assert names == ["role", "untrusted content", "clearing rule", "notes rule", "output style", "environment", "workspace files"]
     assert session.agent.messages[0].content == after == session.agent.system_prompt
     assert os.path.commonprefix([before, after]).startswith(ROLE)           # the role is shared, so it stays cached
     assert after.index("# Output style") < after.index("# Environment")

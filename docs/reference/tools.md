@@ -12,6 +12,9 @@ Tools the model can call. Paths are relative to the workspace root.
 | `write_file` | no | no | no | Create a file, or replace a whole file the model has read. |
 | `run_shell` | no | no | yes | Run a shell command; returns the exit code and output. |
 | `web_fetch` | no | yes | yes | Fetch one web page and return its text. |
+| `remember` | no | no | no | Save a note for later chats in this project (unless `auto_memory` is `off`). |
+| `recall` | yes | yes | yes | Show a saved note, or list them. |
+| `forget` | no | no | no | Delete a saved note. |
 
 Results longer than a tool's limit (8,000 characters by default) are shortened: the agent
 keeps the first 80% and the last 20% and says how much was cut in the middle.

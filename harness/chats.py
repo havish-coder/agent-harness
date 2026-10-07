@@ -253,6 +253,7 @@ class ChatStore:
         self.root = Path(root).resolve()
         self.dir = Path(user_dir) / "projects" / project_id(self.root)
         self.chats_dir = self.dir / "chats"
+        self.memory_dir = self.dir / "memory"        # what the agent saved for itself (Lesson 42)
 
     def register(self) -> None:
         """Record that this project exists (for a list of projects, Lesson 56)."""

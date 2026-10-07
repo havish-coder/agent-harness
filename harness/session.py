@@ -12,6 +12,8 @@ from pathlib import Path
 from harness import config
 from harness.agent import Agent
 from harness.audit import AuditLog
+from harness.automemory import RULE as NOTES_RULE
+from harness.automemory import AutoMemory, Note, index_text, make_memory_tools
 from harness.chats import Chat, ChatInfo, ChatStore, Replay, replay, title_from
 from harness.config import Settings
 from harness.context.prompt import PROMPT_SHARE, Assembly, Section, assemble, environment_text
@@ -22,7 +24,7 @@ from harness.limits import Limits
 from harness.memory import MIN_FILE_TOKENS, MemoryFile, load_memory, nested_files, note_text, section_text
 from harness.providers.factory import make_provider
 from harness.providers.retry import RetryingProvider
-from harness.security.permissions import MODES, Permissions
+from harness.security.permissions import MODES, Permissions, Rule
 from harness.security.sandbox import detect as detect_sandbox
 from harness.security.sandbox import hint as sandbox_hint
 from harness.security.taint import SYSTEM_RULE
@@ -56,7 +58,8 @@ class Session:
             settings.output_style = "default"
         self.style = self.styles[settings.output_style]
         self.reported_tokens = 0         # what the model server last said it read
-        self.store = ChatStore(config.USER_DIR, ws.root) if settings.save_chats else None    # saved chats (Lesson 40)
+        self.project = ChatStore(config.USER_DIR, ws.root)          # where this project's saved things live (Lessons 40, 42)
+        self.store = self.project if settings.save_chats else None  # saved chats (Lesson 40)
         self.chat: Chat | None = None    # the saved chat this conversation is written to; made on the first message
         if self.store is not None:
             self.store.cleanup(settings.chat_retention_days)
@@ -67,6 +70,10 @@ class Session:
         self.costs = CostTracker(settings.provider, self.provider.model, settings.prices)
         self.permissions = Permissions.from_settings(ws, settings.permission_mode, settings.permissions)
         self.permissions.taint.trusted = is_trusted(ws.root, config.USER_DIR)
+        self.automemory = AutoMemory(self.project.memory_dir) if settings.auto_memory != "off" else None   # Lesson 42
+        if settings.auto_memory == "on":                 # a blanket approval: it stops applying once untrusted content has been read
+            self.permissions.rules.append(Rule.parse("remember", "allow", "auto_memory"))
+        self.notes: list[Note] = []                      # what the agent saved earlier, read into the prompt
         self.memory: list[MemoryFile] = []          # HARNESS.md files read into the prompt (Lesson 41)
         self.seen_notes: set[Path] = set()           # folder notes already shown in this chat
         self.load_memory()
@@ -77,6 +84,8 @@ class Session:
         tools = default_tools(ws, shell=settings.shell, env_keep=settings.shell_env_keep, web=settings.web_fetch,
                               web_allow_local=settings.web_allow_local, sandbox=self.sandbox,
                               sandbox_network=settings.sandbox_network, sandbox_required=required)
+        if self.automemory is not None:
+            tools = tools + make_memory_tools(self.automemory, self.permissions.taint)
         for warning in self.permissions.unknown_tools([t.name for t in tools]):
             ui.warn(f"warning: {warning}")
         self.hooks = Hooks([], ws.root, self.permissions, settings.shell_env_keep)
@@ -263,6 +272,11 @@ class Session:
                 return section_text(self.memory, fenced, max(MIN_FILE_TOKENS, max_tokens // len(self.memory)))
             sections.append(Section("project memory", section_text(self.memory, fenced), 1, required=False, shrink=shrink_memory,
                                     priority=1))
+        if self.automemory is not None:
+            sections.append(Section("notes rule", NOTES_RULE, 1, required=False, priority=1))
+            if self.notes:
+                sections.append(Section("saved notes", index_text(self.notes, self.settings.fence_untrusted), 1, required=False, priority=1,
+                                        shrink=lambda tokens: index_text(self.notes, self.settings.fence_untrusted, max(120, tokens))))
         if self.style.prompt:
             sections.append(Section("output style", f"# Output style: {self.style.name}\n{self.style.prompt}", 1, required=False))
         sections.append(Section("environment", environment_text(ws.root, self.shell_name), 2, required=False))
@@ -278,6 +292,10 @@ class Session:
         for f in self.memory:
             if not f.trusted and f.label not in " ".join(taint.sources):
                 taint.sources.append(f"memory {f.label}")
+        self.notes = self.automemory.notes() if self.automemory is not None else []
+        for n in self.notes:                              # saved after untrusted content was read: still counts as having read it
+            if n.tainted:
+                taint.sources.append(f"memory note '{n.title}'")
 
     def reload_memory(self) -> None:
         """Read the files again and rebuild the prompt (after an edit, or /trust). The start of the prompt changes, so the

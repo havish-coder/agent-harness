@@ -45,6 +45,9 @@ is below 1.0, minor releases may contain breaking changes.
   trusted are fenced as untrusted content and taint the chat from the start (so a command they lead to asks you, even in `bypass`); `/trust` makes them yours.
   Memory files are protected paths. `/memory`, `/memory reload`, `/remember [--local|--user] TEXT`, `/init`; setting `memory`. A start-up banner says when notes are untrusted.
   User guide: [project memory](docs/user-guide/memory.md).
+- Notes the agent saves for itself (ADR 0039): tools `remember`, `recall` and `forget`; the notes' one-line descriptions go in the next chats' prompts (within 800 tokens), kept in your folder per
+  project, never in the repository. Setting `auto_memory`: `ask` (default), `on` (no questions while the chat has read no untrusted content) or `off`. Each note records whether untrusted content
+  had been read when it was written; such a note is loaded fenced and taints later chats until `/memory trust NAME` or `/memory forget NAME`. User guide: [saved notes](docs/user-guide/auto-memory.md).
 
 ### Changed
 - The status line's context figure is the harness's own estimate of the conversation as it stands, not the last

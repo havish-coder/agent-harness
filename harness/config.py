@@ -74,6 +74,7 @@ class Settings:
     auto_compact: bool = True                    # summarise the older conversation when it nearly fills the window (Lesson 39)
     save_chats: bool = True                      # keep each conversation on disk so it can be resumed (Lesson 40)
     memory: bool = True                          # read HARNESS.md files into the system prompt (Lesson 41)
+    auto_memory: str = "ask"                     # notes the agent saves for itself: ask (each one), on (without asking), off (Lesson 42)
     chat_retention_days: int = 30                # delete saved chats of a project not used for this many days (0: keep them)
     shell_env_keep: list = field(default_factory=list)   # environment variables commands may see despite looking secret
     sources: dict = field(default_factory=dict, repr=False, compare=False)   # key → where it came from
@@ -100,7 +101,7 @@ TYPES: dict[str, tuple] = {
     "shell": (str, type(None)), "max_retries": (int,), "prices": (dict,),
     "output_style": (str,), "status_line": (str, type(None)), "additional_directories": (list,),
     "permission_mode": (str,), "permissions": (dict,), "shell_env_keep": (list,), "fence_untrusted": (bool,), "web_fetch": (bool,), "hooks": (dict,), "audit_log": (bool,), "sandbox": (str,), "sandbox_network": (bool,), "redact_secrets": (bool,),
-    "limits": (dict,), "web_allow_local": (list,), "microcompact": (bool,), "microcompact_keep": (int,), "auto_compact": (bool,), "save_chats": (bool,), "memory": (bool,), "chat_retention_days": (int,),
+    "limits": (dict,), "web_allow_local": (list,), "microcompact": (bool,), "microcompact_keep": (int,), "auto_compact": (bool,), "save_chats": (bool,), "memory": (bool,), "auto_memory": (str,), "chat_retention_days": (int,),
 }
 # Settings a project file may not set, and why: a cloned repository could otherwise run its own
 # code on your machine, or give the agent access to your other folders, just by being opened.
@@ -118,9 +119,11 @@ NOT_FROM_PROJECT = {
     "limits": "it could raise the limits that stop a runaway session",
     "save_chats": "it could stop your conversations being saved, or keep them when you asked it not to",
     "memory": "it could switch off the notes you wrote for every project",
+    "auto_memory": "it could let the agent save notes without asking",
     "chat_retention_days": "it decides which of your saved chats are deleted",
 }
 RULE_ACTIONS = ("allow", "ask", "deny")
+AUTO_MEMORY_MODES = ("ask", "on", "off")
 
 
 def _type_ok(name: str, value) -> bool:
@@ -153,6 +156,8 @@ def check_layer(data: dict, where: str) -> list[str]:
             check_rules(value, where)
         if key == "limits":
             check_limits(value, where)
+        if key == "auto_memory" and value not in AUTO_MEMORY_MODES:
+            raise ConfigError(f"{where}: 'auto_memory' must be one of {', '.join(AUTO_MEMORY_MODES)}")
         if key == "sandbox" and value not in SANDBOX_MODES:
             raise ConfigError(f"{where}: 'sandbox' must be one of {', '.join(SANDBOX_MODES)}")
         if key == "hooks":
