@@ -142,6 +142,7 @@ NOT_FROM_PROJECT = {
 USER_ONLY = {"mcp_servers"}
 
 RULE_ACTIONS = ("allow", "ask", "deny")
+MIN_WINDOW = 4096
 TOOL_SEARCH_MODES = ("auto", "on", "off")
 AUTO_MEMORY_MODES = ("ask", "on", "off")
 
@@ -176,6 +177,9 @@ def check_layer(data: dict, where: str) -> list[str]:
             check_rules(value, where)
         if key == "limits":
             check_limits(value, where)
+        if key == "context_window" and value < MIN_WINDOW:
+            raise ConfigError(f"{where}: 'context_window' must be at least {MIN_WINDOW:,}: the tool definitions and the system prompt alone "
+                              "take 2,000 to 3,500 tokens, and a quarter of the window is kept for the reply")
         if key == "tool_search" and value not in TOOL_SEARCH_MODES:
             raise ConfigError(f"{where}: 'tool_search' must be one of {', '.join(TOOL_SEARCH_MODES)}")
         if key == "journal" and value not in AUTO_MEMORY_MODES:

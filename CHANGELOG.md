@@ -8,6 +8,11 @@ is below 1.0, minor releases may contain breaking changes.
 
 ## [Unreleased]
 
+### Added
+- `--context-window TOKENS`: change the model's window for one run (also the `context_window` setting and `HARNESS_CONTEXT_WINDOW`); values under 4,096 are refused.
+  The context guide has a new section, [a bigger window](docs/user-guide/context.md#a-bigger-window): how to change it, what it costs in memory and speed on a
+  4 GB GPU (measured), and the two Ollama options (flash attention, an 8-bit KV cache) that make a 16K window faster than the default 8K one.
+
 ## [0.7.0] - 2026-10-08
 
 The workflows release. The agent can now take on a job in parts and share it: a todo list the harness can see (written for you from a numbered request),

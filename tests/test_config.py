@@ -41,6 +41,17 @@ def test_layers_override_in_order(home, ws):
     assert warnings == []
 
 
+def test_the_window_can_be_set_three_ways_and_not_too_small(home, ws):
+    from harness.cli import parse_args
+    assert parse_args(["--context-window", "16384"]).context_window == 16384 and parse_args([]).context_window is None
+    write(home / "settings.json", {"context_window": 16384})
+    assert load_settings(ws, environ={})[0].context_window == 16384
+    settings, _ = load_settings(ws, flags={"context_window": 32768}, environ={"HARNESS_CONTEXT_WINDOW": "24576"})
+    assert (settings.context_window, settings.sources["context_window"]) == (32768, "flag")
+    with pytest.raises(ConfigError, match="'context_window' must be at least 4,096"):
+        load_settings(ws, flags={"context_window": 2048}, environ={})
+
+
 def test_unknown_keys_warn_with_a_suggestion(home, ws):
     write(ws / ".harness" / "settings.json", {"max_step": 3})
     _, warnings = load_settings(ws, environ={})

@@ -1,7 +1,7 @@
 # The context window
 
 A model reads a fixed amount of text at once, its **context window**: `qwen3:4b-instruct` on Ollama
-reads 8,192 tokens by default (the `context_window` setting), Claude models 200,000. A token is
+reads 8,192 tokens by default (`--context-window`, or the `context_window` setting: [a bigger window](#a-bigger-window)), Claude models 200,000. A token is
 a piece of a word: about 3 to 4 characters of English, but as little as 2.4 characters in test output and
 tables, and **each digit counts as one and a half tokens**.
 
@@ -41,8 +41,91 @@ What fills a window fastest: whole-file reads and long command output (the resul
 capped at about 7,000 characters, a read at 300 lines). To keep room, ask for the part of a file you
 need, use `grep` before `read_file`, and start a new chat (`/reset`) for a new task.
 
-A bigger window costs memory and speed: for Ollama set `"context_window": 16384` in your settings and
-check that the model still fits your GPU (see [choosing a model](models.md)).
+A bigger window costs memory and speed: see [a bigger window](#a-bigger-window) below.
+
+## A bigger window
+8,192 tokens is the default because it fits a small local model on a small GPU: the system prompt and the tool
+definitions take 2,000 to 3,500 of it before you type anything, and a quarter is kept for the reply. If `/context`
+shows the window filling up after a few files, make it bigger.
+
+### 1. Change the size
+Any of these, the most specific winning:
+
+| for | how |
+|---|---|
+| one run | `harness --context-window 16384` |
+| every run | `"context_window": 16384` in `~/.harness/settings.json` (Windows: `C:\Users\<you>\.harness\settings.json`) |
+| one project | the same line in `<project>/.harness/settings.json` or `settings.local.json` |
+| one terminal | the environment variable `HARNESS_CONTEXT_WINDOW=16384` |
+
+Use a multiple of 1,024; the smallest the harness accepts is 4,096. With Ollama the harness asks for exactly that many
+tokens (Ollama's `num_ctx`), so the server and the harness agree; Ollama reloads the model the first time the size
+changes, which takes a few seconds. With a cloud model the window is known from the model's name (Claude 200,000), and
+the setting is only needed for a model the harness doesn't know.
+
+Check it took: `/context` says `of 16,384 tokens`, the status line says `/16.4k`, and `harness --show-config` shows
+where the value came from.
+
+### 2. Make room for it in memory (Ollama)
+Every token in the window needs memory in the model server, whether the conversation uses it yet or not. Measured with
+`qwen3:4b-instruct` on a laptop with a 4 GB GPU (RTX 3050) and 16 GB of RAM:
+
+| window | memory | on the GPU | writing speed, half full | writing speed, nearly full |
+|---|---|---|---|---|
+| 8,192 | 4.1 GB | 55% | 6.0 tokens/s | |
+| 16,384 | 5.4 GB | 42% | 4.6 tokens/s | 2.0 tokens/s |
+| 32,768 | 8.0 GB | 27% | 4.0 tokens/s | 0.7 tokens/s |
+
+What doesn't fit on the GPU runs on the CPU, so a bigger window works on a small GPU but answers more slowly, and much
+more slowly once the window is actually full: a 100-token answer took two and a half minutes at 32K.
+
+Two options of the Ollama server shrink that memory: **flash attention**, a faster way to compute attention, and an
+**8-bit KV cache**, which stores what the model has read in 8 bits instead of 16. On the same machine:
+
+| window | memory | on the GPU | writing speed, half full | writing speed, nearly full |
+|---|---|---|---|---|
+| 8,192 | 3.6 GB | 64% | 10.3 tokens/s | |
+| **16,384** | **4.3 GB** | **54%** | **8.4 tokens/s** | **3.8 tokens/s** |
+| 32,768 | 5.7 GB | 39% | 7.0 tokens/s | 1.7 tokens/s |
+
+With them, a 16K window is faster than the default 8K window without them. Each 8K of window costs about 0.7 GB
+instead of 1.3 GB. The 8-bit cache is generally reported to change answers very little; `q4_0` instead of `q8_0` halves
+the memory again with a larger loss (not measured here).
+
+To turn them on, set two environment variables for the Ollama server and restart it:
+
+- **Windows**: run `setx OLLAMA_FLASH_ATTENTION 1` and `setx OLLAMA_KV_CACHE_TYPE q8_0`, then quit Ollama from the
+  system tray and start it again.
+- **macOS**: run `launchctl setenv OLLAMA_FLASH_ATTENTION 1` and `launchctl setenv OLLAMA_KV_CACHE_TYPE q8_0`, then
+  quit and reopen the Ollama app.
+- **Linux** (systemd): `sudo systemctl edit ollama.service`, add the lines below, then `sudo systemctl restart ollama`:
+  ```ini
+  [Service]
+  Environment="OLLAMA_FLASH_ATTENTION=1"
+  Environment="OLLAMA_KV_CACHE_TYPE=q8_0"
+  ```
+
+Check: with a model loaded, `ollama ps` shows a smaller SIZE than before (here 3.6 GB instead of 4.1 GB at 8K).
+
+**Which size?** On a 4 GB GPU, 16,384 with both options. With more GPU memory, add about 0.7 GB per 8K of window (with
+the options) and keep the whole model on the GPU (`ollama ps` says `100% GPU`): that is what keeps answers fast. A model
+has its own limit too (`ollama show <model>` lists the context length; 262,144 for `qwen3:4b-instruct`).
+
+### 3. Or need less of it
+- **Fewer tools.** Each tool is described in every request. Turning off what you don't use saves its share:
+  `"web_fetch": false`, `"subagents": false`, `"skills": false`, `"todo": false`, `"background_tasks": false`,
+  `"auto_memory": "off"`. With all of these off, the start-up cost went from about 3,400 tokens to 1,800.
+- **Look at the system prompt.** `/prompt` lists its sections and what each costs. A long [progress journal](journal.md)
+  or `HARNESS.md` is read into every request.
+- **Read less at once.** `grep` before `read_file`, ask for the lines you need, `/reset` between tasks. Old results are
+  cleared, then the conversation summarised, as it fills (below).
+- **A cloud model** for a job that needs a whole codebase in view: Claude reads 200,000 tokens
+  ([choosing a model](models.md)).
+
+### What else changes with the size
+The harness plans everything from the window: a quarter is kept for the reply (at most `max_output_tokens`, 4,096),
+the system prompt may use a quarter (so a bigger window shows more of the workspace listing), [tool search](tool-search.md)
+stops holding tools back once their definitions are under 15% of it, and clearing and summarising start later.
 
 ## Window sizes
 For cloud models the harness knows the window by model name (Claude 200K, GPT-4o 128K, Gemini 1M, ...);

@@ -1,7 +1,7 @@
 # CLI reference
 
 ```text
-harness [--provider NAME] [--model MODEL] [--base-url URL] [--fallback-model MODEL] [--workspace PATH] [--max-steps N] [--mode MODE] [--yes] [--no-stream] [--think] [--plain] [--show-config] [-c] [-r [CHAT]] [--no-save] [--fresh] [--worktree NAME]
+harness [--provider NAME] [--model MODEL] [--base-url URL] [--fallback-model MODEL] [--workspace PATH] [--max-steps N] [--context-window TOKENS] [--mode MODE] [--yes] [--no-stream] [--think] [--plain] [--show-config] [-c] [-r [CHAT]] [--no-save] [--fresh] [--worktree NAME]
 ```
 
 | Flag | Default | Description |
@@ -12,6 +12,7 @@ harness [--provider NAME] [--model MODEL] [--base-url URL] [--fallback-model MOD
 | `--fallback-model` | none | A second model on the same provider, used when the main one keeps failing with temporary errors. |
 | `--workspace` | `workspace` | Folder the agent works in. Must exist. |
 | `--max-steps` | `20` | Maximum model calls per request before the agent stops. |
+| `--context-window` | `8192` | The model's window in tokens: what the harness plans for, and Ollama's `num_ctx`. At least 4,096. Bigger costs memory and speed ([a bigger window](../user-guide/context.md#a-bigger-window)). |
 | `--mode` | `default` | Permission mode: `default`, `accept-edits`, `plan` or `bypass`. See [permissions](../user-guide/permissions.md). |
 | `--yes` | off | Same as `--mode bypass`: tool calls run without asking, except deny rules and protected paths. Only for throwaway folders. |
 | `--no-stream` | off | Wait for each complete reply instead of showing text as it is generated. |

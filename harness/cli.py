@@ -40,6 +40,8 @@ def parse_args(argv=None):
                    help="a model (same provider) to try when the main one keeps failing")
     p.add_argument("--workspace", default="workspace", help="folder the agent works in")
     p.add_argument("--max-steps", type=int, default=None)
+    p.add_argument("--context-window", type=int, default=None, metavar="TOKENS",
+                   help="the model's window in tokens (Ollama's num_ctx; default 8192). Bigger costs memory and speed")
     p.add_argument("--mode", default=None, choices=MODES,
                    help="permission mode: " + "; ".join(f"{m}: {h}" for m, h in MODE_HELP.items()))
     p.add_argument("--yes", action="store_true",
@@ -128,7 +130,7 @@ def main(argv=None):
         sys.exit(f"workspace folder not found: {workspace}")
 
     flags = {"provider": args.provider, "model": args.model, "base_url": args.base_url,
-             "fallback_model": args.fallback_model, "max_steps": args.max_steps,
+             "fallback_model": args.fallback_model, "max_steps": args.max_steps, "context_window": args.context_window,
              "stream": False if args.no_stream else None, "think": True if args.think else None,
              "permission_mode": "bypass" if args.yes else args.mode, "save_chats": False if args.no_save else None}
     wt = None
