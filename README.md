@@ -5,15 +5,17 @@ written from scratch in Python, without agent frameworks. It talks to a local mo
 [Ollama](https://ollama.com) or to a cloud API, inspects and edits files, runs commands, and
 explains every step it takes.
 
-> **Status: v0.6, pre-release.** The agent reads, searches and edits code, runs commands and
+> **Status: v0.7, pre-release.** The agent reads, searches and edits code, runs commands and
 > fetches web pages, and what it may do is decided by code, not by the model: a workspace
 > boundary, permission modes and rules, command analysis, untrusted-content handling, hooks,
 > secret redaction, an audit log and limits (and an OS sandbox on Linux and macOS). It keeps its
-> conversation inside the model's window, saves every chat so you can resume or fork it, reads
-> your project notes, remembers where the last chat stopped, and can undo what it changed. It
-> streams its answers and runs on Ollama, Claude or any OpenAI-compatible service, in a terminal
-> app with Markdown rendering, slash commands, output styles and typeset math. Sub-agents,
-> skills and a web UI are on the [roadmap](#roadmap).
+> conversation inside the model's window, saves every chat, reads your project notes, remembers
+> where the last chat stopped and can undo what it changed. It plans before it changes things,
+> keeps a todo list, hands jobs to sub-agents, runs commands in the background, loads skills,
+> uses tools from MCP servers and works in a git worktree of its own. It streams its answers and
+> runs on Ollama, Claude or any OpenAI-compatible service, in a terminal app with Markdown
+> rendering, slash commands, output styles and typeset math. A web UI is next on the
+> [roadmap](#roadmap).
 > See the [changelog](CHANGELOG.md) for what changed in each release.
 
 ![The agent fixing a bug: it reads the file, proposes a diff, runs the tests](docs/images/demo.svg)
@@ -67,6 +69,13 @@ plus [`httpx`](https://www.python-httpx.org/). Every design decision is written 
 | ✅ | Project memory (`HARNESS.md`), notes the agent saves for itself, both trust-aware | v0.6 |
 | ✅ | A project journal: a new chat starts from where the last one stopped | v0.6 |
 | ✅ | `/undo` and `/rewind`: a copy of each file before it is changed; never overwrites your own edits | v0.6 |
+| ✅ | A todo list the harness can see, written from your numbered request; the agent is sent back when it stops early | v0.7 |
+| ✅ | Plan mode that ends only with your yes; questions from the agent, at most three per request | v0.7 |
+| ✅ | Sub-agents with conversations of their own, sharing your permissions, taint and limits | v0.7 |
+| ✅ | Commands in the background (`run_shell(background=true)`), stopped with the session | v0.7 |
+| ✅ | Skills loaded when a task needs them; tool search for rarely used tools | v0.7 |
+| ✅ | MCP servers over stdio: their tools ask, their results are untrusted (`/mcp`) | v0.7 |
+| ✅ | `--worktree NAME`: a git worktree for each session, removed only if nothing in it would be lost | v0.7 |
 
 ## Quickstart
 Requirements: Python 3.10+, [Ollama](https://ollama.com/download), about 3 GB of disk.
@@ -103,7 +112,7 @@ Then ask something like *"How many TODOs are in my notes?"*. Full walkthrough:
 |---|---|
 | v0.5 ✅ | Security: path jail, permission modes and rules, shell hardening, hooks, audit log |
 | v0.6 ✅ | Context: token budgets, compaction, sessions, project and auto memory, journal, undo |
-| v0.7 | Workflows: todo list, plan mode, sub-agents, skills, background tasks, MCP |
+| v0.7 ✅ | Workflows: todo list, plan mode, asking, sub-agents, background tasks, skills, tool search, MCP, worktrees |
 | v0.8 | Web UI with streaming, approvals and settings |
 | v1.0 | Evals, tracing, packaging, CI |
 

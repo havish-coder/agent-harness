@@ -3,7 +3,7 @@
 Agent Harness lets a language model run tools on your computer. Treat it like any program
 that can read your files, change them, run commands and fetch web pages.
 
-## Current security model (v0.6)
+## Current security model (v0.7)
 - **Path jail.** File tools only reach the workspace (and folders you list in `additional_directories`),
   however a path is written: `..`, absolute paths, drive letters, links, Windows junctions and device names.
 - **Permissions.** Anything that changes something asks, unless you choose a mode (`accept-edits`, `plan`,
@@ -22,6 +22,13 @@ that can read your files, change them, run commands and fetch web pages.
 - **Undo is yours, not the model's.** `/undo` and `/rewind` are commands the model can't call; they never overwrite a file you changed
   since, and files changed by commands can't be undone (copies are kept only for `edit_file` and `write_file`).
 - **Saved chats hold what the agent read**, in your user folder, with secrets hidden by shape and removed after 30 days; `--no-save` writes none.
+- **Workflows add no way around the rules.** Sub-agents share your permissions, taint record and limits; a background command is
+  `run_shell`, judged like any other; plan mode refuses changes in the permission layer and ends only with your answer; a skill is
+  text, never a permission; the agent's questions are labelled, limited and warned about after untrusted reading.
+- **MCP servers come only from your user settings.** Their tools always ask (a server's claim that a tool only reads is ignored), what
+  they return is untrusted content unless you mark the server trusted, and a server gets a secret environment variable only if you name it.
+- **A `settings.local.json` that git tracks** came with the repository: until you trust the folder it has a project file's limits.
+- **A worktree separates files, not permissions**: commands run in one still reach the rest of your disk.
 - Details, and what each defense does *not* cover, are in [docs/security.md](docs/security.md).
 
 Earlier basics still hold:

@@ -8,6 +8,15 @@ is below 1.0, minor releases may contain breaking changes.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-08
+
+The workflows release. The agent can now take on a job in parts and share it: a todo list the harness can see (written for you from a numbered request),
+plan mode that ends only with your yes, questions to you, sub-agents with conversations of their own, commands in the background, skills loaded when a
+task needs them, tool search for rarely used tools, tools from MCP servers, and a git worktree of its own for each session. Every feature was measured on
+a 4B local model, and the measurements changed the design more than once: a tool that tool search loads is sent on the very next call, a server's tools
+are held back only when they alone are many, and the harness writes the todo list itself because a small model rarely does. 1,569 tests.
+Start with [MCP servers](docs/user-guide/mcp.md) and [worktrees](docs/user-guide/worktrees.md).
+
 ### Added
 - A todo list the agent keeps (ADR 0042): the `todo_write` tool replaces the whole checklist, a short rule in the system prompt says when to use it, and when the agent tries to finish with items still open the harness
   adds a note and sends it back to work (at most twice per request, never after you refused a call). The list is rebuilt from the conversation after a resume or a rewind, repeated word for word in a summary, and quoted fenced when it was written
@@ -343,7 +352,8 @@ Start with [the security model](docs/security.md).
   the system prompt.
 - Terminal chat (`harness`) with tool-call display, `/reset`, `/bye` and per-turn token counts.
 
-[Unreleased]: https://github.com/havish-coder/agent-harness/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/havish-coder/agent-harness/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/havish-coder/agent-harness/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/havish-coder/agent-harness/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/havish-coder/agent-harness/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/havish-coder/agent-harness/compare/v0.3.0...v0.4.0

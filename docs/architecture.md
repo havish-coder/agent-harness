@@ -174,17 +174,35 @@ show. See the [events reference](reference/events.md).
 
 ```
 harness/
-  agent.py          the agent loop
+  agent.py          the agent loop: steps, tool calls, approvals, hooks, context checks, rollback
   messages.py       provider-neutral message types
-  cli.py            the `harness` command: settings, the input loop, command dispatch
-  session.py        one running session: provider with retries, agent, costs, UI
-  commands.py       slash commands: built-in and Markdown-defined
+  session.py        one running session: settings, workspace, provider, tools, agent, costs, UI
+  cli.py            the `harness` command: flags, the input loop, command dispatch, --worktree
+  commands.py       slash commands: built-in, Markdown-defined, and skills started by name
   styles.py         output styles added to the system prompt
   export.py         /export: chats as Markdown, LaTeX (pandoc) or PDF (pandoc + Tectonic)
-  tui/              terminal interfaces: rich (Markdown, diffs, spinner) and plain;
-                    the line editor (prompt.py), the Esc/type-ahead key watcher (keys.py),
-                    LaTeX math to Unicode (latex.py)
   mentions.py       @file mentions attached to messages
+  config.py         settings layers, validation, .env loading
+  workspace.py      the path jail and read tracking for all file tools
+  usage.py          prices and per-session cost tracking
+  limits.py         per-chat limits on calls, cost, tokens and time
+  audit.py          the hash-chained audit log
+  hooks.py          your scripts before and after tool calls, and before a message is sent
+  chats.py          saved chats: append-only logs, resume, fork
+  memory.py         HARNESS.md project memory
+  automemory.py     notes the agent saves for itself
+  journal.py        the project's progress journal
+  filehistory.py    a copy of each file before an edit tool changes it, for /undo and /rewind
+  todo.py           the todo list, seeding from a numbered request, the nudge
+  plan.py           plan mode's exit_plan_mode and saved plans
+  ask.py            questions from the agent to the user
+  agents.py         sub-agent definitions and the delegate tool
+  tasks.py          commands running in the background
+  skills.py         skills loaded on demand
+  toolsearch.py     holding rarely used tool definitions back, and tool_search
+  mcp.py            the MCP client: tools from other programs over stdio
+  worktree.py       a git worktree for a session, and its cleanup
+  context/          token estimates and window sizes, the system prompt's sections, clearing old results, summarising
   providers/
     base.py         the Provider interface and ProviderError
     ollama.py       Ollama adapter (/api/chat, NDJSON streaming)
@@ -195,15 +213,18 @@ harness/
     fake.py         scripted, recording and replaying providers for tests
   tools/
     base.py         the Tool type and the @tool decorator
-    registry.py     lookup, argument validation, running, result caps
+    registry.py     lookup, argument validation, running, result caps, held-back tools
     fs.py           list_dir, read_file, workspace_snapshot
     search.py       glob, grep
     edit.py         edit_file, write_file
-    shell.py        run_shell
-  workspace.py      the path jail and read tracking for all file tools
-  config.py         settings layers, validation, .env loading
-  usage.py          prices and per-session cost tracking
-scripts/            setup check and teaching scripts
+    shell.py        run_shell (in the foreground or the background), task_output, task_stop
+    web.py          web_fetch
+  security/         permissions and rules, shell command analysis, taint and folder trust, the network guard,
+                    secrets and redaction, the OS sandbox
+  tui/              terminal interfaces: rich (Markdown, diffs, spinner) and plain; the line editor (prompt.py),
+                    the Esc/type-ahead key watcher (keys.py), LaTeX math to Unicode (latex.py)
+scripts/            setup check, the labs that measure each feature, demo rendering
+tests/              unit and integration tests, recorded runs, a test MCP server
 workspace/          a sample folder to try the agent on
 docs/               this documentation
 ```
