@@ -60,3 +60,4 @@ Copy [the template](template.md) to `NNNN-short-title.md` with the next number.
 | [0051](0051-a-standard-library-web-server-with-server-sent-events.md) | The web interface is a standard-library HTTP server that streams events with Server-Sent Events | Accepted |
 | [0052](0052-the-page-is-plain-html-css-and-javascript.md) | The page is plain HTML, CSS and JavaScript, and model text becomes HTML only through an escape-first renderer | Accepted |
 | [0053](0053-the-agents-questions-wait-in-the-page.md) | The agent's questions wait in the page: one at a time, the first answer counts, Stop answers no | Accepted |
+| [0054](0054-the-page-switches-by-rebuilding-the-session.md) | The page opens other chats with slash commands, and other projects and models by rebuilding the session; it never takes a key, nor a folder you haven't used | Accepted |

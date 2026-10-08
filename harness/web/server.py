@@ -14,6 +14,8 @@ Python's own http.server, one thread per request (ADR 0051). The page talks to i
 - GET  /api/files     a folder of the workspace, for the explorer (Lesson 54)
 - GET  /api/file      a text file of the workspace, for the viewer, with secrets hidden
 - POST /api/answer    {"id", "answer"}: answer the question the agent is waiting on: an approval, a choice, text (Lesson 55)
+- GET  /api/chats     this project's saved chats and the projects used before; GET /api/journal, GET /api/settings (Lesson 56)
+- POST /api/project   {"path"}: open a project used before; POST /api/connect {"provider", "model", "base_url"}: another model
 
 Only this computer can connect (127.0.0.1), the Host header must name it, and every request needs the key.
 """
@@ -31,10 +33,19 @@ from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 
+import httpx
+
+from harness import config
+from harness.chats import ChatStore
 from harness.cli import announce, handle_line
+from harness.commands import load_commands, resume_text
+from harness.config import ConfigError, describe, load_dotenv, load_settings
+from harness.providers.base import ProviderError
+from harness.providers.factory import OPENAI_COMPATIBLE, PROVIDERS
 from harness.security.permissions import CHANGES
 from harness.security.redact import redacted
 from harness.session import Session
+from harness.styles import load_styles
 from harness.tui.latex import render_math
 from harness.tui.plain import always_label
 from harness.web import DEFAULT_PORT
@@ -304,11 +315,42 @@ class WebApprover:
         return {"yes": True, "always": "always"}.get(answer, False)
 
 
+def build_session(workspace: Path, flags: dict, ui: WebUI, fresh: bool = False) -> tuple[Session, object]:
+    """What `harness` does at start, for one project and the command line's settings, with the page as the interface (Lesson 56:
+    also when the page opens another project or connects another model)."""
+    load_dotenv(workspace)                                       # never overrides a variable that is already set
+    settings, warnings = load_settings(workspace, flags)        # ConfigError: the caller keeps what it had
+    ws = Workspace(workspace, extra_dirs=[workspace / Path(d).expanduser() for d in settings.additional_directories])
+    commands = load_commands(workspace)
+    styles, style_warnings = load_styles(workspace)
+    for warning in warnings + commands.warnings + style_warnings:
+        ui.warn(f"warning: {warning}")
+    session = Session(settings, ws, ui, WebApprover(ui), styles, interface="web", fresh=fresh)
+    session.commands = commands
+    ui.banner("Agent harness", f"{settings.provider} · {session.provider.model} · {ws.root}")
+    announce(session)
+    return session, commands
+
+
+def ollama_models(base_url: str | None) -> list[str]:
+    """The models the Ollama server has, for the settings' list; [] when it doesn't answer."""
+    try:
+        r = httpx.get(f"{(base_url or 'http://localhost:11434').rstrip('/')}/api/tags", timeout=2)
+        return sorted(m["name"] for m in r.json().get("models", []))
+    except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError):
+        return []
+
+
+def key_variable(provider: str) -> str | None:
+    return "ANTHROPIC_API_KEY" if provider == "anthropic" else OPENAI_COMPATIBLE.get(provider, (None, None))[1]
+
+
 class WebApp:
     """What the server runs: one session, the hub its events go to, and the request in progress."""
 
-    def __init__(self, session: Session, commands):
+    def __init__(self, session: Session, commands, flags: dict | None = None):
         self.session, self.commands, self.ui = session, commands, session.ui
+        self.flags = dict(flags or {})           # the command line's settings: kept when the page opens another project or model (Lesson 56)
         self.lock = threading.Lock()
         self.keys = SimpleNamespace(watching=nullcontext)      # run_turn's keyboard watcher: the browser has a Stop button instead
         self.notes: list[dict] = []          # what was said before any page was open (the banner, warnings): shown first on every page
@@ -317,31 +359,106 @@ class WebApp:
     def busy(self) -> bool:
         return self.ui.turn is not None and self.ui.turn.is_alive()
 
-    def send(self, text: str) -> bool:
-        """Start a request (or a command) on a worker thread. False while one is running."""
+    def send(self, text: str, action=None) -> bool:
+        """Start a request, a command, or `action` (Lesson 56) on a worker thread. False while one is running."""
         with self.lock:
             if self.busy:
                 return False
             self.ui.stop.clear()
-            self.ui.turn = threading.Thread(target=self.run, args=(text,), name="harness-turn", daemon=True)
+            self.ui.turn = threading.Thread(target=self.run, args=(text, action), name="harness-turn", daemon=True)
             self.ui.turn.start()
             return True
 
-    def run(self, text: str) -> None:
+    def shape(self) -> tuple:
+        """Which conversation this is: another session, another list (/reset, /resume), or a shorter one (/rewind, /compact) means redraw."""
+        return id(self.session), id(self.session.agent.messages), len(self.session.agent.messages)
+
+    def run(self, text: str, action=None) -> None:
         hub = self.ui.hub
-        hub.publish({"type": "user", "text": text})
+        if action is None:
+            hub.publish({"type": "user", "text": text})
+        else:
+            self.ui.info(text)
         hub.publish({"type": "busy", "busy": True})
+        before = self.shape()
         try:
-            self.session.announce_tasks()          # background tasks that ended since the last request (Lesson 48)
-            if not handle_line(self.session, self.keys, self.commands, text):
-                self.ui.info("/bye ends a terminal session; here, close the tab (Ctrl+C in the server's terminal stops the server)")
+            if action is not None:
+                action()
+            else:
+                self.session.announce_tasks()          # background tasks that ended since the last request (Lesson 48)
+                if not handle_line(self.session, self.keys, self.commands, text):
+                    self.ui.info("/bye ends a terminal session; here, close the tab (Ctrl+C in the server's terminal stops the server)")
         except KeyboardInterrupt:
             self.ui.error("stopped")
+        except (ConfigError, ProviderError) as e:
+            self.ui.error(str(e))
         except Exception as e:                     # a bug in one request mustn't take the server down
             self.ui.error(f"{type(e).__name__}: {e}")
         finally:
             self.ui.stop.clear()
+            after = self.shape()
+            if after[:2] != before[:2] or after[2] < before[2]:
+                hub.publish({"type": "conversation"})       # the pages draw it again from /api/state
             hub.publish({"type": "busy", "busy": False, "status": self.session.status() | {"busy": False}})   # this thread is still alive
+
+    # --- projects, models and chats (Lesson 56) -------------------------------------------------------------------------------
+    def replace(self, workspace: Path, overrides: dict, resume: str | None = None) -> None:
+        """A new session for `workspace` with these settings; the old one closes only once the new one works."""
+        first = self.ui.hub.last
+        session, commands = build_session(workspace, self.flags | overrides, self.ui, self.session.fresh)
+        self.session.close()
+        self.session, self.commands = session, commands
+        self.flags |= overrides
+        self.notes = [e for i, data in self.ui.hub.events if i > first and (e := json.loads(data))["type"] in ("info", "warn")]
+        info = session.store.find(resume) if resume and session.store is not None else None
+        if info is not None:
+            self.ui.info(resume_text(session, info))
+
+    def open_project(self, path: str) -> str | None:
+        """Switch to a project used before. Only those: the page can't point the agent at any folder it names."""
+        known = {p["path"] for p in ChatStore.projects(config.USER_DIR)}
+        if not isinstance(path, str) or path not in known or not Path(path).is_dir():
+            return "that isn't a project you have used here; start one with harness --web --workspace FOLDER"
+        ok = self.send(f"opening the project {path} ...", lambda: self.replace(Path(path), {}))
+        return None if ok else "a request is running"
+
+    def connect(self, provider, model, base_url) -> str | None:
+        """Another provider or model, for this project; the chat carries on. API keys come only from environment variables."""
+        if provider not in PROVIDERS:
+            return f"choose a provider from: {', '.join(PROVIDERS)}"
+        if not isinstance(model, str) or len(model) > 200 or not isinstance(base_url, str) or len(base_url) > 300:
+            return "the model and the address must be short text"
+        if base_url and not base_url.startswith(("http://", "https://")):
+            return "the address must start with http:// or https://"
+        chat = self.session.chat
+        resume = chat.id if chat is not None and chat.path.exists() else None
+        overrides = {"provider": provider, "model": model.strip() or None, "base_url": base_url.strip() or None}
+        ok = self.send(f"connecting to {provider} · {model.strip() or 'its default model'} ...",
+                       lambda: self.replace(self.session.ws.root, overrides, resume))
+        return None if ok else "a request is running"
+
+    def chats_json(self) -> dict:
+        s = self.session
+        return {"current": s.chat.id if s.chat else None, "saving": s.store is not None, "workspace": str(s.ws.root),
+                "chats": [{"id": i.id, "title": i.title or "(no title)", "age": i.age(), "messages": i.messages, "model": i.model}
+                          for i in s.chats()[:100]],
+                "projects": [{"path": p["path"], "name": p.get("name", ""), "current": Path(p["path"]) == s.ws.root}
+                             for p in ChatStore.projects(config.USER_DIR)[:50]]}
+
+    def journal_json(self) -> dict:
+        s = self.session
+        doc = s.journal.read()
+        return {"mode": s.settings.journal, "active": s.journal_active(), "exists": doc is not None,
+                "updated": doc.updated if doc else None, "by": doc.updated_by if doc else None,
+                "tainted": doc.tainted if doc else False, "body": redacted(doc.body) if doc else ""}
+
+    def settings_json(self) -> dict:
+        s = self.session
+        return {"provider": s.settings.provider, "model": s.provider.model, "base_url": s.settings.base_url or "",
+                "providers": [{"name": p, "key": key_variable(p), "key_set": bool(key_variable(p) and os.environ.get(key_variable(p)))}
+                              for p in PROVIDERS],
+                "models": ollama_models(s.settings.base_url) if s.settings.provider == "ollama" else [],
+                "styles": list(s.styles), "style": s.style.name, "context_window": s.context.window, "config": describe(s.settings)}
 
     def stop(self) -> bool:
         if not self.busy:
@@ -359,7 +476,8 @@ class WebApp:
         tasks = [{"id": t.id, "command": t.command, "text": t.describe(), "running": t.running}
                  for t in (s.tasks.tasks.values() if s.tasks else [])]
         return {"status": self.status(), "messages": self.notes + transcript(list(s.agent.messages)), "last_event": last,
-                "todos": s.todos.as_data(), "tasks": tasks, "question": self.ui.question.payload if self.ui.question else None}
+                "todos": s.todos.as_data(), "tasks": tasks, "question": self.ui.question.payload if self.ui.question else None,
+                "chat": {"id": s.chat.id, "title": s.chat.title} if s.chat else None}
 
 
 class Server(ThreadingHTTPServer):
@@ -432,6 +550,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(self.server.app.state())
         if url.path == "/events":
             return self.events(url)
+        if url.path in ("/api/chats", "/api/journal", "/api/settings"):
+            app = self.server.app
+            return self.json({"/api/chats": app.chats_json, "/api/journal": app.journal_json, "/api/settings": app.settings_json}[url.path]())
         if url.path in ("/api/files", "/api/file"):
             path = parse_qs(url.query).get("path", [""])[0]
             try:
@@ -461,6 +582,10 @@ class Handler(BaseHTTPRequestHandler):
             return self.json({"ok": True}) if app.send(text.strip()) else self.json({"error": "a request is running"}, 409)
         if url.path == "/api/stop":
             return self.json({"stopping": app.stop()})
+        if url.path in ("/api/project", "/api/connect"):
+            why = (app.open_project(body.get("path")) if url.path == "/api/project" else
+                   app.connect(body.get("provider"), body.get("model", ""), body.get("base_url", "")))
+            return self.json({"ok": True}) if why is None else self.json({"error": why}, 409 if "running" in why else 400)
         if url.path == "/api/answer":
             why = app.ui.reply(body.get("id"), body.get("answer"))
             return self.json({"ok": True}) if why is None else self.json({"error": why}, 409 if "waiting" in why else 400)
@@ -495,23 +620,20 @@ class Handler(BaseHTTPRequestHandler):
             pass
 
 
-def start(session: Session, commands, port: int = DEFAULT_PORT) -> Server:
+def start(session: Session, commands, port: int = DEFAULT_PORT, flags: dict | None = None) -> Server:
     """The server, listening but not yet serving (tests run serve_forever on a thread)."""
-    return Server(WebApp(session, commands), port)
+    return Server(WebApp(session, commands, flags), port)
 
 
-def serve(settings, ws, commands, styles, port: int = DEFAULT_PORT, open_browser: bool = True, fresh: bool = False) -> None:
+def serve(workspace: Path, flags: dict, port: int = DEFAULT_PORT, open_browser: bool = True, fresh: bool = False) -> None:
     """`harness --web`: make the session with the browser as its interface and serve it until Ctrl+C."""
     ui = WebUI(Hub())
-    session = Session(settings, ws, ui, WebApprover(ui), styles, interface="web", fresh=fresh)
-    session.commands = commands
+    session, commands = build_session(workspace, flags, ui, fresh)
     try:
-        server = start(session, commands, port)
+        server = start(session, commands, port, flags)
     except OSError as e:
         session.close()
         raise OSError(f"can't listen on port {port} ({e.strerror or e}): another program may be using it. Try --web 0 for a free port") from e
-    ui.banner("Agent harness", f"{settings.provider} · {session.provider.model} · {ws.root}")
-    announce(session)
     server.app.notes = [json.loads(data) for _, data in ui.hub.events]
     print(f"Agent harness in your browser: {server.url}\n(only this computer can open it; Ctrl+C here stops the server)", flush=True)
     if open_browser:
@@ -523,6 +645,7 @@ def serve(settings, ws, commands, styles, port: int = DEFAULT_PORT, open_browser
     finally:
         server.closing = True
         server.server_close()
+        session = server.app.session              # the page may have opened another project or model since
         session.close()
         if session.costs.models:
             print(f"session: {session.costs.summary()}")

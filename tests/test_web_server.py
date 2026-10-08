@@ -1,4 +1,4 @@
-"""Lessons 53-55: the web server. A real server on a free port, a scripted model that streams, and httpx as the browser."""
+"""Lessons 53-56: the web server. A real server on a free port, a scripted model that streams, and httpx as the browser."""
 import json
 import threading
 import time
@@ -8,6 +8,7 @@ import pytest
 
 from harness import config
 from harness.agent import NO_APPROVER
+from harness.chats import ChatStore
 from harness.cli import parse_args
 from harness.commands import load_commands
 from harness.config import Settings
@@ -16,7 +17,7 @@ from harness.messages import Message, Reply, ToolCall, Usage
 from harness.providers.base import TextDelta
 from harness.session import Session
 from harness.web import DEFAULT_PORT
-from harness.web.server import Hub, WebApprover, WebUI, check_answer, event_json, start
+from harness.web.server import Hub, WebApprover, WebUI, check_answer, event_json, ollama_models, start
 from harness.workspace import Workspace
 
 
@@ -307,6 +308,88 @@ def test_what_an_answer_must_be():
     approval = {"kind": "approval", "always": None}
     assert check_answer(approval, "yes") is None and check_answer(approval, "always") and check_answer(approval | {"always": "x"}, "always") is None
     assert check_answer({"kind": "choice", "options": {"1": "a"}}, "") is None and check_answer({"kind": "text"}, "x" * 5000)
+
+
+# --- chats, projects, the journal and the model (Lesson 56) ------------------------------------------------------------
+
+def done(w, text):
+    """Send `text` and wait for that request to end (from the events after it, not an earlier request's end)."""
+    after = w.client.get("/api/state").json()["last_event"]
+    assert w.send(text).status_code == 200
+    return without_ids(w.events(after=after))
+
+
+def test_chats_are_listed_and_a_new_chat_or_a_resumed_one_redraws_the_page(web):
+    w = web([answer("First."), answer("Second.")], save_chats=True)
+    done(w, "first chat")
+    chats = w.client.get("/api/chats").json()
+    assert chats["saving"] and [c["title"] for c in chats["chats"]] == ["first chat"] and chats["current"] == chats["chats"][0]["id"]
+    first_id = chats["current"]
+    assert {"type": "conversation"} in done(w, "/reset")                     # pages draw the (empty) conversation again
+    assert all(m["type"] != "answer" for m in w.client.get("/api/state").json()["messages"])
+    done(w, "second chat")
+    assert {"type": "conversation"} in done(w, f"/resume {first_id}")
+    state = w.client.get("/api/state").json()
+    assert [(m["type"], m["text"]) for m in state["messages"] if m["type"] in ("user", "answer")][-2:] == [("user", "first chat"), ("answer", "First.")]
+    assert state["chat"]["id"] == first_id
+
+
+def test_a_project_is_opened_only_if_it_was_used_before(web, tmp_path):
+    w = web([])
+    other = tmp_path / "other"
+    other.mkdir()
+    assert w.client.post("/api/project", json={"path": str(other)}).status_code == 400            # never used: refused
+    assert w.client.post("/api/project", json={"path": "C:/Windows"}).status_code == 400
+    ChatStore(config.USER_DIR, other).register()
+    listed = w.client.get("/api/chats").json()["projects"]
+    assert str(other.resolve()) in [p["path"] for p in listed]
+    after = w.client.get("/api/state").json()["last_event"]
+    assert w.client.post("/api/project", json={"path": str(other.resolve())}).json() == {"ok": True}
+    got = without_ids(w.events(after=after))
+    assert {"type": "conversation"} in got
+    state = w.client.get("/api/state").json()
+    assert state["status"]["workspace"] == str(other.resolve()) and any("other" in m.get("text", "") for m in state["messages"] if m["type"] == "info")
+
+
+def test_connecting_another_model_keeps_the_chat_and_never_takes_a_key(web, monkeypatch):
+    w = web([answer("Hello.")], save_chats=True)
+    w.send("hi")
+    w.events()
+    for bad in ({"provider": "nope", "model": "x"}, {"provider": "ollama", "model": "x", "base_url": "file:///etc/passwd"},
+                {"provider": "ollama", "model": "x" * 300}):
+        assert w.client.post("/api/connect", json=bad).status_code == 400
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    after = w.client.get("/api/state").json()["last_event"]
+    w.client.post("/api/connect", json={"provider": "openai", "model": "gpt-x", "base_url": ""})
+    got = without_ids(w.events(after=after))
+    assert any(e["type"] == "error" and "OPENAI_API_KEY" in e["text"] for e in got)                 # said why; the old session goes on
+    assert w.session.provider.model == "streamer" or w.server.app.session is w.session
+    after = w.client.get("/api/state").json()["last_event"]
+    assert w.client.post("/api/connect", json={"provider": "ollama", "model": "qwen3:8b", "base_url": ""}).json() == {"ok": True}
+    w.events(after=after)
+    app = w.server.app
+    assert app.session is not w.session and app.session.provider.model == "qwen3:8b" and app.flags["model"] == "qwen3:8b"
+    assert [m.content for m in app.session.agent.messages if m.role == "user"] == ["hi"]          # the chat carried on
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-a-real-key-123456")
+    settings = w.client.get("/api/settings").json()
+    openai = next(p for p in settings["providers"] if p["name"] == "openai")
+    assert openai == {"name": "openai", "key": "OPENAI_API_KEY", "key_set": True}
+    assert "sk-test-not-a-real-key" not in json.dumps(settings) and settings["model"] == "qwen3:8b"
+
+
+def test_the_journal_is_shown_with_secrets_hidden(web, tmp_path):
+    w = web([], journal="ask")
+    assert w.client.get("/api/journal").json()["exists"] is False
+    from harness.journal import SECTIONS
+    body = "\n\n".join(f"# {s}\n{s} text" for s in SECTIONS).replace("Goal text", "Goal text sk-ant-" + "b" * 30)
+    (tmp_path / "proj" / ".harness").mkdir(exist_ok=True)
+    (tmp_path / "proj" / ".harness" / "progress.md").write_text(body, encoding="utf-8")
+    journal = w.client.get("/api/journal").json()
+    assert journal["exists"] and journal["active"] and "# Done so far" in journal["body"] and "sk-ant-" not in journal["body"]
+
+
+def test_ollamas_models_are_listed_and_a_server_that_doesnt_answer_lists_none():
+    assert ollama_models("http://127.0.0.1:9") == []
 
 
 # --- the explorer and the file viewer (Lesson 54) --------------------------------------------------------------------

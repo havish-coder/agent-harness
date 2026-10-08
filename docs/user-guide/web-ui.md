@@ -57,6 +57,23 @@ updated if there is one, and background commands and MCP servers are stopped.
 - The rail on the left hides or shows the explorer, the graph and the terminal. On a narrow screen the panels stack, with
   the conversation first.
 
+## Chats, projects and models
+The two buttons at the bottom of the rail open drawers:
+
+- **Chats and projects**: **+ New chat** starts a new conversation (the one you were in stays saved); click a saved chat to carry on with it;
+  **Rename** names this one. Below, the **projects** you have used: click one to open it (its own chats, settings, memory and journal). A
+  folder you haven't used before is opened from the command line: `harness --web --workspace FOLDER`. The page can't open any other folder.
+- **Settings**: **Connect your LLM** chooses the provider, the model (Ollama's models are listed) and, if you need one, another server
+  address. The conversation carries on with the new model. API keys are never typed here: the drawer says whether the provider's variable
+  (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY` ...) is set; set it in your environment or a `.env` file ([models](models.md)) and start the
+  server again. Connecting restarts background commands and MCP servers. Below: the output style, and every setting in effect with where
+  it came from (edit them in the settings files, [configuration](configuration.md)).
+- The **Journal** tab shows the project's [progress journal](journal.md): **Start** keeps one, **Update now** writes it, **Stop** stops
+  reading and writing it (the file stays).
+
+These are the terminal's commands underneath (`/reset`, `/resume`, `/rename`, `/style`, `/progress ...`): you can also type them. When the
+conversation changes under the page (another chat, `/rewind`, `/compact`), every open tab draws it again.
+
 ## Using it
 - Type a request and press **Enter** (Shift+Enter for a new line). Slash commands work as in the terminal: `/cost`,
   `/context`, `/mode plan`, `/model qwen3:8b`, `/undo` ... (`/bye` doesn't: close the tab).

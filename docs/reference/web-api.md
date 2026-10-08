@@ -9,11 +9,16 @@ Everything is JSON over HTTP on `127.0.0.1`; every request needs the key (see [w
 | `GET /?key=KEY` | | `303` to `/`, with the cookie `harness_key_PORT` (`HttpOnly; SameSite=Strict`) |
 | `GET /` | | the page |
 | `GET /static/NAME` | | the page's script and style (only the files that ship with it) |
-| `GET /api/state` | | `{"status": {...}, "messages": [event, ...], "last_event": N, "todos": [...], "tasks": [...], "question": {...} or null}` |
+| `GET /api/state` | | `{"status": {...}, "messages": [event, ...], "last_event": N, "todos": [...], "tasks": [...], "question": {...} or null, "chat": {"id", "title"} or null}` |
 | `GET /events?after=N` | | the event stream from event `N + 1` on (see below) |
 | `POST /api/send` | `{"text": "..."}` | `{"ok": true}`, or `409` while a request runs, `400` for no text |
 | `POST /api/stop` | `{}` | `{"stopping": true}`, or `false` when nothing runs |
 | `POST /api/answer` | `{"id": "q3", "answer": ...}` | answer the waiting question: `"yes"`, `"no"` or `"always"` (if offered) for an approval, an option's key (or `""`) for a choice, text (at most 4,000 characters) for text. `{"ok": true}`, `400` for an answer it can't be, `409` when that question isn't waiting (answered already, or stopped) |
+| `GET /api/chats` | | `{"current", "saving", "workspace", "chats": [{"id", "title", "age", "messages", "model"}], "projects": [{"path", "name", "current"}]}` |
+| `GET /api/journal` | | `{"mode", "active", "exists", "updated", "by", "tainted", "body"}` (secrets hidden) |
+| `GET /api/settings` | | `{"provider", "model", "base_url", "providers": [{"name", "key", "key_set"}], "models", "styles", "style", "context_window", "config"}`: `key` is the name of the variable, `key_set` whether it is set; the value is never sent |
+| `POST /api/project` | `{"path"}` | open a project used before (one of `/api/chats`' `projects`); `400` for any other path, `409` while a request runs |
+| `POST /api/connect` | `{"provider", "model", "base_url"}` | a new session with this provider and model (`""` for the defaults); the chat carries on. `400` for an unknown provider, long text or an address that isn't `http(s)`; a missing key is reported as an `error` event and nothing changes |
 | `GET /api/files?path=P` | | `{"path", "entries": [{"name", "path", "dir"}]}`: folder `P` of the workspace (`""` for its root), folders first, without the folders the tools skip (`.git`, `node_modules` ...); `403` outside the workspace, `404` if it isn't a folder |
 | `GET /api/file?path=P` | | `{"path", "text", "truncated"}` (the first 200 KB, secrets hidden), or `{"path", "binary": true}`; `403` outside the workspace, `404` if it isn't a file |
 
@@ -61,6 +66,7 @@ and a `: ping` comment every 15 s when nothing happens. A client that reconnects
 | `question` | `id`, `kind`; for `approval`: `call_id`, `tool`, `args`, `preview` (the diff), `reason`, `notes`, `destructive`, `always` (what "always" would allow, or `null`); for `choice`: `question`, `options` (`{key: label}`); for `text`: `question` | the agent waits for an answer (`POST /api/answer`) |
 | `answered` | `id`, `answer` (`true`/`false` for text: whether something was typed) | a question was answered, or Stop answered it |
 | `plan` | `text`, `markdown` | plan mode proposes a plan; a `choice` question follows |
+| `conversation` | | the conversation was replaced or cut (another chat or project, `/rewind`, `/compact`): draw it again from `/api/state` |
 | `rolled_back` | | a request that failed or was stopped was removed from the conversation |
 | `note` | `text` | the harness did something worth a line: cleared old results, summarised, a limit, hid a secret |
 | `info`, `warn`, `error` | `text` | messages, as the terminal prints them |

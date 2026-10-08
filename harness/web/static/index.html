@@ -10,7 +10,7 @@
 <body>
 <header class="top">
   <div class="brand"><img src="/static/icon.svg" alt=""><b>AGENT HARNESS</b></div>
-  <div class="where"><span class="label">Workspace</span> <span id="workspace">…</span></div>
+  <div class="where"><span class="label">Workspace</span> <span id="workspace">…</span> <span class="label">· Chat</span> <span id="chat-title">new</span></div>
   <div class="top-right">
     <span id="busy-chip" class="chip">idle</span>
     <span id="conn" class="conn">connecting</span>
@@ -28,7 +28,19 @@
     <button class="rail-btn on" data-toggle="terminal" title="Terminal output">
       <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m7 10 3 2-3 2M12.5 15H17"/></svg>
     </button>
+    <span class="rail-gap"></span>
+    <button class="rail-btn" data-drawer="chats" title="Chats and projects">
+      <svg viewBox="0 0 24 24"><path d="M4 5.5h16v10H9l-5 4z"/><path d="M8 9.5h8M8 12.5h5"/></svg>
+    </button>
+    <button class="rail-btn" data-drawer="settings" title="Settings: connect your LLM">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>
+    </button>
   </nav>
+
+  <aside class="drawer hidden" id="drawer" aria-label="Chats and settings">
+    <div class="drawer-head"><b id="drawer-title"></b><button class="btn" id="drawer-close" type="button" title="Close">✕</button></div>
+    <div class="scroll drawer-body" id="drawer-body"></div>
+  </aside>
 
   <section class="panel explorer" id="explorer">
     <h2>File Explorer</h2>
@@ -39,9 +51,11 @@
     <div class="tabs">
       <button class="tab on" data-tab="chat">Conversation</button>
       <button class="tab" data-tab="file" id="file-tab">File</button>
+      <button class="tab" data-tab="journal" id="journal-tab">Journal</button>
     </div>
     <div id="chat" class="scroll chat"></div>
     <div id="file" class="scroll viewer hidden"><div class="file-head" id="file-head"></div><div class="code-view"><pre class="gutter" id="gutter"></pre><pre class="code" id="code"></pre></div></div>
+    <div id="journal" class="scroll journal hidden"></div>
   </section>
 
   <section class="panel graph" id="graph-panel">

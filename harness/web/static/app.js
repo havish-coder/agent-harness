@@ -75,6 +75,14 @@ class Graph {
   stale(ids) {
     for (const id of ids) { const n = this.byId.get(id); if (n) { n.stale = true; this.setStatus(id, n.status); } }
   }
+  clear() {
+    this.nodes.forEach((n) => n.g.remove());
+    this.edges.forEach((e) => e.line.remove());
+    this.nodes = [];
+    this.edges = [];
+    this.byId.clear();
+    $("graph-count").textContent = "";
+  }
   trim() {
     while (this.nodes.length > MAX_NODES) {
       const old = this.nodes.shift();
@@ -342,7 +350,11 @@ function show(e, live = true) {
       $("busy-chip").textContent = busy ? "working" : "idle";
       $("busy-chip").classList.toggle("working", busy);
       setState(busy ? "thinking…" : "idle");
-      if (!busy) { currentAgent = null; stream = null; thinking = null; }
+      if (!busy && live) {
+        currentAgent = stream = thinking = null;
+        refreshState();                      // the chat's title, the background tasks
+        if (!$("journal").classList.contains("hidden")) journal();
+      }
       if (e.status) status(e.status);
       break;
     case "context":
@@ -505,6 +517,7 @@ async function refreshState() {
   const s = await api("/api/state");
   status(s.status);
   tasks(s.tasks);
+  $("chat-title").textContent = s.chat ? s.chat.title || "untitled" : "new";
 }
 
 // --- explorer and file viewer ---------------------------------------------------------------------------------------------------
@@ -560,9 +573,124 @@ async function openFile(path, focus = true) {
 }
 function selectTab(name) {
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("on", t.dataset.tab === name));
-  $("chat").classList.toggle("hidden", name !== "chat");
-  $("file").classList.toggle("hidden", name !== "file");
+  for (const tab of ["chat", "file", "journal"]) $(tab).classList.toggle("hidden", name !== tab);
+  if (name === "journal") journal();
 }
+
+// --- the progress journal, chats and projects, settings (Lesson 56) ------------------------------------------------------------------
+function button(box, label, cls, onClick) {
+  const b = box.appendChild(el("button", "btn " + cls, label));
+  b.type = "button";
+  b.disabled = busy;
+  b.addEventListener("click", onClick);
+  return b;
+}
+async function journal() {
+  const j = await api("/api/journal"), box = $("journal");
+  box.replaceChildren();
+  const state = j.mode === "off" ? "off" : j.active ? "on" : "not started";
+  box.appendChild(el("div", "journal-head", `progress journal: ${state}` + (j.updated ? ` · updated ${j.updated} by ${j.by || "?"}` : "")));
+  const actions = box.appendChild(el("div", "row-buttons"));
+  if (!j.active) button(actions, "Start", "yes", () => send("/progress start"));
+  if (j.active) button(actions, "Update now", "option", () => send("/progress update"));
+  if (j.active) button(actions, "Stop", "no", () => send("/progress stop"));
+  if (j.tainted) box.appendChild(el("div", "sys warn", "written after content you may not trust was read: it is read as information, not instructions (/progress trust once you have checked it)"));
+  box.appendChild(el("div", "md")).innerHTML = j.exists ? md(j.body) :
+    md("No journal in this project yet. **Start** keeps one: every later chat, here or in the terminal, begins from where this one stopped.");
+}
+
+const drawer = { open: null };
+async function openDrawer(name) {
+  if (drawer.open === name) return closeDrawer();
+  drawer.open = name;
+  document.querySelectorAll("[data-drawer]").forEach((b) => b.classList.toggle("on", b.dataset.drawer === name));
+  $("drawer").classList.remove("hidden");
+  $("drawer-title").textContent = name === "chats" ? "Chats and projects" : "Settings";
+  const body = $("drawer-body");
+  body.replaceChildren(el("div", "small", "loading…"));
+  const box = el("div");
+  box.style.display = "contents";
+  if (name === "chats") await chatsDrawer(box); else await settingsDrawer(box);
+  body.replaceChildren(box);
+}
+function closeDrawer() {
+  drawer.open = null;
+  $("drawer").classList.add("hidden");
+  document.querySelectorAll("[data-drawer]").forEach((b) => b.classList.remove("on"));
+}
+function pick(box, title, detail, current, onClick) {
+  const b = box.appendChild(el("button", "pick" + (current ? " current" : "")));
+  b.type = "button";
+  b.append(el("span", "", title), el("span", "small", detail));
+  b.disabled = current || busy;
+  b.addEventListener("click", async () => { closeDrawer(); await onClick(); });
+}
+async function chatsDrawer(box) {
+  const c = await api("/api/chats");
+  box.appendChild(el("h3", "", "Chats in this project"));
+  const actions = box.appendChild(el("div", "row-buttons"));
+  button(actions, "+ New chat", "yes", () => { closeDrawer(); send("/reset"); });
+  if (c.current) {
+    const name = el("input");
+    name.placeholder = "a name for this chat";
+    const field = box.appendChild(el("div", "field"));
+    field.appendChild(name);
+    button(actions, "Rename", "option", () => name.value.trim() && (closeDrawer(), send("/rename " + name.value.trim())));
+  }
+  if (!c.saving) box.appendChild(el("div", "hint", "chats aren't being saved (save_chats is off, or --no-save)"));
+  for (const chat of c.chats) pick(box, chat.title, `${chat.age} · ${chat.messages} messages · ${chat.model}`, chat.id === c.current, () => send("/resume " + chat.id));
+  if (c.saving && !c.chats.length) box.appendChild(el("div", "hint", "no saved chats yet: your first message starts one"));
+  box.appendChild(el("h3", "", "Projects"));
+  for (const p of c.projects) pick(box, p.name || p.path, p.path, p.current, async () => {
+    const r = await api("/api/project", { path: p.path });
+    if (r.error) system("warn", r.error);
+  });
+  box.appendChild(el("div", "hint", "A project is a folder the agent has worked in. To add one: harness --web --workspace FOLDER"));
+}
+async function settingsDrawer(box) {
+  const s = await api("/api/settings");
+  box.appendChild(el("h3", "", "Connect your LLM"));
+  const provider = el("select"), model = el("input"), url = el("input"), key = el("div");
+  for (const p of s.providers) provider.appendChild(new Option(p.name, p.name, false, p.name === s.provider));
+  model.value = s.model;
+  model.setAttribute("list", "models");
+  const list = box.appendChild(el("datalist"));
+  list.id = "models";
+  for (const m of s.models) list.appendChild(new Option(m, m));
+  url.value = s.base_url;
+  url.placeholder = "the provider's own address";
+  const showKey = () => {
+    const p = s.providers.find((x) => x.name === provider.value);
+    key.className = !p.key ? "hint" : p.key_set ? "key-ok" : "key-missing";
+    key.textContent = !p.key ? "no API key needed" : p.key_set ? `✓ ${p.key} is set` :
+      `✗ ${p.key} is not set: set it in your environment (or a .env file) and start the server again. Keys are never typed here.`;
+  };
+  provider.addEventListener("change", showKey);
+  showKey();
+  for (const [label, input] of [["Provider", provider], ["Model", model], ["Address (optional)", url]]) {
+    const field = box.appendChild(el("div", "field"));
+    field.append(el("span", "label", label), input);
+  }
+  box.appendChild(key);
+  const actions = box.appendChild(el("div", "row-buttons"));
+  button(actions, "Connect", "yes", async () => {
+    closeDrawer();
+    const r = await api("/api/connect", { provider: provider.value, model: model.value, base_url: url.value });
+    if (r.error) system("warn", r.error);
+  });
+  box.appendChild(el("div", "hint", "The chat carries on with the new model. Background commands and MCP servers are restarted."));
+  box.appendChild(el("h3", "", "Output style"));
+  const style = el("select");
+  for (const name of s.styles) style.appendChild(new Option(name, name, false, name === s.style));
+  style.addEventListener("change", () => send("/style " + style.value));
+  box.appendChild(style).classList.add("pill");
+  box.appendChild(el("h3", "", "Settings in effect"));
+  box.appendChild(el("pre", "", s.config));
+  box.appendChild(el("div", "hint", "Change them in ~/.harness/settings.json or the project's .harness/settings.json, then start the server again."));
+}
+document.querySelectorAll("[data-drawer]").forEach((b) => b.addEventListener("click", () => openDrawer(b.dataset.drawer)));
+$("drawer-close").addEventListener("click", closeDrawer);
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && drawer.open) closeDrawer(); });
 document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => selectTab(t.dataset.tab)));
 graph.onClick = (n) => {
   const call = calls.get(n.id);
@@ -603,7 +731,9 @@ $("stop").addEventListener("click", () => api("/api/stop", {}));
 $("mode").addEventListener("change", (ev) => send("/mode " + ev.target.value));
 
 // --- start: what happened so far, then the live stream ------------------------------------------------------------------------------
-(async () => {
+let loading = false, queued = [];
+async function load() {
+  loading = true;
   const state = await api("/api/state");
   for (const e of state.messages) show(e, false);
   lastStreamed = null;
@@ -611,9 +741,35 @@ $("mode").addEventListener("change", (ev) => send("/mode " + ev.target.value));
   if (state.question) show(state.question, false);           // the agent was already waiting when this page opened
   todos(state.todos);
   tasks(state.tasks);
+  $("chat-title").textContent = state.chat ? state.chat.title || "untitled" : "new";
   refreshTree();
+  loading = false;
+  for (const [id, e] of queued) if (id > state.last_event) show(e);      // what arrived while the state was on its way
+  queued = [];
+  return state;
+}
+async function redraw() {
+  // another chat, another project, or a conversation cut short (/rewind, /compact): draw it again from the state (Lesson 56)
+  const said = request ? request.els.filter((x) => x.classList.contains("sys")) : [];   // what the command said ("resumed: ...") stays
+  chat.replaceChildren();
+  graph.clear();
+  calls.clear();
+  cards.clear();
+  changed.clear();
+  request = stream = lastStreamed = thinking = null;
+  await load();
+  said.forEach((x) => append(chat, x));
+  if (!$("journal").classList.contains("hidden")) journal();
+}
+(async () => {
+  const state = await load();
   const events = new EventSource("/events?after=" + state.last_event);     // reconnects by itself, with Last-Event-ID
-  events.onmessage = (m) => show(JSON.parse(m.data));
+  events.onmessage = (m) => {
+    const e = JSON.parse(m.data);
+    if (loading) queued.push([+m.lastEventId, e]);
+    else if (e.type === "conversation") redraw();
+    else show(e);
+  };
   events.onopen = () => { $("conn").textContent = "live"; $("conn").className = "conn live"; refreshState(); };
   events.onerror = () => { $("conn").textContent = "reconnecting"; $("conn").className = "conn"; };
 })();

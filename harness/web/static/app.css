@@ -41,7 +41,7 @@ button, select, textarea { font: inherit; color: inherit; }
 .app.no-graph { grid-template-areas: "rail explorer main main side" "rail explorer terminal terminal side"; }
 .app.no-terminal { grid-template-rows: minmax(0, 1fr) 0; row-gap: 0; }
 .app.no-explorer .explorer, .app.no-graph .graph, .app.no-terminal .terminal { display: none; }
-.rail { grid-area: rail; display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
+.rail { grid-area: rail; display: flex; flex-direction: column; gap: 8px; padding: 4px 0 2px; }
 .explorer { grid-area: explorer; } .main { grid-area: main; } .graph { grid-area: graph; } .terminal { grid-area: terminal; }
 .side { grid-area: side; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
 
@@ -106,6 +106,32 @@ button, select, textarea { font: inherit; color: inherit; }
 .call.error pre { color: var(--red); }
 .sub { margin-left: 18px; font: 12px var(--mono); color: var(--violet); }
 .call.waiting .state { background: var(--amber); animation: pulse .8s ease-in-out infinite; }
+
+/* chats, projects, settings, the journal (Lesson 56) */
+.rail-gap { flex: 1; }
+.drawer { position: fixed; top: 58px; left: 68px; bottom: 10px; width: min(400px, calc(100vw - 80px)); z-index: 10; display: flex;
+          flex-direction: column; background: linear-gradient(180deg, #101b26, #0b121a); border: 1px solid rgba(34, 224, 255, .45);
+          border-radius: 12px; box-shadow: var(--glow-cyan), 0 20px 60px rgba(0, 0, 0, .6); }
+.drawer-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.drawer-head b { color: #e6f1fb; }
+.drawer-body { padding: 10px 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+.drawer h3 { margin: 10px 0 2px; font: 600 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--dim); }
+.pick { text-align: left; border: 1px solid var(--line); background: #0a1219; border-radius: 8px; padding: 7px 10px; cursor: pointer;
+        display: flex; flex-direction: column; gap: 1px; }
+.pick:hover:not(:disabled) { border-color: rgba(34, 224, 255, .5); }
+.pick.current { border-color: rgba(255, 63, 216, .6); box-shadow: 0 0 10px rgba(255, 63, 216, .15); cursor: default; }
+.pick .small { color: var(--dim); white-space: normal; overflow-wrap: anywhere; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field input, .field select { background: #070c12; border: 1px solid var(--line-2); border-radius: 6px; padding: 6px 8px; font: 12.5px var(--mono); }
+.hint { font-size: 12px; color: var(--dim); }
+.key-ok { color: var(--green); font: 12px var(--mono); } .key-missing { color: var(--amber); font: 12px var(--mono); }
+.drawer pre { margin: 0; padding: 8px 10px; border-radius: 6px; background: #05080c; border: 1px solid var(--line); font: 11.5px/1.5 var(--mono);
+              color: var(--dim); white-space: pre-wrap; overflow-wrap: anywhere; }
+.row-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+.journal { padding: 12px 16px; }
+.journal-head { margin-bottom: 8px; font: 12px var(--mono); color: var(--dim); }
+.journal .row-buttons { margin-bottom: 10px; }
+.journal .md h1 { font-size: 13px; color: var(--cyan); text-transform: uppercase; letter-spacing: .08em; margin-top: 14px; }
 
 /* questions from the agent (Lesson 55) */
 .ask { border: 1px solid rgba(255, 63, 216, .6); border-radius: 10px; padding: 10px 12px; background: rgba(255, 63, 216, .05);
@@ -232,7 +258,9 @@ select.pill { cursor: pointer; }
 @media (max-width: 1100px) {
   body { overflow: auto; }
   .app { display: flex; flex-direction: column; height: auto; }
-  .rail, .explorer { display: none; }
+  .explorer, .rail [data-toggle], .rail-gap { display: none; }
+  .rail { flex-direction: row; order: 0; padding: 0; }
+  .drawer { left: 10px; top: 58px; width: auto; right: 10px; }
   .main { height: 70vh; order: 1; }
   .side { order: 2; } .graph { height: 320px; order: 3; } .terminal { height: 220px; order: 4; }
   .log { height: 220px; flex: none; } .queue { max-height: none; }

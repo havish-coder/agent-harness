@@ -15,6 +15,11 @@ is below 1.0, minor releases may contain breaking changes.
   rebinding, and on Windows an exclusive port (Python's default lets a second server bind the same one). Calls that would ask are refused in the page for now.
   `--no-browser`. Measured: an event reaches the page 0.34 ms after it is published. User guide: [the web UI](docs/user-guide/web-ui.md); reference:
   [web API](docs/reference/web-api.md).
+- Chats, projects, the journal and models in the web UI (ADR 0054): a **Chats and projects** drawer (new chat, rename, resume a saved chat, open a
+  project used before), a **Settings** drawer (**connect your LLM**: provider, model from Ollama's list, address, and whether the provider's key
+  variable is set, never the key; output style; the settings in effect), and a **Journal** tab (read it, start, update, stop). Chat actions are the
+  terminal's slash commands; another project or model builds a new session (the chat carries on) and closes the old one only once the new one works.
+  The top bar names the chat. `GET /api/chats`, `/api/journal`, `/api/settings`; `POST /api/project`, `/api/connect`; event `conversation`.
 - Approvals and questions in the web UI (ADR 0053): a call that asks shows in the conversation as a card with the diff (or the command), why it asks,
   the risks and whether it may destroy data, answered **Yes**, **No** or **Always allow ...** (when offered). The agent's questions (`ask_user`), plan
   review and the progress journal's offer work in the page too. One question at a time, shown in every open tab; the first answer counts; Stop answers

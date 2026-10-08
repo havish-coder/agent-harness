@@ -211,8 +211,8 @@ def main(argv=None):
     if args.web is not None:                                   # Lesson 53: the same session, driven from a browser
         from harness.web.server import serve
         try:
-            serve(settings, ws, commands, styles, port=args.web, open_browser=not args.no_browser, fresh=args.fresh)
-        except (ProviderError, OSError) as e:
+            serve(workspace, flags, port=args.web, open_browser=not args.no_browser, fresh=args.fresh)
+        except (ProviderError, ConfigError, OSError) as e:
             sys.exit(f"error: {e}")
         return
 
