@@ -42,4 +42,11 @@ Calling a held-back tool before loading it is an error that says to search first
 **Resuming.** A resumed chat has the tools it found earlier again (`/resume` reads them from the conversation); `/reset` starts a new chat that has found none.
 
 ## What it measured
-TOOLSEARCH_RESULT
+Thirty invented tools and ten requests that each need one of them (`scripts/toolsearch_lab.py find`, `qwen3:4b-instruct`, three runs each):
+
+| variant | right tool first | searched | definitions sent (tokens) | tool calls (mean) |
+|---|---|---|---|---|
+| `all`: every definition in every request | 30/30 | 0/30 | 2,014 | 1.0 |
+| `search`: held back, found with `tool_search` | **23/30** | 23/30 | **95** | 1.5 |
+
+Holding the definitions back cut what every request carries from about 2,000 tokens to under 100. When the model searched it found and called the right tool every time; in 7 of 30 runs it didn't search, and answered without a tool. If a request needs a tool you know is held back, naming it helps ("use the calendar tool to ...").

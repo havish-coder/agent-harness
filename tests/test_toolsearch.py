@@ -238,6 +238,16 @@ def test_the_model_searches_loads_and_then_calls(tmp_path, monkeypatch):
     assert "hasn't been loaded yet" in results[0] and results[1].startswith("Loaded: remember") and "remember" in names(s)
 
 
+def test_a_loaded_tool_is_sent_to_the_model_on_the_very_next_call(tmp_path, monkeypatch):
+    # The first version built the tool list once per request: the model was told "you can call them now" and wasn't sent them until the user's
+    # next message, so it searched again and again (the lab: right tool first 0 of 30). A scripted model doesn't care what it is sent; this checks it.
+    s = make_session(tmp_path, monkeypatch, auto_memory="on")
+    s.agent.provider = provider = ScriptedProvider([tool_calls(ToolCall("b", "tool_search", {"query": "save a note"})), text("ok")])
+    s.agent.run("remember that I like tabs")
+    sent = [[t["name"] for t in tools] for _, tools in provider.requests]
+    assert "remember" not in sent[0] and "remember" in sent[1]
+
+
 def test_a_held_back_tool_is_still_judged_by_the_same_rules(tmp_path, monkeypatch):
     s = make_session(tmp_path, monkeypatch, web_fetch=True)
     s.agent.tools.load(["web_fetch"])

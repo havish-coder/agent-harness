@@ -142,6 +142,7 @@ def run_once(variant: str, question: str, model: str) -> dict:
             real = s.agent.provider
             s.agent.provider = ScriptedProvider([tool_calls(ToolCall("d", "delegate", {"agent": "explore", "task": question}))])
             s.agent.provider = _Chain(s.agent.provider, real)
+            s.agent.stream = False         # _Chain answers chat(); a streaming agent would go straight to the real model and skip the first move
         answer = s.agent.run(question)
         calls = [c for m in s.agent.messages for c in m.tool_calls]
         return {"answer": answer, "calls": len(calls), "delegated": sum(c.name == "delegate" for c in calls), "tokens": s.limits.tokens,

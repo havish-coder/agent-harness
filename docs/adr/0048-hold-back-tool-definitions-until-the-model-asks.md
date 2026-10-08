@@ -7,7 +7,15 @@
 A tool's definition (name, description, arguments) is part of every request. Measured with `/context`'s estimator, the tools of v0.6 took about **1,700 tokens**; with the three tools and prompt rules Module 7 added (todo, asking, delegating) and the background-task tools,
 about **2,600**: a third of an 8,192-token window, on every request. That is paid before the user has said anything, and it will get worse: a connected server (Lesson 51) can add dozens.
 
-Measured (`scripts/toolsearch_lab.py`): thirty invented tools cost **2,014 tokens** as definitions and **140** as names; and what a 4B model does when it has to search first: TS_TABLE
+Measured (`scripts/toolsearch_lab.py`): thirty invented tools cost **2,014 tokens** as definitions and **140** as names; and what a 4B model does when it has to search first: thirty invented tools, ten requests that each need one, three runs each, `qwen3:4b-instruct`:
+
+| variant | right tool first | searched | definitions sent (tokens) | tool calls (mean) |
+|---|---|---|---|---|
+| `all`: every definition in every request | 30/30 | 0/30 | 2,014 | 1.0 |
+| `search`: held back, found with `tool_search` | **23/30** | 23/30 | **95** | 1.5 |
+| `search`, first version (the bug below) | 0/30 | 20/30 | 95 | 2.1 |
+
+Every run that searched then called the right tool; the seven misses never searched.
 
 ## Options
 1. **Show everything**: always available, costs the window.
@@ -28,7 +36,8 @@ Option 3 (`harness/toolsearch.py`).
 - **It is not a safety feature.** The same permission rules, hooks and sandbox judge a call whether or not its definition was shown.
 
 ## Consequences
-- In the default small window about 700 tokens come back per request. TS_CONSEQ
+- In the default small window about 700 tokens come back per request. On the lab's thirty tools the definitions went from 2,014 tokens to 95, for 23 of 30 right first calls instead of 30 of 30: the cost of deferral is the model that doesn't search (7 runs answered without a tool).
+- **The tool list is rebuilt before every model call**, not once per request. The first version built it once, so a tool `tool_search` had just loaded was not sent until the user's next message: the model was told "you can call them now", wasn't shown them, and searched again (0 of 30). A scripted test model doesn't care what it is sent, so the tests passed; a test now checks the definitions the model receives.
 - A small model must decide to search. A tool that is held back and never searched for is a tool that is never used: this is the cost, and it is why the always-visible set is the one the prompt's rules mention.
 - Search quality is the words of the tool authors: a tool whose description never says what it is for is hard to find. Lesson 51's servers write their own descriptions, which are untrusted text; deferral means they enter the conversation only when searched for.
 - The 15% threshold is a judgment, not a measurement: below it everything is shown and nothing changes; above it, held back. The `"on"` and `"off"` settings exist for when it is wrong for a model.

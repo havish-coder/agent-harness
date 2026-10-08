@@ -62,7 +62,15 @@ You review code. Read what you are given, then list the three most likely proble
 A sentence in the system prompt says to hand a question that needs many files read to `explore`. A small model uses `delegate` less often than you might hope: see what it measured. You can always ask: *"use the explore agent to find ..."*.
 
 ## What it measured
-AGENTS_RESULT
+Four questions about a 14-module package with planted facts ("What is the value of RETRY_LIMIT in the inventory package?"), three runs each, `qwen3:4b-instruct` (`scripts/agents_lab.py answers`):
+
+| variant | right answers | parent's conversation at the end (tokens) | parent's tool calls | delegated | tokens used in all | stopped early |
+|---|---|---|---|---|---|---|
+| `inline`: no sub-agents | 12/12 | 3,389 | 2.5 | (no tool) | 9,189 | 0/12 |
+| `rule`: `delegate` offered, and the prompt says when | 12/12 | 3,739 | 2.6 | **0/12** | 10,210 | 0/12 |
+| `forced`: the harness delegates the question for it | 12/12 | **2,435** | 1.0 | 12/12 | 8,105 | 0/12 |
+
+Handing the reading to `explore` kept every answer right and left the main conversation about 30% smaller. But this small model, told when to delegate, **never chose to** (0 of 12): it found each fact with a `grep` in two or three calls, which for these questions was the cheaper path anyway. Ask for it when you want it: *"use the explore agent to find ..."*.
 
 ## Setting
 `"subagents": false` removes `delegate` and its sentence in the prompt. A project may set it.

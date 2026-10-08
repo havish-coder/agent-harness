@@ -52,7 +52,19 @@ The items are written by the model, possibly **after it read a web page or a fil
 the way [saved notes](auto-memory.md) are. `/todo` says so. Whatever the model then does still goes through the usual [permission rules](permissions.md): a list can't approve anything.
 
 ## What it measured
-TODO_RESULT
+With `qwen3:4b-instruct` and a request with six numbered parts (`scripts/todo_lab.py`, 5 runs per row):
+
+| variant | what the agent had | parts done (of 6, mean) | all six | `todo_write` calls (mean) | nudges (mean) | tool calls (mean) |
+|---|---|---|---|---|---|---|
+| `none` | no todo tool | 5.0 | 1/5 | (no tool) | 0 | 13.2 |
+| `tool` | `todo_write`, described only by its own description | 4.0 | 0/5 | 0.0 | 0 | 12.6 |
+| `rule` | the tool, and a sentence in the system prompt saying when to use it | 5.2 | 2/5 | 0.2 | 0 | 12.2 |
+| `nudge` | the tool, the sentence, and the harness's check at the end | 5.0 | 2/5 | 0.0 | 0 | 10.8 |
+| `seed` | all of that, and the harness writes the list from the numbered request | **5.6** | **4/5** | 0.4 | 1.8 | 4.6* |
+
+\* calls still in the conversation at the end; the long `seed` runs had their older messages summarised (Lesson 39), so this undercounts them.
+
+Left to itself this small model almost never wrote a todo list (0 or 1 run of 5, with or without the sentence in the prompt), so the list couldn't help it. When the harness made the list from your numbered request, **4 of 5 runs did all six parts**, and the nudge (which fired about twice a run) is part of why. So: **number the parts of a request** when there are several.
 
 ## Setting
 `"todo": false` removes the tool and the nudging. A project may set it.

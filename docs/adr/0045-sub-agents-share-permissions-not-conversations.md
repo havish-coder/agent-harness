@@ -31,7 +31,15 @@ Option 3 (`harness/agents.py`, `Session.delegate`).
 
 ## Consequences
 - The main conversation pays for the report and not the reading: measured above. The sub-agent still pays in its own window: a job that overflows a small window overflows it there too, and what it can keep of what it read is whatever fits its own context.
-- AG_CONSEQ
+- A small model rarely chooses to delegate. Four questions about a 14-module package with planted facts ("What is the value of RETRY_LIMIT in the inventory package?"), three runs each, `qwen3:4b-instruct` (`scripts/agents_lab.py answers`):
+
+| variant | right answers | parent's conversation at the end (tokens) | parent's tool calls | delegated | tokens used in all | stopped early |
+|---|---|---|---|---|---|---|
+| `inline`: no sub-agents | 12/12 | 3,389 | 2.5 | (no tool) | 9,189 | 0/12 |
+| `rule`: `delegate` offered, and the prompt says when | 12/12 | 3,739 | 2.6 | **0/12** | 10,210 | 0/12 |
+| `forced`: the harness delegates the question for it | 12/12 | **2,435** | 1.0 | 12/12 | 8,105 | 0/12 |
+
+  With the rule in the prompt it delegated **0 of 12** times: `grep` found each fact in two or three calls, so it never needed to. When the harness made the delegation, the answers were as right and the parent's conversation ended about 30% smaller. The benefit is real; this model only gets it when asked ("use the explore agent to ...") or when the question needs more reading than a grep.
 - A sub-agent is a model call loop: it costs time (a small local model takes tens of seconds per delegation) and tokens, shown in its footer.
 - The sub-agent's report is only as good as its task text; a main agent that sends "check the thing" gets a report on nothing. The tool's description says so.
 - Every definition adds to the `delegate` tool's description, which is paid on every request: about 140 tokens with two agents (measured with the other tools in Lesson 50).

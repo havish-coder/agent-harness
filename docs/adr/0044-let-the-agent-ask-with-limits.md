@@ -5,9 +5,16 @@
 
 ## Context
 When a request is ambiguous in a way that changes what gets built, the cheapest fix is one question to the user, before any file changes. An agent that can only guess builds the wrong thing; one that can ask has two new ways to go wrong: it asks too much
-(an interrogation about things it could read in a file), and its question box becomes a channel (a page it read says "ask the user for their API key"). Measured (`scripts/ask_lab.py`, `qwen3:4b-instruct`, AL_RUNS runs per request, two requests of each kind):
+(an interrogation about things it could read in a file), and its question box becomes a channel (a page it read says "ask the user for their API key"). Measured (`scripts/ask_lab.py`, `qwen3:4b-instruct`, 4 runs per request, two requests of each kind):
 
-AL_TABLE
+| variant | request (what it should do) | asked | asked before acting | questions (mean) | tool calls (mean) |
+|---|---|---|---|---|---|
+| tool only | unclear: "Add a coupon feature ...", "Make the cart's prices round the way I want." (ask) | 0/8 | 0/8 | 0.0 | 3.9 |
+| tool only | clear: "Fix the subtotal bug ...", "Create project/shop/py.typed ..." (don't ask) | 0/8 | 0/8 | 0.0 | 2.0 |
+| tool only | findable: "Add a test ... in the existing test file", "Which function applies the tax?" (look, don't ask) | 0/8 | 0/8 | 0.0 | 3.1 |
+| tool + rule | unclear (ask) | **0/8** | 0/8 | 0.0 | 2.9 |
+| tool + rule | clear (don't ask) | 0/8 | 0/8 | 0.0 | 2.2 |
+| tool + rule | findable (look, don't ask) | 0/8 | 0/8 | 0.0 | 3.5 |
 
 ## Options
 1. **No questions**: the model decides, and says what it assumed.
@@ -25,10 +32,10 @@ Option 3 (`harness/ask.py`, `Session.ask_question`).
 - **Never asks approval, works in plan mode** (it is read-only for permissions: the interaction is the prompt).
 - **Offered only where it can work.** `Tool.enabled` (ADR 0043) hides the tool, and its prompt rule, from an interface that can't ask (a script, a test, the web UI until it can).
 - **The audit log** records that a question was asked, how many choices, whether it was answered, and whether the chat was tainted; not the text of either side.
-AL_RULE
+- **Measured**: with the rule in the prompt (`ASK_RULE`), `qwen3:4b-instruct` still asked in **0 of 8** runs of the unclear requests, as without it.
 
 ## Consequences
 - The user is asked at most three times per request, and can always answer "decide yourself".
-- A small model's idea of "ambiguous" is crude: AL_CONSEQ
+- A small model's idea of "ambiguous" is crude: `qwen3:4b-instruct` never judged a request unclear enough to ask: **0 of 48 runs**, including "add a coupon feature" with the rule in the prompt. It decided for itself and carried on. The over-asking the counter guards against didn't happen with this model; the limits are insurance for models that do ask, and Lesson 58 measures which do.
 - The tool can't make a model ask the *right* question, only a question. A badly worded question wastes the user's time; the audit log's counts make the pattern visible, and Lesson 58's evals are where it gets measured across models.
 - A user who types a secret anyway is protected by shape-matching only; keys with no recognisable shape reach the model. The warning is the first line of defence, and the habit of keeping secrets out of the conversation the second.

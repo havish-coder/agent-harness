@@ -25,7 +25,18 @@ A page the agent read can tell it *"ask the user for their API key"*. Two things
 Don't type secrets into the agent either way. It never needs them: keys belong in environment variables.
 
 ## What it measured
-ASK_RESULT
+With `qwen3:4b-instruct` (`scripts/ask_lab.py`, two requests of each kind, four runs each):
+
+| variant | request (what it should do) | asked | asked before acting | questions (mean) | tool calls (mean) |
+|---|---|---|---|---|---|
+| tool only | unclear: "Add a coupon feature ...", "Make the cart's prices round the way I want." (ask) | 0/8 | 0/8 | 0.0 | 3.9 |
+| tool only | clear: "Fix the subtotal bug ...", "Create project/shop/py.typed ..." (don't ask) | 0/8 | 0/8 | 0.0 | 2.0 |
+| tool only | findable: "Add a test ... in the existing test file", "Which function applies the tax?" (look, don't ask) | 0/8 | 0/8 | 0.0 | 3.1 |
+| tool + rule | unclear (ask) | **0/8** | 0/8 | 0.0 | 2.9 |
+| tool + rule | clear (don't ask) | 0/8 | 0/8 | 0.0 | 2.2 |
+| tool + rule | findable (look, don't ask) | 0/8 | 0/8 | 0.0 | 3.5 |
+
+This small model **never asked**, not even when the request was genuinely open ("add a coupon feature": a percentage or a fixed amount?), with or without the sentence in the system prompt telling it when to. It decided for itself. With such a model, put the choices in the request yourself. Larger models are more likely to ask; the limits above are there for when they ask too much.
 
 ## Setting
 There is no setting: the tool exists wherever the interface can ask. The [audit log](audit-and-limits.md) records that a question was asked, how many choices it had, and whether you answered, not the question's text or your answer.

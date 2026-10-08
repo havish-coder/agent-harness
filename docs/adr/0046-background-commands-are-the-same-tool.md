@@ -8,7 +8,16 @@
 with one large trap: **every rule that decides whether a command may run is about `run_shell`**: deny and ask rules written as `run_shell(rm *)`, the command analysis that finds `curl | sh`, hooks that match the
 tool's name, the sandbox, the approval question. A second tool for background commands would be a way round every one of them: the same `rm -rf` as `run_background`.
 
-Measured (`scripts/tasks_lab.py latency`): a command that takes 3 s blocks for 3.4 s; starting it in the background returned in **28 ms**. And, in the same lab, what a 4B model does with the choice: TL_CHOOSE
+Measured (`scripts/tasks_lab.py latency`): a command that takes 3 s blocks for 3.4 s; starting it in the background returned in **28 ms**. And, in the same lab, what a 4B model does with the choice: told to run it in the background, the model did (4 of 4) and then **never came back for the output** (0 of 4 waited or read it): it reported the TODO count, promised the build ("I will now wait for the background task to complete"), and ended its turn. Not told, it ran the command normally (0 of 4 in the background) and reported both results. The user hears when the task ends, and the model with the next request; nothing is lost, but nothing makes the model wait either.
+
+| asked | `background` offered | both results (the output was seen) | seconds* | started in the background | waited for it (`task_output`) |
+|---|---|---|---|---|---|
+| hint: "it is slow, so run it in the background" | no | 4/4 | 57 | (no tool) | (no tool) |
+| hint | yes | **0/4** | 22 | 4/4 | **0/4** |
+| plain: "run it and count the lines" | no | 4/4 | 53 | (no tool) | (no tool) |
+| plain | yes | 4/4 | 44 | 0/4 | 0/4 |
+
+\* with another lab sharing the GPU; `scripts/tasks_lab.py latency` (no model) gives the clean numbers above.
 
 ## Options
 1. **A separate tool** (`run_background`), as some agents have: clear to the model, but a second tool that must be added to every rule, hook and analysis, forever.
@@ -31,5 +40,5 @@ Option 2 (`harness/tasks.py`, `harness/tools/shell.py`).
 ## Consequences
 - A model can start a slow command and use the time. What it does with the result is up to it: it can poll with `task_output`, wait with `wait`, or, if it is a model that forgets, finish its answer while the command is still running; the user is told when it ends, and the note comes with the next request.
 - Four more concurrent subprocesses, each with a pump thread: bounded, and stopped at exit. A crash of the harness itself can leave a task running (the OS reaps the pipe, not the process): the process-tree kill is best effort, as for timeouts.
-- `run_shell`'s schema grew by one parameter and the two task tools cost about TT_TOKENS tokens on every request. `background_tasks: false` removes them: the tool-search lesson (50) is the principled answer to what rarely-used tools cost.
+- `run_shell`'s schema grew by one parameter and the two task tools cost about **220 tokens** on every request (the parameter about 50 more), measured with the harness's estimator. `background_tasks: false` removes them: the tool-search lesson (50) is the principled answer to what rarely-used tools cost.
 - Background commands can't read input (stdin is closed), like foreground ones, and can't be attached to later: this is not a terminal multiplexer.

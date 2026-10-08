@@ -34,7 +34,18 @@ You can do the same yourself: `/tasks` lists them, `/tasks output bg-1 [LINES]` 
 - The command runs in the same [sandbox](sandbox.md), with the same environment (secrets removed), as a normal one.
 
 ## What it measured
-TASKS_RESULT
+A slow command (25 s) and a quick job (count the TODO lines in `notes.txt`), asked two ways, with and without `background` (`scripts/tasks_lab.py choose`, `qwen3:4b-instruct`, four runs each):
+
+| asked | `background` offered | both results (the output was seen) | seconds* | started in the background | waited for it (`task_output`) |
+|---|---|---|---|---|---|
+| hint: "it is slow, so run it in the background" | no | 4/4 | 57 | (no tool) | (no tool) |
+| hint | yes | **0/4** | 22 | 4/4 | **0/4** |
+| plain: "run it and count the lines" | no | 4/4 | 53 | (no tool) | (no tool) |
+| plain | yes | 4/4 | 44 | 0/4 | 0/4 |
+
+\* with another lab sharing the GPU. Without a model (`scripts/tasks_lab.py latency`): a command that takes 3 s holds the agent for 3.4 s in the foreground; started in the background, `run_shell` answers in 28 ms.
+
+Told to, this small model starts the command in the background every time, and then **answers without waiting for it**: you get the quick result and a promise ("I will now wait for the background task to complete"). You are told when the command ends; ask *"and the build?"* and the model reads it. If you want both results in one answer, don't say "in the background", or say "wait for it before you answer".
 
 ## Setting
 `"background_tasks": false` removes the `background` parameter, `task_output` and `task_stop`. A project may set it.

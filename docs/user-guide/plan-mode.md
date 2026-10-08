@@ -47,7 +47,14 @@ has the checklist without being asked to write it a second time.
 - Your answer, and the size of the plan, go in the [audit log](audit-and-limits.md); the plan's text doesn't.
 
 ## What it measured
-PLAN_RESULT
+With `qwen3:4b-instruct` and a request with six parts (`scripts/plan_lab.py`, 5 runs):
+
+| run | plan proposed with `exit_plan_mode` | refused calls (mean) | files changed before an approval | parts done (of 6, mean) | all six | tool calls (mean) |
+|---|---|---|---|---|---|---|
+| no plan mode (bypass, for comparison) | 0/5 | 0.0 | (not measured) | 3.2 | 1/5 | 5.6 |
+| plan mode | **0/5** | 0.8 | **0** | 0.0 | 0/5 | 8.6 |
+
+Plan mode held every time: **no file changed** before an approval, and the attempts the model made anyway (0.8 per run) were refused. But this small model **never proposed its plan with `exit_plan_mode`**: it wrote its next step as an answer ("I'll now work on the fix ...") and stopped. With such a model, read the answer, then `/plan off` and ask it to go ahead. Larger models are more likely to use the tool.
 
 ## Limits
 - A plan is only as good as what the agent read before writing it, and nothing checks that the agent then follows it (the todo list and your approvals for each change are the checks).

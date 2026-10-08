@@ -121,12 +121,13 @@ class Agent:
         self.turn_start = len(self.messages)
         self.nudges, self.denied = 0, False
         self.add(Message.user(user_input, checkpoint=secrets.token_hex(4)))
-        schemas = self.tools.schemas()
         self.stop_reason = None
         seen: dict[str, tuple[str, int]] = {}   # call → (result, times seen), for note_repeats
 
         try:
             for _ in range(self.max_steps):  # stop condition #2: never loop forever
+                # built every step: a tool tool_search loaded, or one switched on (plan mode), is callable on the very next call (Lesson 50)
+                schemas = self.tools.schemas()
                 for note in (self.notices() if self.notices else []):
                     self.add(Message.user(f"[Note from the harness: {note}]"))
                     self.on_event("notice", note)

@@ -35,7 +35,16 @@ It does have the standing of [HARNESS.md](memory.md): the agent follows it. So *
 ("2 skill(s) were not read") and `/trust` loads them. A project's skill can't replace one of yours with the same name.
 
 ## What it measured
-SKILLS_RESULT
+A commit message for a small diff in a strict five-rule format (`scripts/skills_lab.py`, `qwen3:4b-instruct`, three diffs, four runs each):
+
+| variant | where the rules were | follows the format | called `use_skill` | system prompt (tokens) | tokens used per run |
+|---|---|---|---|---|---|
+| `none` | nowhere | 0/12 | (no skill) | 298 | 2,148 |
+| `memory` | in `HARNESS.md`, so in every prompt | 0/12 | (no skill) | 451 | 2,855 |
+| `skill` | one line in the prompt; the text when loaded | 0/12 | **0/12** | 336 | 2,300 |
+| `command` | `/commit-message ...`: the user starts it, the text is in the request | **2/12** | 2/12 | 336 | 4,818 |
+
+This small model **never loaded the skill by itself** (0 of 12): the one-line listing wasn't enough. Started by name (`/commit-message ...`) it was the only way it ever followed the format (2 of 12); the same text in `HARNESS.md`, paid for in every request, gave 0 of 12. With a small model, **start skills yourself with their slash command**, and keep their rules few.
 
 ## Setting
 `"skills": false` turns skills off (no list in the prompt, no tool, no commands). A project may set it.
