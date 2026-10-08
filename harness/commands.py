@@ -23,6 +23,16 @@ from harness.config import USER_DIR, describe
 NAME = re.compile(r"^[a-z][a-z0-9-]*$")
 
 
+class Send(str):
+    """What a local command returns when, besides doing its own thing, it wants this text sent to the model as the user's next request
+    (`/plan fix the bug`: turn plan mode on, then ask). `notice` is shown first."""
+
+    def __new__(cls, text: str, notice: str = ""):
+        obj = super().__new__(cls, text)
+        obj.notice = notice
+        return obj
+
+
 @dataclass
 class Command:
     name: str                                   # without the slash
@@ -208,6 +218,87 @@ def _rewind(session, args):
         return f"/rewind takes code, chat, both, show or force, not '{unknown[0]}'"
     mode = next((w for w in words[1:] if w in ("code", "chat", "both")), "both")
     return session.rewind(int(words[0]), mode, force="force" in words, show="show" in words)
+
+
+def _plan(session, args):
+    """/plan [TASK | show | off]: turn plan mode on (the agent can read, not change, and proposes a plan for you to approve)."""
+    word = args.strip()
+    if word.lower() == "show":
+        return session.plan_report()
+    if word.lower() in ("off", "exit"):
+        if session.permissions.mode != "plan":
+            return "plan mode isn't on"
+        return f"plan mode is off: permission mode {session.leave_plan()}"
+    if session.permissions.mode == "plan":
+        notice = "plan mode is already on"
+    else:
+        session.enter_plan()
+        notice = "plan mode on: the agent can read but not change anything, and will propose a plan for you to approve. /plan off leaves it."
+    return Send(word, notice) if word else notice
+
+
+def _skills(session, args):
+    """/skills [reload]: the skills the agent can load."""
+    if args.strip().lower() == "reload":
+        session.reload_skills()
+    elif args.strip():
+        return "/skills takes reload, or nothing to list them"
+    if not session.settings.skills:
+        return "skills are off (the skills setting)"
+    if not session.skills:
+        return "no skills: put one in ~/.harness/skills/NAME/SKILL.md (yours) or .harness/skills/NAME/SKILL.md (this project's, in a trusted folder)"
+    rows = []
+    for s in session.skills.values():
+        extra = ", ".join(x for x in (f"{len(s.files)} file{'s' if len(s.files) != 1 else ''}" if s.files else "", "only you can start it" if s.user_only else "") if x)
+        rows.append(f"{s.name:<18} {s.source:<8} {s.description}" + (f"  ({extra})" if extra else ""))
+    return "\n".join(rows)
+
+
+def _tasks(session, args):
+    """/tasks [stop ID | output ID [LINES]]: the commands running in the background."""
+    if session.tasks is None:
+        return "background tasks are off (the background_tasks setting)"
+    words = args.split()
+    if not words:
+        return session.tasks.listing()
+    task = session.tasks.get(words[1]) if len(words) > 1 else None
+    if words[0] == "stop" and len(words) == 2:
+        if task is None:
+            return f"no background task '{words[1]}'"
+        return f"stopped {task.id}" if session.tasks.stop(task) else f"{task.id} had already ended"
+    if words[0] == "output" and len(words) in (2, 3):
+        if task is None:
+            return f"no background task '{words[1]}'"
+        return session.tasks.output(task, int(words[2]) if len(words) == 3 and words[2].isdigit() else 40)
+    return "/tasks takes stop ID, output ID [LINES], or nothing to list them"
+
+
+def _agents(session, args):
+    """/agents [reload]: the sub-agents the agent can delegate to."""
+    if args.strip().lower() == "reload":
+        session.reload_agents()
+    elif args.strip():
+        return "/agents takes reload, or nothing to list them"
+    if not session.settings.subagents:
+        return "sub-agents are off (the subagents setting)"
+    rows = [f"{a.name:<12} {a.tools:<10} {a.source:<9} {a.description}" for a in session.agents.values()]
+    return "\n".join(rows)
+
+
+def _todo(session, args):
+    """/todo [clear]: the agent's checklist for the request in hand."""
+    if args.strip().lower() == "clear":
+        session.todos.clear()
+        return "todo list cleared"
+    if args.strip():
+        return "/todo takes clear, or nothing to show the list"
+    if not session.settings.todo:
+        return "the todo list is off (the todo setting)"
+    if not session.todos.items:
+        return "no todo list: the agent writes one when a task has several steps"
+    done, total = session.todos.counts()
+    note = "\n(written after untrusted content was read: " + ", ".join(session.todos.sources[:2]) + ")" if session.todos.tainted else ""
+    return f"todo list ({done} of {total} done):\n{session.todos.text()}{note}"
 
 
 def _cost(session, args):
@@ -554,7 +645,10 @@ def _export(session, args):
 
 def _tools(session, args):
     rows = []
-    for tool in session.agent.tools:
+    registry = session.agent.tools
+    for tool in registry:
+        if not tool.is_enabled():                   # exit_plan_mode outside plan mode, use_skill with no skills: not part of what the model has
+            continue
         flags = []
         if callable(tool.read_only):
             flags.append("read-only for some calls")
@@ -564,6 +658,8 @@ def _tools(session, args):
             flags.append("can change things")
         if tool.concurrency_safe is True:
             flags.append("parallel")
+        if tool.name in registry.deferred and tool.name not in registry.loaded:
+            flags.append("held back: found with tool_search")
         rows.append(f"{tool.name:<12} {', '.join(flags):<22} {tool.description.splitlines()[0]}")
     return "\n".join(rows)
 
@@ -603,6 +699,12 @@ def builtin_commands() -> list[Command]:
         Command("undo", "put back the files the last request changed", run=_undo, argument_hint="[show|force]"),
         Command("rewind", "list this chat's requests, or go back to before one (files, conversation, or both)", run=_rewind,
                 argument_hint="[N [code|chat|both] [show|force]]"),
+        Command("plan", "plan mode: the agent looks and proposes a plan; nothing changes until you approve it", run=_plan,
+                argument_hint="[TASK|show|off]"),
+        Command("skills", "the skills the agent can load; `reload` reads them again", run=_skills, argument_hint="[reload]"),
+        Command("tasks", "the commands running in the background; `stop ID`, `output ID [LINES]`", run=_tasks, argument_hint="[stop ID | output ID [LINES]]"),
+        Command("agents", "the sub-agents the agent can hand jobs to; `reload` reads the definitions again", run=_agents, argument_hint="[reload]"),
+        Command("todo", "the agent's todo list for this request; `clear` empties it", run=_todo, argument_hint="[clear]"),
         Command("cost", "tokens and cost so far, per model", run=_cost),
         Command("config", "the settings in effect and where each came from", run=_config),
         Command("model", "show the model, or switch to another one", run=_model, argument_hint="[name]"),
@@ -643,4 +745,11 @@ def load_commands(workspace: Path) -> CommandRegistry:
         registry.add(command)
     registry.load_folder(USER_DIR / "commands", "user")
     registry.load_folder(workspace / ".harness" / "commands", "project")
+    from harness.security.trust import is_trusted
+    from harness.skills import command_text, load_skills
+    skills, _ = load_skills(workspace, USER_DIR, is_trusted(workspace, USER_DIR))
+    for skill in skills.values():                  # a skill is also a command: `/name what to do` loads it and sends the request (Lesson 49)
+        if skill.name not in registry.commands:    # but never replaces a command or a built-in
+            registry.add(Command(skill.name, skill.description, kind="prompt", template=command_text(skill), argument_hint="[what to do]",
+                                 source=f"skill ({skill.source})"))
     return registry

@@ -332,7 +332,7 @@ def make_journal_tools(jf: JournalFile, taint: Taint, who: Callable[[], str]) ->
             shown += f"\n!! this chat has read content you may not trust ({', '.join(taint.sources[:2])}): the journal will be marked untrusted"
         return shown
 
-    @tool(read_only=False, concurrency_safe=False)
+    @tool(deferrable=True, read_only=False, concurrency_safe=False)
     def update_progress(section: str, text: str, mode: str = "append") -> str:
         """Write to the project's progress journal, which later chats read to pick up where this one stopped.
 

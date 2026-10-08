@@ -46,6 +46,8 @@ Flags are **fail-closed**: leave one out and the agent assumes the risky value.
 | `read_only` | `False` | the tool never changes anything | no approval needed |
 | `concurrency_safe` | `False` | the tool can run at the same time as others, **on another thread** | may run in parallel with neighbouring safe calls |
 | `destructive` | `False` | the tool may delete or overwrite data | shown as a warning when approving |
+| `deferrable` | `False` | the tool is rarely used and its definition may wait | when [tool search](../user-guide/tool-search.md) is active the model isn't shown the definition until it finds the tool with `tool_search`; whether it waits is the session's decision |
+| `enabled` | always | a function: the tool is shown to the model and can be called only while it returns `True` (e.g. `exit_plan_mode`, only in plan mode) | a tool that isn't enabled is invisible, and a call to it is an error; a function that raises hides the tool |
 | `clearable` | `False` | calling the tool again gives the model the same information back (a read, a search, a fetch) | when the window fills, an old result may be replaced by a short note |
 
 `concurrency_safe=True` is a promise that the tool's code is thread-safe and that its result

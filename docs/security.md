@@ -168,6 +168,16 @@ These remain even with every defense in place. Know them before you approve thin
   dedicated user account for untrusted projects. Those sandboxes are tested here as command lines only.
 - **Prompt injection can't be fully prevented**, only made visible and less effective. Be most
   careful right after the agent has read web pages or files you didn't write.
+- **A sub-agent is another loop that must obey the same rules.** It is given the parent's `Permissions` (mode, rules and the taint record), approver, hooks, limits and file history *as the same objects*, so it can do nothing its parent couldn't: in plan mode its edits are refused, an edit asks you, a hook sees its calls,
+  and what it reads from an untrusted source taints the whole session and comes back fenced. It never gets `delegate`, `ask_user` or the tools that write state for later ([sub-agents](user-guide/sub-agents.md)).
+- **A background command is the same command.** It is a parameter of `run_shell`, so every deny rule, the command analysis, the hooks and the sandbox that judge a command judge it; it can't outlive the session; the note that it ended never carries what it printed, which reaches the model only through a fenced `task_output` ([background tasks](user-guide/background-tasks.md)).
+- **A skill is instructions, not permission.** It can't allow a tool or approve a command, and a project's skills are read only in a folder you trust ([skills](user-guide/skills.md)).
+- **Tool search changes what the model is told, not what it may do.** A held-back tool is judged by the same rules ([tool search](user-guide/tool-search.md)).
+- **A question box is a way to phish you.** A page the agent read can tell it to ask for your API key. The agent's questions are always shown as "The agent asks: ...", at most three per request; when the chat has read content you may not trust,
+  you get a warning first; and what you type is run through the secret-hiding before the model sees it. A key with no recognisable shape still gets through: don't type secrets there ([questions](user-guide/ask-user.md)).
+- **A plan is a place to hide a step.** In plan mode the permission layer refuses every change and only your answer ends it; after untrusted reading the approval question carries a warning, and approving with "accept file edits" still asks for each edit while the
+  chat is tainted ([plan mode](user-guide/plan-mode.md)).
+- **The todo list is the model's own writing**, possibly after reading a hostile page. A list written then is marked, and quoted back to the model fenced; it approves nothing ([todo](user-guide/todo.md)).
 - **Undo is the user's command, and only covers the edit tools.** The model has no tool that undoes or rewinds, the copies are in your user folder outside the paths its tools can reach, and a restore never overwrites a file you have
   changed since (`force` does, and keeps your version). Files changed by `run_shell` are not copied and can't be undone; rewinding the conversation does not clear the "read untrusted content" state ([undo](user-guide/undo.md)).
 - **The progress journal is read by every later chat.** One written after untrusted content was read is marked, loaded fenced and tainting until you check it (`/progress trust`), and in a

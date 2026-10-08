@@ -256,7 +256,7 @@ def trust(session, monkeypatch):
 def test_the_prompt_gets_a_memory_section_after_the_rules_and_before_the_style(tmp_path, monkeypatch):
     s = make_session(tmp_path, monkeypatch, {"HARNESS.md": "run pytest"}, user_text="be brief", output_style="concise")
     names = [p.name for p in s.prompt.parts]
-    assert names == ["role", "untrusted content", "clearing rule", "project memory", "notes rule", "output style", "environment", "workspace files"]
+    assert names == ["role", "untrusted content", "clearing rule", "todo rule", "more tools", "sub-agent rule", "ask rule", "project memory", "notes rule", "output style", "environment", "workspace files"]
     assert "run pytest" in s.agent.messages[0].content and "be brief" in s.agent.messages[0].content
     assert "project memory" in run(s, "/prompt")
 

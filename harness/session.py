@@ -5,14 +5,36 @@ receive it so they can act on the running app (switch the model, show costs, res
 """
 import datetime
 import json
+import re
 import shutil
 import subprocess
 import tempfile
+import time
 import uuid
+from contextlib import nullcontext
 from pathlib import Path
 
 from harness import config
 from harness.agent import Agent
+from harness.agents import (
+    MAX_REPORT_CHARS,
+    MAX_TASK_CHARS,
+    SUBAGENT_RULE,
+    AgentDef,
+    agents_text,
+    load_agents,
+    make_agent_tools,
+)
+from harness.ask import (
+    ASK_RULE,
+    MAX_QUESTIONS,
+    NO_ANSWER,
+    NO_ONE,
+    TOO_MANY,
+    clean_options,
+    clean_question,
+    make_ask_tools,
+)
 from harness.audit import AuditLog
 from harness.automemory import RULE as NOTES_RULE
 from harness.automemory import AutoMemory, Note, index_text, make_memory_tools
@@ -28,17 +50,32 @@ from harness.journal import section_text as journal_section
 from harness.journal import update as update_journal
 from harness.limits import Limits
 from harness.memory import MIN_FILE_TOKENS, MemoryFile, load_memory, nested_files, note_text, section_text
+from harness.plan import (
+    CHOICES,
+    MAX_PLAN_CHARS,
+    MIN_PLAN_CHARS,
+    PLAN_RULE,
+    age,
+    latest_plan,
+    make_plan_tools,
+    plan_items,
+    save_plan,
+)
 from harness.providers.factory import make_provider
 from harness.providers.retry import RetryingProvider
 from harness.security.permissions import MODES, Permissions, Rule
 from harness.security.sandbox import detect as detect_sandbox
 from harness.security.sandbox import hint as sandbox_hint
-from harness.security.taint import SYSTEM_RULE
+from harness.security.taint import SYSTEM_RULE, fence
 from harness.security.trust import is_trusted
+from harness.skills import listing_text, load_skills, make_skill_tools
 from harness.styles import BUILTIN, Style
+from harness.tasks import TaskManager
+from harness.todo import TodoList, from_messages, make_todo_tools, nudge_text, numbered_items
 from harness.tools import default_tools
 from harness.tools.fs import workspace_snapshot
 from harness.tools.shell import detect_shell
+from harness.toolsearch import TOOL_SHARE, catalog_text, make_search_tool, schema_tokens
 from harness.usage import CostTracker, format_cost
 from harness.workspace import Workspace
 
@@ -52,6 +89,9 @@ LISTING_LINES = 50            # the longest workspace listing in the prompt; a s
 # Said only when old results may be cleared (Lesson 38): what a note means, and the one thing the model can do about it.
 CLEARING_RULE = ("When the window fills, old tool results are replaced by a note starting '[cleared to save space'. "
                  "Before you move on from a result you will need later, write down what you need from it in your reply.")
+# Said only when the todo tool is on (Lesson 44). Measured: with the tool's own description alone, a 4B model never called it.
+TODO_RULE = ("When a request has several parts, first call todo_write with one item per part. Then do the items one at a time, and mark each "
+             "completed as soon as it is done. Do not give your final answer while an item is still pending.")
 SYSTEM_PROMPT = ROLE + "\n\n" + WORKSPACE_HEADER + "\n{snapshot}"   # the whole prompt in one string: for scripts and recordings
 
 
@@ -77,6 +117,15 @@ class Session:
         self.store = self.project if settings.save_chats else None  # saved chats (Lesson 40)
         self.chat: Chat | None = None    # the saved chat this conversation is written to; made on the first message
         removed_chats = self.store.cleanup(settings.chat_retention_days) if self.store is not None else 0
+        self.tasks: TaskManager | None = None            # commands running in the background (Lesson 48)
+        self.tasks_temp: Path | None = None
+        self.skills: dict = {}                           # skills the agent can load (Lesson 49)
+        self.actor: str | None = None                    # the sub-agent running now, if one is (Lesson 47)
+        self.agents: dict = {}                           # the sub-agent definitions (Lesson 47)
+        self.asked = 0                                   # questions the agent has put to the user in this request (Lesson 46)
+        self.mode_before_plan: str | None = None         # where /plan came from, so leaving plan mode goes back there (Lesson 45)
+        self.plan_text = ""                               # the last plan the agent proposed in this session
+        self.todos = TodoList()                          # the agent's checklist for the request in hand (Lesson 44)
         self.history: FileHistory | None = None          # copies of files before the agent changes them, for /undo and /rewind (Lesson 43)
         self.history_temp: Path | None = None            # where it lives when chats aren't saved: gone when this session ends
         self.undo_focus = ""                             # what to tell the next journal update about work that was undone
@@ -106,11 +155,28 @@ class Session:
         required = settings.sandbox == "on" and self.sandbox is None
         if required:
             ui.warn(f"warning: sandbox is \"on\" but this machine has none, so commands are refused ({sandbox_hint()})")
+        if settings.background_tasks:
+            if self.store is not None:
+                folder = self.project.dir / "tasks"
+            else:                                       # chats aren't saved, so neither is what a task printed
+                folder = self.tasks_temp = Path(tempfile.mkdtemp(prefix="harness-tasks-"))
+            self.tasks = TaskManager(folder)
         tools = default_tools(ws, shell=settings.shell, env_keep=settings.shell_env_keep, web=settings.web_fetch,
                               web_allow_local=settings.web_allow_local, sandbox=self.sandbox,
-                              sandbox_network=settings.sandbox_network, sandbox_required=required, history=self.history)
+                              sandbox_network=settings.sandbox_network, sandbox_required=required, history=self.history, tasks=self.tasks)
         if self.automemory is not None:
             tools = tools + make_memory_tools(self.automemory, self.permissions.taint)
+        tools = tools + make_ask_tools(self.ask_question, self.can_ask)
+        tools = tools + make_search_tool(lambda: self.agent.tools)
+        if settings.skills:
+            self.skills = self.read_skills()
+            tools = tools + make_skill_tools(lambda: self.skills)
+        if settings.subagents:
+            self.agents = self.read_agents()
+            tools = tools + make_agent_tools(self.delegate, self.agents)
+        tools = tools + make_plan_tools(self.review_plan, lambda: self.permissions.mode == "plan")
+        if settings.todo:
+            tools = tools + make_todo_tools(self.todos, self.permissions.taint, self.todos_changed)
         if settings.journal != "off":
             tools = tools + make_journal_tools(self.journal, self.permissions.taint, self.who)
             if self.journal.exists() or settings.journal == "on":
@@ -138,8 +204,10 @@ class Session:
                            hooks=self.hooks, redact_results=settings.redact_secrets, limit_check=self.limit_reason,
                            context=self.context, microcompact=settings.microcompact,
                            keep_recent=settings.microcompact_keep, auto_compact=settings.auto_compact,
-                           call_notes=self.folder_notes)
+                           call_notes=self.folder_notes, finish_check=self.open_todos if settings.todo else None, carry=self.todo_carry,
+                           notices=self.task_notes, on_request=self.seed_todos if settings.todo else None)
         self._status_error_shown = False
+        self.apply_tool_search()
         self.audit("session", workspace=str(ws.root), provider=settings.provider, model=self.provider.model,
                    mode=self.permissions.mode, trusted=self.permissions.taint.trusted, tools=[t.name for t in tools],
                    sandbox=self.sandbox.name if self.sandbox else None,
@@ -151,7 +219,8 @@ class Session:
                              think=True if s.think else None, context_window=s.context_window,
                              max_output_tokens=s.max_output_tokens)
 
-    def on_event(self, kind, data):
+    def account(self, kind, data) -> None:
+        """What every event changes in the session, whichever agent it came from: cost, limits, which calls ran, what changed."""
         if kind == "model_reply":
             self.costs.add(data)
             self.reported_tokens = data.usage.input_tokens
@@ -162,14 +231,21 @@ class Session:
             self.not_run.add((data if kind == "tool_denied" else data[0]).id)
         elif kind == "tool_result":
             self.note_change(*data)
-        elif kind == "compacting" and self.unjournaled and self.journal_active():
+
+    def on_event(self, kind, data):
+        self.account(kind, data)
+        if kind == "compacting" and self.unjournaled and self.journal_active():
             self.checkpoint("before the conversation is summarised")
         elif kind in ("microcompact", "compact"):
             self.ws.forget_reads()             # those results left the conversation: reading them again must return the text, not "unchanged"
         if kind in ("message", "rolled_back", "microcompact", "compact"):
             self.save_event(kind, data)
-        if kind == "message" and data.role == "user" and data.checkpoint and self.history is not None:
-            self.history_turn(data)
+        if kind == "message" and data.role == "user" and data.checkpoint:
+            self.asked = 0
+            if self.todos.done:                     # a finished list belongs to the request before this one
+                self.todos.clear()
+            if self.history is not None:
+                self.history_turn(data)
         self.record(kind, data)
         self.ui(kind, data)
 
@@ -182,6 +258,8 @@ class Session:
         """One line in the audit log (a no-op when it's off). A log that can't be written is reported once."""
         if self.audit_log is None:
             return
+        if self.actor:
+            fields.setdefault("agent", self.actor)      # a sub-agent's calls are labelled in the log (Lesson 47)
         self.audit_log.write(kind, **fields)
         if self.audit_log.failed and not self._audit_warned:
             self._audit_warned = True
@@ -263,12 +341,301 @@ class Session:
             if source not in taint.sources:
                 taint.sources.append(source)
         self.chat = self.store.open(info)
+        self.restore_todos(bool(found.untrusted))
+        self.restore_loaded()
         if self.history is not None:
             self.history.bind(self.chat.id)             # what this chat changed earlier can still be undone (Lesson 43)
         self.chat.title = found.title or info.title
         if found.dropped:
             self.chat.rollback(len(found.messages))     # the log agrees with what was restored
         return found
+
+    # --- talking to the user in the middle of a turn (Lessons 45, 46) ---------------------------------
+    def ask_user(self, question: str, options: dict[str, str]) -> str | None:
+        """Ask the user to pick one of `options` (key -> label) while the agent waits. The key chosen, "" for no answer, or None when this
+        interface has no way to ask (a script, a test): the caller says so to the model instead of waiting for ever."""
+        ask = getattr(self.ui, "ask_choice", None)
+        if ask is None:
+            return None
+        with (getattr(self.approver, "pause", None) or nullcontext)():       # the keyboard watcher steps aside, as it does for an approval
+            return ask(question, options)
+
+    def ask_text(self, question: str) -> str | None:
+        """Ask the user for a line of text; None when this interface can't ask."""
+        ask = getattr(self.ui, "ask_text", None)
+        if ask is None:
+            return None
+        with (getattr(self.approver, "pause", None) or nullcontext)():
+            return ask(question)
+
+    # --- tool search (Lesson 50) -------------------------------------------------------------------------
+    def apply_tool_search(self) -> None:
+        """Decide which tools wait to be described: none, the rarely used ones always, or those only when the definitions take too much of the window."""
+        registry, mode = self.agent.tools, self.settings.tool_search
+        waiting = [t.name for t in registry if t.deferrable]
+        if mode == "off" or not waiting:
+            registry.hold_back([])
+        elif mode == "on" or schema_tokens([t for t in registry if t.is_enabled()]) > TOOL_SHARE * self.context.window:
+            registry.hold_back(waiting)
+        else:
+            registry.hold_back([])
+        if registry.deferred:
+            self.rebuild_prompt()                 # the prompt names the tools being held back
+
+    def restore_loaded(self) -> None:
+        """After a resume or a rewind: the tools the conversation already found (it called them, or tool_search said it loaded them)."""
+        registry = self.agent.tools
+        registry.loaded.clear()
+        for m in self.agent.messages:
+            for call in m.tool_calls:
+                if call.name in registry.deferred:
+                    registry.loaded.add(call.name)
+            if m.role == "tool" and m.tool_name == "tool_search":
+                found = re.match(r"Loaded: ([^.\n]+)\.", m.content)
+                registry.load([n.strip() for n in found.group(1).split(",")] if found else [])
+
+    # --- skills (Lesson 49) ----------------------------------------------------------------------------
+    def read_skills(self) -> dict:
+        found, warnings = load_skills(self.ws.root, config.USER_DIR, self.permissions.taint.trusted)
+        for w in warnings:
+            self.ui.warn(f"warning: {w}")
+        return found
+
+    def reload_skills(self, rebuild: bool = True) -> None:
+        """Read the skills again (after /trust, or an edit) and put the new list in the prompt."""
+        if not self.settings.skills:
+            return
+        self.skills = self.read_skills()
+        if rebuild:
+            self.rebuild_prompt()
+
+    # --- background tasks (Lesson 48) ------------------------------------------------------------------
+    def task_notes(self) -> list[str]:
+        """Background tasks that ended since this was last asked, as notes for the model (the agent says them between steps)."""
+        if self.tasks is None:
+            return []
+        notes = []
+        for t in self.tasks.poll():
+            self.ui("task", ("ended", t))
+            notes.append(f"background task {t.id} ended: {t.describe()}. task_output(task='{t.id}') shows what it printed.")
+        return notes
+
+    def announce_tasks(self) -> None:
+        """While you were not typing a request, tasks may have ended: tell the user, and tell the model with the next request."""
+        self.agent.pending_notes.extend(self.task_notes())
+
+    # --- sub-agents (Lesson 47) ------------------------------------------------------------------------
+    def read_agents(self) -> dict[str, AgentDef]:
+        found, warnings = load_agents(self.ws.root, config.USER_DIR, self.permissions.taint.trusted)
+        for w in warnings:
+            self.ui.warn(f"warning: {w}")
+        return found
+
+    def reload_agents(self) -> None:
+        """Read the definitions again (after /trust) and tell the model the new list."""
+        if not self.settings.subagents:
+            return
+        self.agents = self.read_agents()
+        tool = self.agent.tools.get("delegate")
+        if tool is not None:
+            tool.description = tool.description.split("\n\nAgents:\n")[0] + "\n\nAgents:\n" + agents_text(self.agents)
+
+    def subagent_prompt(self, defn: AgentDef) -> str:
+        """What a sub-agent is told: its definition, the untrusted-content rule, the project's notes and a short listing of the workspace."""
+        parts = [defn.prompt]
+        if self.settings.fence_untrusted:
+            parts.append(SYSTEM_RULE)
+        if self.memory:
+            parts.append(section_text(self.memory, self.settings.fence_untrusted))
+        parts.append(f"{WORKSPACE_HEADER}\n{workspace_snapshot(self.ws, limit=30)}")
+        return "\n\n".join(parts)
+
+    def subagent_tools(self, defn: AgentDef) -> list:
+        allowed = set(defn.tool_names(list(self.agent.tools)))
+        return [t for t in self.agent.tools if t.name in allowed]
+
+    def delegate(self, name: str, task: str) -> str:
+        """The `delegate` tool: run a fresh agent on `task` and return its report. It shares this session's permissions, taint, approver, hooks, limits and costs."""
+        defn = self.agents.get((name or "").strip().lower())
+        if defn is None:
+            return f"Error: there is no agent called '{name}'. Choose one of: {', '.join(self.agents)}"
+        if self.actor is not None:
+            return "Error: a sub-agent can't start another sub-agent."
+        task = (task or "").strip()
+        if not task:
+            raise ValueError("the task is empty: say what the agent should do, completely (it can't see your conversation)")
+        task = task[:MAX_TASK_CHARS]
+        tools = self.subagent_tools(defn)
+        provider = self.provider if defn.model == "inherit" else RetryingProvider(self.make_provider(defn.model), max_retries=self.settings.max_retries,
+                                                                                  on_retry=self.ui.retry)
+        window = self.context.window
+        agent = Agent(provider, tools, self.subagent_prompt(defn), max_steps=defn.max_steps, on_event=self.sub_event(defn.name),
+                      approve=self.agent.approve, stream=False, permissions=self.permissions, fence_untrusted=self.settings.fence_untrusted,
+                      hooks=self.hooks, redact_results=self.settings.redact_secrets, limit_check=self.limit_reason,
+                      context=ContextBudget(window, reserve=min(self.settings.max_output_tokens, window // 4)),
+                      microcompact=self.settings.microcompact, keep_recent=self.settings.microcompact_keep, auto_compact=self.settings.auto_compact)
+        taint = self.permissions.taint
+        sources_before, started = len(taint.sources), time.monotonic()
+        self.actor = defn.name
+        self.ui("subagent", (defn.name, "start", task))
+        self.audit("subagent", task_chars=len(task), tools=[t.name for t in tools], model=defn.model)
+        try:
+            report = agent.run(task)
+        finally:
+            self.actor = None
+        calls = sum(len(m.tool_calls) for m in agent.messages)
+        tokens = agent.usage.input_tokens + agent.usage.output_tokens
+        seconds = time.monotonic() - started
+        self.ui("subagent", (defn.name, "end", {"calls": calls, "tokens": tokens, "seconds": seconds, "stop": agent.stop_reason}))
+        body = report.strip() or "(the sub-agent finished without a report)"
+        if len(body) > MAX_REPORT_CHARS:
+            body = body[:MAX_REPORT_CHARS].rstrip() + f"\n... (the report was cut: it had {len(report):,} characters)"
+        if len(taint.sources) > sources_before:        # it read something untrusted: what it says about it is information, not instructions
+            body = fence(body, f"report from sub-agent {defn.name}, which read untrusted content")
+        early = "" if agent.stop_reason == "completed" else f"(the sub-agent stopped early: {agent.stop_reason}; this is what it had)\n"
+        return f"{early}{body}\n\n({defn.name}: {calls} tool calls, ~{tokens:,} tokens, {seconds:.0f} s)"
+
+    def sub_event(self, name: str):
+        """Where a sub-agent's events go: the accounting and the audit log as for the main agent, a short line to the screen, nothing to the saved chat."""
+        counted = ("model_reply", "tool_call", "tool_result", "tool_denied", "tool_refused", "tool_approved", "permission", "redacted", "hook", "limit")
+
+        def handle(kind, data):
+            if kind in counted:
+                self.account(kind, data)
+                self.record(kind, data)
+            if kind == "tool_call":
+                self.ui("subagent", (name, "tool_call", data))
+        return handle
+
+    # --- asking the user (Lesson 46) -----------------------------------------------------------------
+    def can_ask(self) -> bool:
+        """Can this interface put a question to the user and read an answer? A script or a test can't, so the tool isn't offered there."""
+        return callable(getattr(self.ui, "ask_choice", None)) and callable(getattr(self.ui, "ask_text", None))
+
+    def ask_question(self, question: str, options: list) -> str:
+        """The `ask_user` tool: show the agent's question (with a short menu if it gave options) and return the answer for the model to read."""
+        text = clean_question(question)
+        if not text:
+            raise ValueError("the question is empty: ask one clear question")
+        choices = clean_options(options)
+        if self.asked >= MAX_QUESTIONS:
+            return TOO_MANY
+        taint = self.permissions.taint
+        if taint.active:                                  # a page the agent read may have told it to ask for something it shouldn't have
+            self.ui.warn("the agent is asking you a question after reading content you may not trust (" + ", ".join(taint.sources[:2])
+                         + "): don't type passwords, keys or other secrets here")
+        if choices:
+            menu = {str(n): c for n, c in enumerate(choices, 1)} | {"t": "something else (type it)"}
+            key = self.ask_user(f"The agent asks: {text}", menu)
+            if key is None:
+                return NO_ONE
+            answer = (self.ask_text("Your answer:") or "") if key == "t" else menu.get(key, "")
+        else:
+            typed = self.ask_text(f"The agent asks: {text}")
+            if typed is None:
+                return NO_ONE
+            answer = typed
+        self.asked += 1
+        self.audit("question", chars=len(text), options=len(choices), answered=bool(answer), tainted=taint.active or None)
+        return f"The user answered: {answer}" if answer else NO_ANSWER
+
+    # --- plan mode (Lesson 45) -----------------------------------------------------------------------
+    @property
+    def plans_dir(self) -> Path:
+        return self.project.dir / "plans"
+
+    def enter_plan(self) -> None:
+        if self.permissions.mode != "plan":
+            self.set_mode("plan")
+
+    def leave_plan(self) -> str:
+        """Back to the mode before /plan (or the default one). The user's own command."""
+        back = self.mode_before_plan if self.mode_before_plan in MODES and self.mode_before_plan != "plan" else "default"
+        self.set_mode(back)
+        return back
+
+    def review_plan(self, plan: str) -> str:
+        """The `exit_plan_mode` tool: show the plan, ask, and say what the user answered. Only a yes from the user changes the mode."""
+        plan = plan.strip()
+        if len(plan) < MIN_PLAN_CHARS:
+            raise ValueError("the plan is too short to review: write the goal, then numbered steps that each name the file and the change")
+        if len(plan) > MAX_PLAN_CHARS:
+            plan = plan[:MAX_PLAN_CHARS].rstrip() + "\n... (the rest was cut: keep plans short)"
+        self.plan_text = plan
+        show = getattr(self.ui, "show_plan", None)
+        if show is not None:
+            show(plan)
+        taint = self.permissions.taint
+        if taint.active:
+            self.ui.warn("this chat has read content you may not trust (" + ", ".join(taint.sources[:2]) + "): read each step before you approve")
+        answer = self.ask_user("Go ahead with this plan?", CHOICES)
+        if answer is None:
+            return "Error: the plan can't be shown to the user in this session, so it can't be approved. Describe it in your answer instead."
+        self.audit("plan", answer=answer or "none", chars=len(plan), tainted=taint.active or None)
+        if answer in ("y", "a"):
+            self.set_mode("default" if answer == "y" else "accept-edits")
+            try:
+                save_plan(self.plans_dir, plan)
+            except OSError:
+                pass                                     # the plan is still in the conversation; losing the copy is not worth stopping for
+            seeded = ""
+            items = plan_items(plan) if self.settings.todo else []
+            if len(items) >= 2:
+                self.todos.items = items
+                self.todos.tainted, self.todos.sources = taint.active, list(taint.sources) if taint.active else []
+                self.todos_changed(self.todos)
+                seeded = f" Its {len(items)} numbered steps are now your todo list: mark each completed as you finish it."
+            return (f"The user approved the plan. The permission mode is now '{self.permissions.mode}'. Carry it out step by step, "
+                    f"and say what you did when you are done.{seeded}")
+        if answer == "f":
+            words = self.ask_text("What should change?")
+            if words:
+                return ("The user did not approve the plan and wrote what to change: \"" + words.replace('"', "'") + "\". "
+                        "You are still in plan mode: revise the plan and call exit_plan_mode again.")
+        return ("The user did not approve the plan. You are still in plan mode, so nothing has changed. "
+                "Ask what they would like different, or revise the plan and call exit_plan_mode again.")
+
+    def plan_report(self) -> str:
+        """The last plan (this session's, or the newest saved one), for /plan show."""
+        if self.plan_text:
+            return self.plan_text
+        found = latest_plan(self.plans_dir)
+        return f"(saved {age(found[0])}, {found[0].name})\n{found[1]}" if found else "no plan yet: /plan, then describe the task"
+
+    # --- the todo list (Lesson 44) -----------------------------------------------------------------
+    def todos_changed(self, todos: TodoList) -> None:
+        self.on_event("todos", todos.as_data())
+
+    def open_todos(self) -> str | None:
+        """Said to a model that tries to finish while items are open (the agent sends it back at most twice)."""
+        return nudge_text(self.todos)
+
+    def seed_todos(self, request: str) -> str | None:
+        """A request with three or more numbered items becomes the todo list, written by the harness (measured: a small model almost never writes one itself).
+        Returns the note that tells the model, or None. Not done while a list with open items is still in progress."""
+        if self.todos.unfinished():
+            return None
+        items = numbered_items(request)
+        if not items:
+            return None
+        self.todos.items, self.todos.tainted, self.todos.sources = items, False, []     # the user's own words: not untrusted
+        self.todos_changed(self.todos)
+        return (f"I made your todo list from the numbered items above:\n{self.todos.text()}\n"
+                "Mark each one completed with todo_write as you finish it, and don't give your final answer while one is open.")
+
+    def todo_carry(self) -> str:
+        """The list, repeated in a summary: it is state the harness holds, and a summary written by a model must not lose or reword it."""
+        if not self.todos.items:
+            return ""
+        return "The agent's todo list as it stands:\n" + self.todos.quoted(only_open=False)
+
+    def restore_todos(self, tainted: bool = False) -> None:
+        """Set the list from what the conversation last said (after a resume or a rewind)."""
+        items = from_messages(self.agent.messages)
+        self.todos.items = items or []
+        self.todos.tainted = bool(items) and tainted
+        if not self.todos.items:
+            self.todos.clear()
 
     # --- undo and rewind (Lesson 43) --------------------------------------------------------------
     def history_turn(self, message) -> None:
@@ -331,6 +698,8 @@ class Session:
         self.on_event("rolled_back", len(messages) - 1)       # the saved chat undoes the same messages (Lesson 40)
         self.ws.forget_reads()
         self.history.drop(later)
+        self.restore_todos(self.todos.tainted)        # the list goes back to what the conversation still says
+        self.restore_loaded()
         return True
 
     def rewind(self, number: int, mode: str = "both", force: bool = False, show: bool = False) -> str:
@@ -454,6 +823,12 @@ class Session:
         cost = self.costs.cost()
         self.audit("end", tool_calls=self.limits.tool_calls, tokens=self.limits.tokens,
                    cost=None if cost is None else round(cost, 6))
+        if self.tasks is not None:
+            stopped = self.tasks.close()                # a task never outlives the session
+            if stopped:
+                self.ui.info(f"(stopped {stopped} background task{'s' if stopped != 1 else ''} still running)")
+        if self.tasks_temp is not None:
+            shutil.rmtree(self.tasks_temp, ignore_errors=True)
         if self.history_temp is not None:               # chats aren't saved, so neither is what could undo them
             shutil.rmtree(self.history_temp, ignore_errors=True)
 
@@ -477,6 +852,21 @@ class Session:
             sections.append(Section("untrusted content", SYSTEM_RULE, 1))
         if self.settings.microcompact:
             sections.append(Section("clearing rule", CLEARING_RULE, 1))
+        if self.settings.todo and TODO_RULE:
+            sections.append(Section("todo rule", TODO_RULE, 1, required=False, priority=2))
+        agent = getattr(self, "agent", None)
+        if agent is not None and agent.tools.deferred:
+            held = [t for t in agent.tools if t.name in agent.tools.deferred and t.is_enabled()]
+            sections.append(Section("more tools", catalog_text(held), 1, required=False, priority=2))
+        if self.skills and listing_text(self.skills):
+            sections.append(Section("skills", listing_text(self.skills), 1, required=False, priority=1,
+                                    shrink=lambda tokens: listing_text(self.skills, max(80, tokens))))
+        if self.settings.subagents and SUBAGENT_RULE:
+            sections.append(Section("sub-agent rule", SUBAGENT_RULE, 1, required=False, priority=2))
+        if self.can_ask() and ASK_RULE:
+            sections.append(Section("ask rule", ASK_RULE, 1, required=False, priority=2))
+        if self.permissions.mode == "plan":
+            sections.append(Section("plan mode", PLAN_RULE, 1))
         if self.memory:
             fenced = self.settings.fence_untrusted
 
@@ -522,6 +912,8 @@ class Session:
         """Read the files again and rebuild the prompt (after an edit, or /trust). The start of the prompt changes, so the
         server reads the conversation again once."""
         self.load_memory()
+        self.reload_agents()
+        self.reload_skills(rebuild=False)
         self.rebuild_prompt()
 
     def folder_notes(self, call) -> str:
@@ -560,9 +952,14 @@ class Session:
         """Switch the permission mode (Lesson 29); rules and the conversation are kept."""
         if mode not in MODES:
             raise ValueError(f"unknown mode '{mode}'; choose from {', '.join(MODES)}")
-        self.audit("mode", before=self.permissions.mode, after=mode)
+        before = self.permissions.mode
+        self.audit("mode", before=before, after=mode)
         self.permissions.mode = self.settings.permission_mode = mode
         self.settings.sources["permission_mode"] = "command"
+        if mode == "plan" and before != "plan":
+            self.mode_before_plan = before
+        if (before == "plan") != (mode == "plan"):         # the prompt tells the model whether it is planning (Lesson 45)
+            self.rebuild_prompt()
 
     def estimate_context(self) -> int:
         """Tokens in the conversation as it stands now (an estimate, Lesson 36)."""
@@ -575,7 +972,7 @@ class Session:
                 "context_tokens": self.estimate_context(),
                 "context_window": self.context.window,
                 "cost": None if cost is None else round(cost, 6), "style": self.style.name,
-                "mode": self.permissions.mode,
+                "mode": self.permissions.mode, "tasks_running": sum(t.running for t in self.tasks.tasks.values()) if self.tasks else 0,
                 "workspace": str(self.ws.root), "turns": sum(m.role == "user" for m in self.agent.messages)}
 
     def status_text(self) -> str:
@@ -595,6 +992,8 @@ class Session:
             parts.append(f"style {info['style']}")
         if info["mode"] != "default":
             parts.append(f"mode {info['mode']}")
+        if info["tasks_running"]:
+            parts.append(f"{info['tasks_running']} task{'s' if info['tasks_running'] != 1 else ''} running")
         return " · ".join(parts)
 
     def run_status_command(self, info: dict) -> str | None:
@@ -619,6 +1018,8 @@ class Session:
     def reset(self) -> None:
         self.agent.reset()
         self.chat = None                 # the next message starts a new saved chat; this one stays as it was
+        self.todos.clear()
+        self.agent.tools.loaded.clear()      # a new conversation hasn't found any tool yet
         if self.history is not None:
             self.history.unbind()        # a new chat has no changes to undo; the old chat's stay on disk
         self.seen_notes.clear()

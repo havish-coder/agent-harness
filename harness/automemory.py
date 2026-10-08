@@ -215,7 +215,7 @@ def make_memory_tools(memory: AutoMemory, taint: Taint) -> list[Tool]:
             shown += f"\n!! this chat has read content you may not trust ({', '.join(taint.sources[:2])}): the note will be marked untrusted"
         return shown
 
-    @tool(read_only=False, concurrency_safe=False)
+    @tool(deferrable=True, read_only=False, concurrency_safe=False)
     def remember(title: str, kind: str, description: str, details: str = "") -> str:
         """Save a note to keep for later chats in this project.
 
@@ -233,7 +233,7 @@ def make_memory_tools(memory: AutoMemory, taint: Taint) -> list[Tool]:
 
     remember.preview = preview_remember
 
-    @tool(read_only=True, concurrency_safe=True, clearable=True)
+    @tool(deferrable=True, read_only=True, concurrency_safe=True, clearable=True)
     def recall(title: str = "") -> str:
         """Show a saved note in full, or list all notes when no title is given.
 
@@ -249,7 +249,7 @@ def make_memory_tools(memory: AutoMemory, taint: Taint) -> list[Tool]:
         text = f"{note.title} ({note.kind}, saved {note.saved}): {note.description}" + (f"\n{note.details}" if note.details else "")
         return fence(text, f"saved note '{note.title}' (written after untrusted content was read)") if note.tainted else text
 
-    @tool(read_only=False, concurrency_safe=False, destructive=True)
+    @tool(deferrable=True, read_only=False, concurrency_safe=False, destructive=True)
     def forget(title: str) -> str:
         """Delete a saved note.
 

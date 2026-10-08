@@ -60,13 +60,30 @@ class PlainUI:
             print(f"{DIM}  (summarised {data.removed} messages: ~{data.before:,} -> ~{data.after:,} tokens){RESET}")
         elif kind == "compact_failed":
             print(f"{YELLOW}  (couldn't summarise: {data}){RESET}")
+        elif kind == "task":
+            _, t = data
+            self.end_line()
+            print(f"{DIM}  ⏹ background task {t.id} ended: {t.describe()}  [{t.command[:60]}]{RESET}")
+        elif kind == "subagent":
+            name, what, info = data
+            self.end_line()
+            if what == "start":
+                print(f"{CYAN}  ↳ {name}: {info[:100]}{RESET}")
+            elif what == "tool_call":
+                args = ", ".join(f"{k}={v!r}" for k, v in info.arguments.items())
+                print(f"{DIM}      · {info.name}({args[:80]}){RESET}")
+            else:
+                print(f"{DIM}  ↳ {name} finished: {info['calls']} tool calls, ~{info['tokens']:,} tokens, {info['seconds']:.0f} s{RESET}")
+        elif kind == "nudge":
+            self.end_line()
+            print(f"{DIM}  (the todo list still has unfinished items: asking the agent to carry on){RESET}")
         elif kind == "microcompact":
             self.end_line()
             print(f"{DIM}  (the window is filling: cleared {len(data.cleared)} old result"
                   f"{'s' if len(data.cleared) != 1 else ''}, ~{data.saved:,} tokens){RESET}")
         elif kind == "tool_result":
-            _, result = data
-            preview = result if len(result) <= 300 else result[:300] + " …"
+            call, result = data
+            preview = result if len(result) <= 300 or call.name == "todo_write" else result[:300] + " …"
             print(DIM + "    " + preview.replace("\n", "\n    ") + RESET)
 
     # --- messages from the app ----------------------------------------------------------------
@@ -96,6 +113,20 @@ class PlainUI:
         except EOFError:
             return ""
         return answer[:1] if answer[:1] in options else ""
+
+    def ask_text(self, question: str) -> str:
+        """Ask for a line of text; "" for Enter or the end of input (Lessons 45, 46)."""
+        self.end_line()
+        try:
+            return input(f"{YELLOW}{question} {RESET}").strip()
+        except EOFError:
+            return ""
+
+    def show_plan(self, plan: str):
+        """The plan the agent proposes, for the user to read before answering (Lesson 45)."""
+        self.end_line()
+        print(f"\n{BOLD}Proposed plan{RESET}")
+        print("  " + plan.replace("\n", "\n  "))
 
     def warn(self, text: str):
         self.end_line()

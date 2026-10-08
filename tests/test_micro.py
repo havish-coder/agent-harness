@@ -348,7 +348,8 @@ def make_session(tmp_path, monkeypatch, **settings):
     for n in range(6):
         rows = [f"row {i:03}: value {(i * 7919 + n * 104729) % 100000:05} status ok" for i in range(130)]
         (root / f"part{n}.txt").write_text("\n".join(rows) + "\n", encoding="utf-8")
-    s = Session(Settings(**settings), Workspace(root), Quiet(), PlainApprover())
+    # (about clearing, in a window sized for the tools of v0.6: the later tools' schemas would crowd it)
+    s = Session(Settings(**({"todo": False, "subagents": False, "background_tasks": False} | settings)), Workspace(root), Quiet(), PlainApprover())
     s.agent.stream = False
     return s
 

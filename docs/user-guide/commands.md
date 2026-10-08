@@ -12,6 +12,11 @@ send a ready-made request to the model.
 | `/remember TEXT` | add a line to this project's `HARNESS.md` (`--local`: just yours, `--user`: every project) |
 | `/init` | have the agent look at the project and write a `HARNESS.md` |
 | `/progress [start\|stop\|update\|clear\|trust]` | the project's progress journal: show it, turn it on or off, update it now ([journal](journal.md)) |
+| `/agents [reload]` | the sub-agents the agent can hand jobs to ([sub-agents](sub-agents.md)) |
+| `/tasks [stop ID \| output ID [LINES]]` | the commands running in the background ([background tasks](background-tasks.md)) |
+| `/skills [reload]` | the skills the agent can load; each is also a command ([skills](skills.md)) |
+| `/todo [clear]` | the agent's todo list for this request ([todo](todo.md)) |
+| `/plan [TASK\|show\|off]` | plan mode: the agent proposes, you approve; with a task, turns it on and sends the task ([plan mode](plan-mode.md)) |
 | `/undo [show\|force]` | put back the files the last request changed; a file you edited since is left alone unless `force` ([undo](undo.md)) |
 | `/rewind [N [code\|chat\|both] [show\|force]]` | list this chat's requests, or go back to before request N: its files, the conversation, or both ([undo](undo.md)) |
 | `/chats` | the saved chats of this project |

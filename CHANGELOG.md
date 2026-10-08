@@ -8,6 +8,26 @@ is below 1.0, minor releases may contain breaking changes.
 
 ## [Unreleased]
 
+### Added
+- A todo list the agent keeps (ADR 0042): the `todo_write` tool replaces the whole checklist, a short rule in the system prompt says when to use it, and when the agent tries to finish with items still open the harness
+  adds a note and sends it back to work (at most twice per request, never after you refused a call). The list is rebuilt from the conversation after a resume or a rewind, repeated word for word in a summary, and quoted fenced when it was written
+  after untrusted reading. A request with three or more numbered lines becomes the list by itself (a small model rarely writes one). `/todo [clear]`; setting `todo`; events `todos` and `nudge`. User guide: [the todo list](docs/user-guide/todo.md).
+- Plan mode ends with your yes (ADR 0043): `/plan [task]` (or `--mode plan`) lets the agent read but not change anything; it proposes a plan with `exit_plan_mode`, shown to you, and you answer yes (ask before each change), yes (accept file edits), no, or no with words.
+  Only your answer changes the mode. The tool exists only in plan mode (`Tool.enabled`); an approved plan is saved in your user folder and its numbered steps start the todo list. `/plan show`, `/plan off`. User guide: [plan mode](docs/user-guide/plan-mode.md).
+- The agent can ask you a question (ADR 0044): `ask_user` with up to four choices or a free answer, shown as "The agent asks: ...", at most three per request, with a warning first when the chat has read content you may not trust, and a secret-looking answer hidden
+  before the model sees it. Offered only where the interface can ask. User guide: [questions from the agent](docs/user-guide/ask-user.md).
+- Sub-agents (ADR 0045): the `delegate` tool starts a fresh agent with its own conversation and context window and returns only its report. It shares the parent's permissions, taint record, approver, hooks, limits, costs and undo history (so it can do nothing the parent couldn't),
+  never gets `delegate`, `ask_user` or the tools that write state for later, and its report comes back fenced when it read anything untrusted. Built-in `explore` (read-only) and `worker`; your own as Markdown files in `~/.harness/agents/` (a project's only in a trusted folder).
+  `/agents`; setting `subagents`; event `subagent`. User guide: [sub-agents](docs/user-guide/sub-agents.md).
+- Commands in the background (ADR 0046): `run_shell(command, background=true)` starts a command and returns an id at once; `task_output` (with `wait`) and `task_stop`; the agent is told between steps when a task ends (the note says that it ended, never what it printed), you are told when it
+  ends. Output goes to a capped file in your folder, at most four run at once, each has a time limit, and none outlives the session. It is a parameter of `run_shell` so every rule and hook that judges a command judges it. `/tasks`; the status line counts running tasks; setting `background_tasks`; events
+  `task` and `notice`. User guide: [commands in the background](docs/user-guide/background-tasks.md).
+- Skills (ADR 0047): `~/.harness/skills/NAME/SKILL.md` (and a project's, in a trusted folder): the prompt carries one line per skill, `use_skill(name, file)` loads the text or a bundled file (which can't leave the skill's folder), and every skill is also a slash command. A skill is text, never a permission.
+  `/skills`; setting `skills`. User guide: [skills](docs/user-guide/skills.md).
+- Tool search (ADR 0048): tools marked deferrable (the notes and journal tools, `web_fetch`, the task tools) are described to the model only after it finds them with `tool_search(query)` when their definitions take more than 15% of the window (always in an 8K window; setting `tool_search`: `auto`, `on`,
+  `off`). The search is the words of the query against the words of each tool's name and description. The prompt names the held-back tools and stays stable when one is loaded. User guide: [tool search](docs/user-guide/tool-search.md).
+- `Tool.enabled`: a tool can be hidden from the model, and refused, while some condition is false. `list` (a list of anything) is accepted as a tool argument type. A local command can return `Send(text)` to also send a request to the agent.
+
 ## [0.6.0] - 2026-10-07
 
 The context release. The agent now knows how big its conversation is and keeps it inside the model's window (clearing old results, then summarising),

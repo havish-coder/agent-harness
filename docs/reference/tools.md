@@ -10,11 +10,19 @@ Tools the model can call. Paths are relative to the workspace root.
 | `grep` | yes | yes | yes | Search inside files with a regular expression. |
 | `edit_file` | no | no | no | Replace exact text in a file the model has read. A copy of the file is kept first ([undo](../user-guide/undo.md)). |
 | `write_file` | no | no | no | Create a file, or replace a whole file the model has read. A copy of an existing file is kept first ([undo](../user-guide/undo.md)). |
-| `run_shell` | no | no | yes | Run a shell command; returns the exit code and output. |
+| `run_shell` | no | no | yes | Run a shell command; returns the exit code and output, or with `background` starts it and returns an id ([background tasks](../user-guide/background-tasks.md)). |
 | `web_fetch` | no | yes | yes | Fetch one web page and return its text. |
 | `remember` | no | no | no | Save a note for later chats in this project (unless `auto_memory` is `off`). |
 | `recall` | yes | yes | yes | Show a saved note, or list them. |
 | `forget` | no | no | no | Delete a saved note. |
+| `delegate` | yes | no | no | Give a job to a sub-agent and get back its report (unless `subagents` is `false`). Read-only for permissions: what the sub-agent does is decided as the parent's calls are ([sub-agents](../user-guide/sub-agents.md)). |
+| `task_output` | yes | yes | yes | The end of a background task's output, and whether it is still running; `wait` waits for it to end. Deferrable. |
+| `task_stop` | no | no | no | Stop a background task and what it started. Deferrable. |
+| `use_skill` | yes | yes | yes | Load a skill's text or one of its files; offered only while there is a skill to load ([skills](../user-guide/skills.md)). |
+| `tool_search` | yes | no | no | Find tools whose definitions are held back, and load them; offered only while some are held back ([tool search](../user-guide/tool-search.md)). |
+| `todo_write` | yes | no | no | Replace the agent's todo list (unless `todo` is `false`). Changes nothing outside the harness, so it never asks. |
+| `ask_user` | yes | no | no | Ask the user a question, with up to four choices; offered only where the interface can ask. |
+| `exit_plan_mode` | yes | no | no | Show the user a plan to approve; offered **only in plan mode**. Only the user's answer changes the mode. |
 | `update_progress` | no | no | no | Write one section of the project's progress journal (unless `journal` is `off`). |
 
 Results longer than a tool's limit (8,000 characters by default) are shortened: the agent
@@ -127,7 +135,8 @@ and hasn't changed since, and is marked **destructive** in the approval prompt. 
 | Argument | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `command` | string | yes | | The command, run in the workspace root (use `cd folder && ...` for another folder). |
-| `timeout` | integer | no | `60` | Seconds before the command is stopped; at most 600. |
+| `timeout` | integer | no | `60` (`1800` in the background) | Seconds before the command is stopped; at most 600 (`7200` in the background). |
+| `background` | boolean | no | `false` | Start the command and return at once with a task id (`bg-1`); you are told when it ends. Not in the schema when `background_tasks` is `false`. |
 
 The shell is **bash** wherever possible: on Windows, Git for Windows' bash when installed,
 otherwise PowerShell 7, otherwise Windows PowerShell 5.1 (where `&&` doesn't work; use `;`).

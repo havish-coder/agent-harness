@@ -43,6 +43,7 @@ Approver = Callable[..., bool | str]
 
 DENIED = ("The user denied this tool call, so it did not run. Do not try it again. "
           "Ask the user what they want to do instead.")
+MAX_NUDGES = 2     # a model that finishes with work open is sent back at most this many times per request (Lesson 44)
 MAX_PARALLEL = 8   # concurrency-safe calls run on up to this many threads (Lesson 14)
 HOOK_REFUSAL = "a hook refused it:"
 NO_APPROVER = ("Error: this tool call can change things and needs the user's approval, "
@@ -57,7 +58,10 @@ class Agent:
                  hooks: Hooks | None = None, redact_results: bool = False,
                  limit_check: Callable[[], str | None] | None = None, context: ContextBudget | None = None,
                  microcompact: bool = False, keep_recent: int = 2, auto_compact: bool = False,
-                 call_notes: Callable[[ToolCall], str] | None = None):
+                 call_notes: Callable[[ToolCall], str] | None = None,
+                 finish_check: Callable[[], str | None] | None = None, carry: Callable[[], str] | None = None,
+                 notices: Callable[[], list[str]] | None = None,
+                 on_request: Callable[[str], str | None] | None = None):
         self.provider = provider
         self.tools = tools if isinstance(tools, ToolRegistry) else ToolRegistry(tools)
         self.system_prompt = system_prompt
@@ -74,6 +78,10 @@ class Agent:
         self.keep_recent = max(1, keep_recent)   # ... but not the newest this many (at least the newest one)
         self.auto_compact = auto_compact   # summarise the older conversation when clearing isn't enough (Lesson 39)
         self.call_notes = call_notes       # text to show beside a result: a folder's own notes (Lesson 41)
+        self.finish_check = finish_check   # says what is still open when the model tries to finish; the agent asks it to carry on (Lesson 44)
+        self.on_request = on_request       # looks at a new request and may add a note to it (the todo list from numbered items, Lesson 44)
+        self.notices = notices             # things that happened while the model was busy (a background task ended), said between steps (Lesson 48)
+        self.carry = carry                 # state to repeat in a summary, so compaction doesn't lose it: the todo list (Lesson 44)
         self.hooks = hooks          # the user's scripts at fixed points (Lesson 33)
         self.fence_untrusted = fence_untrusted   # wrap outside content in <untrusted> tags (Lesson 31)
         self.usage = Usage()
@@ -93,6 +101,8 @@ class Agent:
         self.compact_error: str | None = None     # why the last compact() did nothing, when the model was the problem
         self.turn_start = 1          # where this turn's messages begin, for rolling it back after an error
         self.pending_notes: list[str] = []      # told to the model with the next request, then forgotten
+        self.nudges = 0              # times this request was sent back to work because finish_check found something open (at most MAX_NUDGES)
+        self.denied = False          # the user said no to a call in this request: nobody pushes the model to carry on after that
 
     def run(self, user_input: str) -> str:
         """Handle one user message. May call the model and tools many times."""
@@ -105,7 +115,11 @@ class Agent:
             notes = " ".join(self.pending_notes)
             user_input = f"[Note from the harness: {notes}]\n\n{user_input}"
             self.pending_notes.clear()
+        extra = self.on_request(user_input) if self.on_request else None
+        if extra:
+            user_input = f"{user_input}\n\n[Note from the harness: {extra}]"
         self.turn_start = len(self.messages)
+        self.nudges, self.denied = 0, False
         self.add(Message.user(user_input, checkpoint=secrets.token_hex(4)))
         schemas = self.tools.schemas()
         self.stop_reason = None
@@ -113,6 +127,9 @@ class Agent:
 
         try:
             for _ in range(self.max_steps):  # stop condition #2: never loop forever
+                for note in (self.notices() if self.notices else []):
+                    self.add(Message.user(f"[Note from the harness: {note}]"))
+                    self.on_event("notice", note)
                 why = self.limit_check() if self.limit_check else None
                 if why:                       # stop condition #3: a session-wide limit (Lesson 34)
                     self.stop_reason = "limit"
@@ -146,6 +163,12 @@ class Agent:
                     if reply.stop_reason == "max_tokens":
                         self.stop_reason = "max_tokens"
                         return reply.message.content + "\n\n(reply cut off: output token limit reached)"
+                    note = self.open_work()
+                    if note:                      # it wants to finish with items still open: say so, once or twice (Lesson 44)
+                        self.nudges += 1
+                        self.add(Message.user(note))
+                        self.on_event("nudge", note)
+                        continue
                     self.stop_reason = "completed"
                     return reply.message.content
 
@@ -175,6 +198,12 @@ class Agent:
         """Add to the conversation, and tell whoever is saving it (Lesson 40)."""
         self.messages.append(message)
         self.on_event("message", message)
+
+    def open_work(self) -> str | None:
+        """What to tell a model that is about to finish, or None: nothing is open, it was told twice already, or the user refused something."""
+        if self.finish_check is None or self.denied or self.nudges >= MAX_NUDGES:
+            return None
+        return self.finish_check()
 
     def acts(self, call: ToolCall) -> bool:
         """Does this call change something? A model that has made one has used what it read before (Lesson 39)."""
@@ -231,7 +260,7 @@ class Agent:
         untrusted = bool(self.fence_untrusted and taint is not None and taint.active)
         before = sum(message_tokens(m) for m in self.messages)
         cut = len(self.messages) - len(tail)
-        rebuilt = rebuild(self.messages[0], summary, current_request(head, tail), tail, untrusted)
+        rebuilt = rebuild(self.messages[0], summary, current_request(head, tail), tail, untrusted, self.carry() if self.carry else "")
         # the kept messages now start at index 2 (after the system prompt and the summary); a turn that began in the
         # summarised part is rolled back to just after the summary
         self.turn_start = 2 + self.turn_start - cut if self.turn_start >= cut else 2
@@ -366,6 +395,7 @@ class Agent:
             if answer is None:
                 return None, NO_APPROVER
             if not answer:
+                self.denied = True
                 self.on_event("tool_denied", call)
                 return None, DENIED
             self.on_event("tool_approved", (call, answer))

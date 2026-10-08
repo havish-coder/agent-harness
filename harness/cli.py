@@ -10,7 +10,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from harness.commands import load_commands, resume_text
+from harness.commands import Send, load_commands, resume_text
 from harness.config import USER_DIR, ConfigError, describe, load_dotenv, load_settings
 from harness.mentions import expand_mentions
 from harness.providers.base import ProviderError
@@ -174,6 +174,7 @@ def main(argv=None):
                 "instructions. /trust if you wrote it; /memory shows what was read.")
 
     while True:
+        session.announce_tasks()                 # background tasks that ended while you were thinking (Lesson 48)
         try:
             # The status line is computed once per prompt: the toolbar redraws on every keystroke.
             line = reader.read(default=watcher.take_typeahead(), toolbar=session.status_text()).strip()
@@ -192,7 +193,11 @@ def main(argv=None):
             break
         elif command.kind == "local":
             output = command.run(session, rest)
-            if output:
+            if isinstance(output, Send):                    # the command also has a request for the agent (Lesson 45)
+                if output.notice:
+                    ui.info(output.notice)
+                run_turn(session, watcher, str(output))
+            elif output:
                 ui.info(output)
         else:
             run_turn(session, watcher, command.expand(rest))

@@ -48,3 +48,10 @@ Copy [the template](template.md) to `NNNN-short-title.md` with the next number.
 | [0039](0039-agent-notes-record-whether-untrusted-content-was-read.md) | Let the agent save notes for itself, and record in each whether untrusted content had been read | Accepted |
 | [0040](0040-a-project-journal-written-at-checkpoints.md) | Keep a fixed-section project journal, written at checkpoints and checked before it is saved | Accepted |
 | [0041](0041-keep-a-copy-before-the-edit-tools-write.md) | Keep a copy of a file just before an edit tool writes it, and put it back only if nobody has touched it since | Accepted |
+| [0042](0042-a-todo-list-the-harness-can-see.md) | Give the agent a todo list the harness can see, and send it back when it tries to finish early | Accepted |
+| [0043](0043-plan-mode-ends-with-the-users-yes.md) | Plan mode ends only with the user's yes, through a tool that exists only in plan mode | Accepted |
+| [0044](0044-let-the-agent-ask-with-limits.md) | Let the agent ask the user a question, with a counter, a label and a warning | Accepted |
+| [0045](0045-sub-agents-share-permissions-not-conversations.md) | Sub-agents share the parent's permissions, taint and limits, and not its conversation | Accepted |
+| [0046](0046-background-commands-are-the-same-tool.md) | Run a command in the background with a parameter of `run_shell`, not with a second tool | Accepted |
+| [0047](0047-skills-load-on-demand-and-are-text-only.md) | Skills are loaded on demand, started by name, and are text only | Accepted |
+| [0048](0048-hold-back-tool-definitions-until-the-model-asks.md) | Hold back the definitions of rarely used tools until the model asks for them | Accepted |

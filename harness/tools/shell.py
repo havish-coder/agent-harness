@@ -22,6 +22,8 @@ from harness.workspace import Workspace
 
 DEFAULT_TIMEOUT = 60
 MAX_TIMEOUT = 600
+DEFAULT_LIMIT = 1_800       # seconds a background task may run (Lesson 48)
+TAIL_LINES = 40            # lines task_output shows by default
 OUTPUT_BUDGET = 7_000      # characters of output returned to the model
 HEAD_SHARE = 0.3           # keep 30% from the start, 70% from the end (summaries are at the end)
 
@@ -140,11 +142,12 @@ def run_command(shell: Shell, command: str, cwd: Path, timeout: int, env_keep=()
 
 
 def make_shell_tools(ws: Workspace, shell: Shell | None = None, env_keep=(), sandbox: Sandbox | None = None,
-                     sandbox_network: bool = True, sandbox_required: bool = False) -> list[Tool]:
+                     sandbox_network: bool = True, sandbox_required: bool = False, tasks=None) -> list[Tool]:
+    """`tasks` (Lesson 48) is the session's TaskManager; without one, `background` is refused and there are no task tools."""
     shell = shell or detect_shell()
 
     @tool(read_only=False, concurrency_safe=False, max_result_chars=OUTPUT_BUDGET + 1_000, content_kind="command", clearable=True)
-    def run_shell(command: str, timeout: int = DEFAULT_TIMEOUT) -> str:
+    def run_shell(command: str, timeout: int | None = None, background: bool = False) -> str:
         """Run a shell command in the workspace root folder and return its exit code and output.
 
         Use it to run tests, scripts, git, package managers and build tools. To read, search or
@@ -154,13 +157,21 @@ def make_shell_tools(ws: Workspace, shell: Shell | None = None, env_keep=(), san
 
         Args:
             command: The command to run. Paths are relative to the workspace root.
-            timeout: Seconds before the command is stopped (at most 600).
+            timeout: Seconds before the command is stopped (default 60, at most 600; for a background task default 1800, at most 7200).
+            background: Start it and return at once with a task id, for a command that takes long (tests, a build). You are told when it ends; task_output shows its output.
         """
         folder = ws.root
-        timeout = max(1, min(timeout, MAX_TIMEOUT))
         if sandbox is None and sandbox_required:
             return ("Error: commands are switched off: the settings require a sandbox and this machine has none "
                     "(sandbox: \"on\"). Tell the user.")
+        if background:
+            if tasks is None:
+                return "Error: background tasks aren't available in this session: run the command without background."
+            task = tasks.start(shell, command, folder, limit=DEFAULT_LIMIT if timeout is None else timeout, env_keep=env_keep,
+                               sandbox=sandbox, network=sandbox_network)
+            return (f"Started background task {task.id}: {command[:100]}\nIt runs on while you do other things, and you will be told when it ends. "
+                    f"task_output(task='{task.id}') shows what it has printed; task_stop(task='{task.id}') stops it.")
+        timeout = max(1, min(DEFAULT_TIMEOUT if timeout is None else timeout, MAX_TIMEOUT))
         code, out, err, seconds = run_command(shell, command, folder, timeout, env_keep, sandbox, sandbox_network)
 
         if code is None:
@@ -181,4 +192,40 @@ def make_shell_tools(ws: Workspace, shell: Shell | None = None, env_keep=(), san
     run_shell.description += f"\n\nShell: {shell.name}. {shell.hint}"
     if sandbox is not None:
         run_shell.description += "\n\n" + sandbox.describe(sandbox_network).capitalize() + "."
-    return [run_shell]
+    if tasks is None:
+        run_shell.parameters["properties"].pop("background", None)       # nothing to run in the background with: don't offer it
+        return [run_shell]
+
+    def find(ref: str):
+        task = tasks.get(ref)
+        if task is None:
+            known = ", ".join(tasks.tasks) or "none started"
+            raise ValueError(f"there is no background task '{ref}' (tasks: {known})")
+        return task
+
+    @tool(deferrable=True, read_only=True, concurrency_safe=True, max_result_chars=OUTPUT_BUDGET + 1_000, content_kind="command", clearable=True)
+    def task_output(task: str, lines: int = TAIL_LINES, wait: int = 0) -> str:
+        """Show the end of a background task's output, and whether it is still running.
+
+        Args:
+            task: The task id, like bg-1.
+            lines: How many of the last lines to show.
+            wait: Seconds to wait for it to end first (up to 120): use it when you have nothing else to do and need the result.
+        """
+        found = find(task)
+        if wait > 0:
+            tasks.wait(found, min(int(wait), 120))
+        return tasks.output(found, max(1, min(int(lines), 400)))
+
+    @tool(deferrable=True, read_only=False, concurrency_safe=False)
+    def task_stop(task: str) -> str:
+        """Stop a background task you started, and everything it started.
+
+        Args:
+            task: The task id, like bg-1.
+        """
+        found = find(task)
+        return f"Stopped {found.id}." if tasks.stop(found) else f"{found.id} had already ended: {found.describe()}."
+
+    task_stop.preview = lambda task: f"stop background task {task}: {(tasks.get(task).command[:80] if tasks.get(task) else 'unknown')}"
+    return [run_shell, task_output, task_stop]

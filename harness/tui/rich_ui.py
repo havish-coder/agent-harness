@@ -9,6 +9,7 @@ from rich.live import Live
 from rich.markdown import Markdown
 from rich.markup import escape
 from rich.padding import Padding
+from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
 
@@ -116,6 +117,28 @@ class RichUI:
         elif kind == "compact_failed":
             self.stop_spinner()
             self.console.print(Text(f"  ! couldn't summarise: {data}", style="yellow"))
+        elif kind == "task":
+            _, t = data
+            self.stop_spinner()
+            self.stop_live()
+            self.console.print(Text(f"  ⏹ background task {t.id} ended: {t.describe()}  [{t.command[:60]}]", style="dim"))
+            self.start_spinner()
+        elif kind == "subagent":
+            name, what, info = data
+            self.stop_spinner()
+            self.stop_live()
+            if what == "start":
+                self.console.print(Text(f"  ↳ {name}: {info[:100]}", style="cyan"))
+            elif what == "tool_call":
+                self.console.print(Text(f"      · {info.name}({short_args(info.arguments)[:80]})", style="dim"))
+            else:
+                self.console.print(Text(f"  ↳ {name} finished: {info['calls']} tool calls, ~{info['tokens']:,} tokens, {info['seconds']:.0f} s", style="dim"))
+            self.start_spinner()
+        elif kind == "nudge":
+            self.stop_spinner()
+            self.stop_live()
+            self.console.print(Text("  ↺ the todo list still has unfinished items: asking the agent to carry on", style="dim"))
+            self.start_spinner()
         elif kind == "microcompact":
             self.stop_spinner()
             self.stop_live()
@@ -126,6 +149,8 @@ class RichUI:
             lines = result.splitlines() or ["(empty)"]
             if call.name in ("edit_file", "write_file") and not result.startswith("Error"):
                 lines = shown = lines[:1]            # the diff was already shown when approving
+            elif call.name == "todo_write":
+                shown = lines[:22]                    # the whole checklist: it is the point of the call
             elif call.name == "run_shell" and len(lines) > TOOL_RESULT_LINES:
                 shown = [lines[0], "…", *lines[-(TOOL_RESULT_LINES - 1):]]   # status + the end (summaries)
             else:
@@ -171,6 +196,22 @@ class RichUI:
         except EOFError:
             return ""
         return answer[:1] if answer[:1] in options else ""
+
+    def ask_text(self, question: str) -> str:
+        """Ask for a line of text; "" for Enter or the end of input (Lessons 45, 46)."""
+        self.stop_spinner()
+        self.stop_live()
+        try:
+            return self.console.input(Text(f"{question} ", style="yellow")).strip()
+        except EOFError:
+            return ""
+
+    def show_plan(self, plan: str):
+        """The plan the agent proposes, for the user to read before answering (Lesson 45)."""
+        self.stop_spinner()
+        self.stop_live()
+        self.console.print()
+        self.console.print(Panel(self.markdown(plan), title="Proposed plan", title_align="left", border_style="cyan"))
 
     def error(self, text: str):
         self.stop_spinner()

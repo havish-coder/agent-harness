@@ -47,6 +47,19 @@ class Tool:
     # a command's output), so an old result may be replaced by a short note when the window fills (Lesson 38).
     # Fail-closed like the other flags: a tool that doesn't say so is never cleared.
     clearable: bool = False
+    # A tool can be left out of what the model is shown while something isn't true (Lesson 45: `exit_plan_mode` exists only in plan
+    # mode). Asked every time the schemas are built; a tool that is not enabled is invisible to the model and can't be called.
+    enabled: Callable[[], bool] | None = None
+    # A tool that can wait to be described to the model until it asks for it with tool_search (Lesson 50). Whether it does wait is decided by the session.
+    deferrable: bool = False
+
+    def is_enabled(self) -> bool:
+        if self.enabled is None:
+            return True
+        try:
+            return bool(self.enabled())
+        except Exception:
+            return False   # a broken switch hides the tool: fail closed, like the other flags
 
     def schema(self) -> dict:
         """The provider-neutral description sent to the model."""
@@ -77,7 +90,8 @@ SUBJECTS = ("path", "command", "url")
 def tool(fn: Callable | None = None, *, name: str | None = None, read_only: Flag = False,
          concurrency_safe: Flag = False, destructive: Flag = False,
          max_result_chars: int = DEFAULT_MAX_RESULT_CHARS, subject: str | None = "auto",
-         content_kind: str | None = None, clearable: bool = False) -> Any:
+         content_kind: str | None = None, clearable: bool = False, enabled: Callable[[], bool] | None = None,
+         deferrable: bool = False) -> Any:
     """Turn a function into a `Tool`. Use as `@tool` or `@tool(read_only=True, ...)`.
 
     - name: the function name (or `name=`)
@@ -88,6 +102,8 @@ def tool(fn: Callable | None = None, *, name: str | None = None, read_only: Flag
     - content_kind: "file", "command", "web" or "external" when the result carries text someone
       else wrote; it gets fenced as untrusted and may taint the conversation (Lesson 31)
     - clearable: an old result may be replaced by a note when the window fills; the model can call the tool again
+    - enabled: a function; while it returns False the tool is not shown to the model and can't be called
+    - deferrable: the tool's definition may be held back until the model finds it with tool_search
     """
     def build(f: Callable) -> Tool:
         description, arg_docs = parse_docstring(f)
@@ -109,6 +125,8 @@ def tool(fn: Callable | None = None, *, name: str | None = None, read_only: Flag
             max_result_chars=max_result_chars,
             content_kind=content_kind,
             clearable=clearable,
+            enabled=enabled,
+            deferrable=deferrable,
         )
 
     return build(fn) if fn is not None else build
@@ -163,6 +181,8 @@ def type_schema(t: Any, where: str = "") -> dict:
     """One Python type → its JSON Schema. Unsupported types fail loudly at import time."""
     if t in _SIMPLE:
         return {"type": _SIMPLE[t]}
+    if t is list:                   # a list of anything: the tool checks the items itself and explains what's wrong
+        return {"type": "array", "items": {}}
     origin, args = get_origin(t), get_args(t)
     if origin is Literal:
         kinds = {type(a) for a in args}

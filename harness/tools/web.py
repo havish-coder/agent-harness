@@ -171,7 +171,7 @@ def fetch(url: str, allow_local=(), resolver: Resolver = socket.getaddrinfo, tra
 
 def make_web_tools(allow_local=(), resolver: Resolver = socket.getaddrinfo, transport=None) -> list[Tool]:
 
-    @tool(read_only=False, concurrency_safe=True, max_result_chars=MAX_CHARS + 1_000, content_kind="web", clearable=True)
+    @tool(deferrable=True, read_only=False, concurrency_safe=True, max_result_chars=MAX_CHARS + 1_000, content_kind="web", clearable=True)
     def web_fetch(url: str, max_chars: int = DEFAULT_CHARS) -> str:
         # The wording is measured (Lesson 32): a description that listed what the tool can't reach made
         # qwen3:4b-instruct answer "I cannot fetch web pages" instead of calling it. The limits are

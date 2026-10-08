@@ -9,6 +9,13 @@ you haven't installed it yet.
 - [Permissions: modes and rules](permissions.md): what runs without asking, what asks, what's refused
 - [Reading web pages](web.md): `web_fetch`, where it can connect, and your own servers
 - [Project memory: HARNESS.md](memory.md): notes the agent reads every time; whose words they count as
+- [The todo list](todo.md): a checklist for jobs with several parts; the agent is sent back when it stops early
+- [Plan mode](plan-mode.md): the agent looks and proposes; nothing changes until you say yes
+- [Questions from the agent](ask-user.md): it asks instead of guessing, at most three times
+- [Sub-agents](sub-agents.md): hand a job to a fresh agent and get back only its report
+- [Commands in the background](background-tasks.md): start a long command, keep working, hear when it ends
+- [Skills](skills.md): instructions loaded when they are needed, started by name
+- [Tool search](tool-search.md): rarely used tools are described only when the agent asks for them
 - [Undo and rewind](undo.md): put back what the agent changed, or go back to before a request
 - [The progress journal](journal.md): a new chat starts from where the last one stopped
 - [Notes the agent saves for itself](auto-memory.md): `remember`, what asks, and notes saved after reading something you don't trust

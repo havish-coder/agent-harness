@@ -276,7 +276,7 @@ def make_session(tmp_path, monkeypatch, files=None, approver=None, trusted=True,
     if trusted:
         from harness.security.trust import set_trusted
         set_trusted(root, config.USER_DIR, True)
-    s = Session(Settings(save_chats=False, **settings), Workspace(root), Quiet(), approver or PlainApprover())
+    s = Session(Settings(save_chats=False, tool_search="off", **settings), Workspace(root), Quiet(), approver or PlainApprover())     # (these tests call the note tools)
     s.agent.stream = False
     return s
 

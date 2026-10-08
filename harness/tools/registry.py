@@ -18,6 +18,8 @@ _DECIMAL = re.compile(r"^-?\d+(\.\d+)?$")
 class ToolRegistry:
     def __init__(self, tools: list[Tool] = ()):
         self._tools: dict[str, Tool] = {}
+        self.deferred: set[str] = set()      # tools whose definitions are held back (Lesson 50) ...
+        self.loaded: set[str] = set()        # ... until the model has found them with tool_search
         for t in tools:
             self.add(t)
 
@@ -42,8 +44,22 @@ class ToolRegistry:
         """The tools whose old results may be replaced by a note (Lesson 38)."""
         return {t.name for t in self._tools.values() if t.clearable}
 
+    def hold_back(self, names) -> None:
+        """Hold back the definitions of these tools until they are loaded."""
+        self.deferred = {n for n in names if n in self._tools}
+
+    def held_back(self) -> list[Tool]:
+        """The tools the model hasn't been shown yet and may ask for."""
+        return [t for t in self._tools.values() if t.name in self.deferred and t.name not in self.loaded and t.is_enabled()]
+
+    def load(self, names) -> None:
+        self.loaded.update(n for n in names if n in self._tools)
+
+    def shown(self, t: Tool) -> bool:
+        return t.is_enabled() and (t.name not in self.deferred or t.name in self.loaded)
+
     def schemas(self) -> list[dict]:
-        return [t.schema() for t in self._tools.values()]
+        return [t.schema() for t in self._tools.values() if self.shown(t)]
 
     def resolve(self, call: ToolCall) -> tuple[Tool | None, str | None]:
         """Find the tool and validate (and gently coerce) the call's arguments in place.
@@ -52,7 +68,12 @@ class ToolRegistry:
         """
         tool = self._tools.get(call.name)
         if tool is None:
-            return None, f"Error: unknown tool '{call.name}'. Available tools: {', '.join(self._tools)}"
+            return None, f"Error: unknown tool '{call.name}'. Available tools: {', '.join(t.name for t in self if self.shown(t))}"
+        if tool.name in self.deferred and tool.name not in self.loaded and tool.is_enabled():
+            return None, f"Error: '{call.name}' hasn't been loaded yet. Find it first with tool_search(query='what you want to do'), then call it."
+        if not tool.is_enabled():
+            return None, (f"Error: the tool '{call.name}' isn't available right now. Available tools: "
+                          f"{', '.join(t.name for t in self if self.shown(t))}")
         errors = validate_arguments(call.arguments, tool.parameters)
         if errors:
             return None, (f"Error: invalid arguments for {tool.name}: {'; '.join(errors)}.\n"

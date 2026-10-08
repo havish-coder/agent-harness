@@ -165,7 +165,7 @@ def current_request(head: list[Message], tail: list[Message]) -> str | None:
     return next((m.content for m in reversed(head) if m.role == "user" and not is_summary(m)), None)
 
 
-def rebuild(system: Message, summary: str, request: str | None, tail: list[Message], untrusted: bool) -> list[Message]:
+def rebuild(system: Message, summary: str, request: str | None, tail: list[Message], untrusted: bool, carry: str = "") -> list[Message]:
     """The conversation after compaction: the system prompt, one user message holding the summary, then the kept
     messages. (A kept message that is also from the user follows it as a second user turn; providers accept that.)"""
     body = summary if not untrusted else fence(summary, "summary of earlier steps")
@@ -173,6 +173,8 @@ def rebuild(system: Message, summary: str, request: str | None, tail: list[Messa
     if request:
         parts.append("The user's current request, word for word:\n" + (request if len(request) <= REQUEST_CAP else request[:REQUEST_CAP] + " ..."))
     parts.append(body)
+    if carry:                                  # state the harness holds, repeated word for word: a summary must not lose it (Lesson 44)
+        parts.append(carry)
     if CONTINUE_NOTE:
         parts.append(CONTINUE_NOTE)
     return [system, Message.user("\n\n".join(parts)), *tail]
