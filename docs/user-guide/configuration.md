@@ -103,6 +103,20 @@ other folders (`additional_directories`) or skip your approvals (`permission_mod
 [rules](permissions.md)) are **ignored** in project settings, with a warning. Put them in your
 user or local settings.
 
+`settings.local.json` is yours only while it stays out of git. It sits in the project folder,
+so a repository could ship one with `"permission_mode": "bypass"` or a hook in it. If git
+tracks the file and you haven't [trusted](untrusted-content.md) the folder, the harness says so
+and treats it as project settings: the settings above are ignored, its allow rules too, and its
+hooks don't run.
+
+```text
+warning: settings.local.json is tracked by git, so it came with the repository: it counts as project settings while this folder isn't trusted (/trust, then restart, if the project is yours)
+```
+
+If the project is yours, run `/trust`, then restart the harness. Or untrack the file with
+`git rm --cached .harness/settings.local.json`. A file git doesn't track (one you wrote, or the
+one the harness saves `"journal": "off"` to) needs no trust.
+
 ## What to commit
 In your own projects, commit `.harness/settings.json` and ignore the rest:
 

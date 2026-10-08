@@ -25,6 +25,7 @@ from harness.mcp import check_servers
 from harness.security.permissions import MODES, Rule, RuleError
 from harness.security.sandbox import MODES as SANDBOX_MODES
 from harness.security.secrets import SECRET_VALUES
+from harness.security.trust import is_trusted
 
 USER_DIR = Path(os.environ.get("HARNESS_HOME", Path.home() / ".harness"))
 SECRET_KEY_NAMES = re.compile(r"(api[_-]?key|secret|token|password)", re.IGNORECASE)
@@ -290,6 +291,13 @@ def load_settings(workspace: Path, flags: dict | None = None, environ=None) -> t
     layers += [("environment", env_layer(environ)), ("flag", {k: v for k, v in (flags or {}).items() if v is not None})]
     for label, data in layers:
         warnings += check_layer(data, label)
+        # A settings.local.json that git tracks came with the repository, not from you: in a folder you haven't
+        # trusted it gets no more say than the project's settings.json (and its hooks wait for /trust, like a project's).
+        if (label == "local" and data and not is_trusted(workspace, USER_DIR)
+                and tracked_by_git(workspace, workspace / ".harness" / "settings.local.json")):
+            warnings.append("settings.local.json is tracked by git, so it came with the repository: it counts as project "
+                            "settings while this folder isn't trusted (/trust, then restart, if the project is yours)")
+            label = "project"
         if label == "project" and NOT_FROM_PROJECT.keys() & data.keys():
             for key in sorted(NOT_FROM_PROJECT.keys() & data.keys()):
                 warnings.append(f"project settings can't set '{key}' ({NOT_FROM_PROJECT[key]}); ignored. "
@@ -375,6 +383,15 @@ def ignored_by_git(repo: Path, path: Path) -> bool:
                               capture_output=True, timeout=10).returncode == 0
     except (OSError, subprocess.TimeoutExpired):
         return True
+
+
+def tracked_by_git(repo: Path, path: Path) -> bool:
+    """True if git tracks `path`, so it came with the repository (or was committed) rather than only from you."""
+    try:
+        return subprocess.run(["git", "ls-files", "--error-unmatch", str(path)], cwd=repo,
+                              capture_output=True, timeout=10).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
 
 
 def describe(settings: Settings) -> str:

@@ -35,6 +35,11 @@ is below 1.0, minor releases may contain breaking changes.
   harness says how to carry on, merge or remove it. A trusted folder's worktree is trusted; the `.env` of your own folder is still read. User guide: [worktrees](docs/user-guide/worktrees.md).
 - `Tool.enabled`: a tool can be hidden from the model, and refused, while some condition is false. `list` (a list of anything) is accepted as a tool argument type. A local command can return `Send(text)` to also send a request to the agent.
 
+### Security
+- A `settings.local.json` that git tracks came with the repository, not from you: in a folder you haven't trusted it now counts as project settings, so it can't set
+  `permission_mode`, `status_line`, allow rules and the other settings a project can't, and its hooks wait for `/trust`. One git doesn't track (yours) needs no trust.
+  See [configuration](docs/user-guide/configuration.md).
+
 ## [0.6.0] - 2026-10-07
 
 The context release. The agent now knows how big its conversation is and keeps it inside the model's window (clearing old results, then summarising),
