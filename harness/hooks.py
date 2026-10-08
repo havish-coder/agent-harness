@@ -139,11 +139,11 @@ class Hooks:
     def matches(self, rule: Rule, call, tool) -> bool:
         """Does this call match the hook's `match` rule? Like a deny or ask rule: for a command, any command in it."""
         if self.permissions is None:
-            return rule.tool in ("*", tool.name) and rule.pattern is None
+            return rule.names(tool.name) and rule.pattern is None
         try:
             subject, kind = self.permissions.subject(call, tool)
         except Exception:
-            return rule.tool in ("*", tool.name) and rule.pattern is None
+            return rule.names(tool.name) and rule.pattern is None
         from harness.security.shell import analyze
         analysis = analyze(subject, getattr(tool, "dialect", None) or "posix") if kind == "command" and subject else None
         return self.permissions.applies(rule, tool.name, subject, kind, analysis)

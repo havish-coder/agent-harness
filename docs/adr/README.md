@@ -55,3 +55,4 @@ Copy [the template](template.md) to `NNNN-short-title.md` with the next number.
 | [0046](0046-background-commands-are-the-same-tool.md) | Run a command in the background with a parameter of `run_shell`, not with a second tool | Accepted |
 | [0047](0047-skills-load-on-demand-and-are-text-only.md) | Skills are loaded on demand, started by name, and are text only | Accepted |
 | [0048](0048-hold-back-tool-definitions-until-the-model-asks.md) | Hold back the definitions of rarely used tools until the model asks for them | Accepted |
+| [0049](0049-mcp-servers-are-yours-their-words-are-not.md) | Connect MCP servers over stdio, from your user settings only, with tools that ask and results that are untrusted | Accepted |

@@ -115,17 +115,20 @@ def validate_arguments(args: dict, schema: dict) -> list[str]:
 
 
 def check_value(value, schema: dict, where: str):
-    """Return (possibly coerced value, None) or (value, error message)."""
-    kind = schema.get("type")
+    """Return (possibly coerced value, None) or (value, error message). Parts of a schema it doesn't read (an MCP server's
+    `"type": ["string", "null"]`, `anyOf`, `$ref`) are left for the tool itself to check (Lesson 51)."""
+    if not isinstance(schema, dict):
+        return value, None
+    kind = schema.get("type") if isinstance(schema.get("type"), str) else None
     value = _coerce(value, kind)
     expected = _JSON_TYPES.get(kind)
     # bool is a subclass of int in Python, but true is not a number in JSON
     wrong_bool = isinstance(value, bool) and kind in ("integer", "number")
     if expected and (not isinstance(value, expected) or wrong_bool):
         return value, f"'{where}' must be {_article(kind)} {kind}, got {type(value).__name__} {value!r:.40}"
-    if "enum" in schema and value not in schema["enum"]:
+    if isinstance(schema.get("enum"), list) and value not in schema["enum"]:
         return value, f"'{where}' must be one of {schema['enum']}, got {value!r}"
-    if kind == "array" and "items" in schema:
+    if kind == "array" and isinstance(schema.get("items"), dict):
         for i, item in enumerate(value):
             item_value, error = check_value(item, schema["items"], f"{where}[{i}]")
             if error:
@@ -155,7 +158,7 @@ def signature(tool: Tool) -> str:
     required = set(tool.parameters.get("required", []))
     parts = []
     for name, p in props.items():
-        kind = "|".join(map(json.dumps, p["enum"])) if "enum" in p else p.get("type", "any")
+        kind = "|".join(map(json.dumps, p["enum"])) if isinstance(p.get("enum"), list) else p.get("type", "any")
         if name in required:
             parts.append(f"{name}: {kind}")
         else:

@@ -21,6 +21,7 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 
 from harness.hooks import HookError, check_hooks
+from harness.mcp import check_servers
 from harness.security.permissions import MODES, Rule, RuleError
 from harness.security.sandbox import MODES as SANDBOX_MODES
 from harness.security.secrets import SECRET_VALUES
@@ -84,6 +85,9 @@ class Settings:
     file_history: bool = True                    # keep a copy of each file before the agent changes it, for /undo and /rewind (Lesson 43)
     chat_retention_days: int = 30                # delete saved chats of a project not used for this many days (0: keep them)
     shell_env_keep: list = field(default_factory=list)   # environment variables commands may see despite looking secret
+    # {"name": {"command", "args", "env", "trusted"}}: programs that offer the agent tools over MCP (Lesson 51). Read only from
+    # your user settings, the environment and flags: a file in a project folder can't start programs.
+    mcp_servers: dict = field(default_factory=dict)
     sources: dict = field(default_factory=dict, repr=False, compare=False)   # key → where it came from
 
 
@@ -109,6 +113,7 @@ TYPES: dict[str, tuple] = {
     "output_style": (str,), "status_line": (str, type(None)), "additional_directories": (list,),
     "permission_mode": (str,), "permissions": (dict,), "shell_env_keep": (list,), "fence_untrusted": (bool,), "web_fetch": (bool,), "hooks": (dict,), "audit_log": (bool,), "sandbox": (str,), "sandbox_network": (bool,), "redact_secrets": (bool,),
     "limits": (dict,), "web_allow_local": (list,), "microcompact": (bool,), "microcompact_keep": (int,), "auto_compact": (bool,), "save_chats": (bool,), "memory": (bool,), "auto_memory": (str,), "journal": (str,), "file_history": (bool,), "todo": (bool,), "subagents": (bool,), "background_tasks": (bool,), "skills": (bool,), "tool_search": (str,), "chat_retention_days": (int,),
+    "mcp_servers": (dict,),
 }
 # Settings a project file may not set, and why: a cloned repository could otherwise run its own
 # code on your machine, or give the agent access to your other folders, just by being opened.
@@ -130,7 +135,11 @@ NOT_FROM_PROJECT = {
     "journal": "it would make every chat write to the project and spend tokens, or hide a journal you want read",
     "file_history": "it could turn off the copies that /undo and /rewind depend on",
     "chat_retention_days": "it decides which of your saved chats are deleted",
+    "mcp_servers": "it starts programs on your machine",
 }
+# Not even from <workspace>/.harness/settings.local.json: that file sits in the project folder, so a repository could ship one.
+USER_ONLY = {"mcp_servers"}
+
 RULE_ACTIONS = ("allow", "ask", "deny")
 TOOL_SEARCH_MODES = ("auto", "on", "off")
 AUTO_MEMORY_MODES = ("ask", "on", "off")
@@ -179,6 +188,10 @@ def check_layer(data: dict, where: str) -> list[str]:
                 check_hooks(value, where)
             except HookError as e:
                 raise ConfigError(str(e)) from None
+        if key == "mcp_servers":
+            problems = check_servers(value, where)
+            if problems:
+                raise ConfigError(problems[0])
         if key == "additional_directories" and not all(isinstance(d, str) for d in value):
             raise ConfigError(f"{where}: 'additional_directories' must be a list of folder paths")
         if isinstance(value, str) and SECRET_VALUES.search(value):
@@ -280,8 +293,13 @@ def load_settings(workspace: Path, flags: dict | None = None, environ=None) -> t
         if label == "project" and NOT_FROM_PROJECT.keys() & data.keys():
             for key in sorted(NOT_FROM_PROJECT.keys() & data.keys()):
                 warnings.append(f"project settings can't set '{key}' ({NOT_FROM_PROJECT[key]}); ignored. "
-                                "Put it in your user or local settings")
+                                f"Put it in your user{'' if key in USER_ONLY else ' or local'} settings")
             data = {k: v for k, v in data.items() if k not in NOT_FROM_PROJECT}
+        if label == "local" and USER_ONLY & data.keys():
+            for key in sorted(USER_ONLY & data.keys()):
+                warnings.append(f"settings.local.json can't set '{key}' ({NOT_FROM_PROJECT[key]}, and a repository could ship that file); "
+                                "ignored. Put it in your user settings")
+            data = {k: v for k, v in data.items() if k not in USER_ONLY}
         if label == "project" and data.get("permissions", {}).get("allow"):
             warnings.append("project settings can't add allow rules (they let things run without asking); "
                             f"ignored: {', '.join(data['permissions']['allow'])}")
@@ -296,6 +314,8 @@ def load_settings(workspace: Path, flags: dict | None = None, environ=None) -> t
                 if key == "permissions":                 # so do rules, each keeping its source
                     value = settings.permissions + [{"action": action, "rule": rule, "source": label}
                                                     for action in RULE_ACTIONS for rule in value.get(action, [])]
+                if key == "mcp_servers":                 # servers add up across layers; a later layer can replace one by name
+                    value = {**settings.mcp_servers, **value}
                 if key == "limits":                      # a layer can change some limits and leave the rest
                     value = {**settings.limits, **value}
                 if key == "hooks":                       # hooks add up too, each remembering its layer

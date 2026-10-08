@@ -16,6 +16,7 @@ you haven't installed it yet.
 - [Commands in the background](background-tasks.md): start a long command, keep working, hear when it ends
 - [Skills](skills.md): instructions loaded when they are needed, started by name
 - [Tool search](tool-search.md): rarely used tools are described only when the agent asks for them
+- [MCP servers](mcp.md): tools from other programs; what they may do, and why their results are untrusted
 - [Undo and rewind](undo.md): put back what the agent changed, or go back to before a request
 - [The progress journal](journal.md): a new chat starts from where the last one stopped
 - [Notes the agent saves for itself](auto-memory.md): `remember`, what asks, and notes saved after reading something you don't trust

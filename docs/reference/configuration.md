@@ -23,7 +23,7 @@ variable `HARNESS_<NAME>` (upper case) and most as a flag. How the layers combin
 | `subagents` | boolean | `true` | | Give the agent `delegate` and the sentence in the prompt that says when to use it ([sub-agents](../user-guide/sub-agents.md)). A project may set it. |
 | `background_tasks` | boolean | `true` | | Let commands run in the background: the `background` parameter of `run_shell`, `task_output` and `task_stop` ([background tasks](../user-guide/background-tasks.md)). A project may set it. |
 | `skills` | boolean | `true` | | Read skills: their list in the prompt, `use_skill`, and the commands ([skills](../user-guide/skills.md)). A project may set it. |
-| `tool_search` | string | `"auto"` | | Hold back the definitions of rarely used tools until the model finds them with `tool_search`: `auto` (when the definitions take more than 15% of the window), `on`, `off` ([tool search](../user-guide/tool-search.md)). A project may set it. |
+| `tool_search` | string | `"auto"` | | Hold back the definitions of rarely used tools until the model finds them with `tool_search`: `auto` (when the definitions take more than 15% of the window; an MCP server's tools when they alone take more than 15%), `on`, `off` ([tool search](../user-guide/tool-search.md)). A project may set it. |
 | `todo` | boolean | `true` | | Give the agent the `todo_write` tool, the prompt sentence that says when to use it, and the nudge when it tries to finish with items open ([todo](../user-guide/todo.md)). A project may set it. |
 | `file_history` | boolean | `true` | | Keep a copy of each file before `edit_file` or `write_file` changes it, for `/undo` and `/rewind` ([undo](../user-guide/undo.md)). Not accepted from project settings. |
 | `max_output_tokens` | integer | `4096` | | Longest reply the model may write, in tokens. Stops a model that keeps repeating itself; a reply cut off here ends with a note. |
@@ -46,6 +46,7 @@ variable `HARNESS_<NAME>` (upper case) and most as a flag. How the layers combin
 | `web_allow_local` | list of strings | `[]` | `HARNESS_WEB_ALLOW_LOCAL` (separated like `PATH`) | `host` or `host:port` entries `web_fetch` may reach on your own machine or network, such as `localhost:3000`. Not accepted from project settings. |
 | `fence_untrusted` | boolean | `true` | | Wrap file text, command output and web pages in `<untrusted>` tags and tell the model they are data ([untrusted content](../user-guide/untrusted-content.md)). Not accepted from project settings. |
 | `shell_env_keep` | list of strings | `[]` | `HARNESS_SHELL_ENV_KEEP` (separated like `PATH`) | Environment variables commands may see even though they look secret (for example `SSH_AUTH_SOCK` to let `git push` use your ssh agent). Names are compared without case. Not accepted from project settings. |
+| `mcp_servers` | object | `{}` | `HARNESS_MCP_SERVERS` (JSON) | Programs that give the agent tools over MCP: `{"name": {"command": "npx", "args": [...], "env": ["VAR_NAME"], "trusted": false}}`. `env` lists names of variables to pass on even though they look secret; `trusted` means the results are yours, not untrusted content. Servers from all your layers add up; one of the same name replaces the earlier. **Only from your user settings**, the environment or a flag: not from project settings, nor from `settings.local.json` ([MCP servers](../user-guide/mcp.md)). |
 | `additional_directories` | list of strings | `[]` | | Folders outside the workspace the file tools may also use ([workspace](../user-guide/workspace.md)). Relative to the workspace. Not accepted from project settings. |
 | `prices` | object | `{}` | | Extra prices: model-name prefix → `{"input", "output", "cache_read", "cache_write"}` in US dollars per million tokens. Merged across layers. |
 
@@ -72,6 +73,8 @@ Environment values are converted to the setting's type: booleans accept `1`, `tr
 | project settings that set `provider` or `base_url` | warning showing the values |
 | a workspace `.env` not ignored by git | warning |
 | project settings that set `status_line` (it runs a program), `additional_directories` (it widens access) `permission_mode` (it decides what runs without asking), `shell_env_keep` (it hands your secrets to commands) or `fence_untrusted` (it removes a protection) or `web_allow_local` (it lets web_fetch reach your own network) | warning; the value is ignored |
+| project or `settings.local.json` settings that set `mcp_servers` (it starts programs, and a repository could ship either file) | warning; the value is ignored |
+| an `mcp_servers` entry without a `command`, with an unknown key, a name that isn't 1-30 letters, digits, `-` or `_` (or contains `__`), `args` or `env` that aren't lists of strings, or `trusted` that isn't a boolean | error |
 | project settings with `allow` rules | warning; the allow rules are ignored, `ask` and `deny` rules are kept |
 | a rule that can't be read (`run shell`, `run_shell()`), or an unknown key under `permissions` | error |
 | a rule naming a tool that doesn't exist | warning at start |

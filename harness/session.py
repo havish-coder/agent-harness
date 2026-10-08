@@ -11,6 +11,7 @@ import subprocess
 import tempfile
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
 from pathlib import Path
 
@@ -49,6 +50,7 @@ from harness.journal import Journal, JournalFile, make_journal_tools
 from harness.journal import section_text as journal_section
 from harness.journal import update as update_journal
 from harness.limits import Limits
+from harness.mcp import Server, connect, make_tools
 from harness.memory import MIN_FILE_TOKENS, MemoryFile, load_memory, nested_files, note_text, section_text
 from harness.plan import (
     CHOICES,
@@ -181,6 +183,8 @@ class Session:
             tools = tools + make_journal_tools(self.journal, self.permissions.taint, self.who)
             if self.journal.exists() or settings.journal == "on":
                 self.permissions.rules.append(Rule.parse("update_progress", "allow", "journal"))   # blanket: ends with untrusted reading
+        self.mcp: dict[str, Server | str] = {}          # MCP servers (Lesson 51): name -> the running server, or why it didn't start
+        tools = tools + self.start_mcp()
         for warning in self.permissions.unknown_tools([t.name for t in tools]):
             ui.warn(f"warning: {warning}")
         self.hooks = Hooks([], ws.root, self.permissions, settings.shell_env_keep)
@@ -370,13 +374,17 @@ class Session:
 
     # --- tool search (Lesson 50) -------------------------------------------------------------------------
     def apply_tool_search(self) -> None:
-        """Decide which tools wait to be described: none, the rarely used ones always, or those only when the definitions take too much of the window."""
-        registry, mode = self.agent.tools, self.settings.tool_search
-        waiting = [t.name for t in registry if t.deferrable]
-        if mode == "off" or not waiting:
-            registry.hold_back([])
-        elif mode == "on" or schema_tokens([t for t in registry if t.is_enabled()]) > TOOL_SHARE * self.context.window:
-            registry.hold_back(waiting)
+        """Decide which tools wait to be described: none, the rarely used ones always, or those only when the definitions take too much of the window.
+        In "auto" an MCP server's tools are judged by their own share (Lesson 51): you added the server to use it, and a small model told only a
+        tool's name didn't search for it (measured: scripts/mcp_lab.py use)."""
+        registry, mode, limit = self.agent.tools, self.settings.tool_search, TOOL_SHARE * self.context.window
+        ours = [t.name for t in registry if t.deferrable and not t.name.startswith("mcp__")]
+        servers = [t for t in registry if t.deferrable and t.name.startswith("mcp__") and t.is_enabled()]
+        if mode == "on":
+            registry.hold_back(ours + [t.name for t in servers])
+        elif mode == "auto":
+            registry.hold_back((ours if schema_tokens([t for t in registry if t.is_enabled()]) > limit else [])
+                               + ([t.name for t in servers] if schema_tokens(servers) > limit else []))
         else:
             registry.hold_back([])
         if registry.deferred:
@@ -393,6 +401,28 @@ class Session:
             if m.role == "tool" and m.tool_name == "tool_search":
                 found = re.match(r"Loaded: ([^.\n]+)\.", m.content)
                 registry.load([n.strip() for n in found.group(1).split(",")] if found else [])
+
+    # --- MCP servers (Lesson 51) -------------------------------------------------------------------------
+    def start_mcp(self) -> list:
+        """Start the servers in the settings, all at once (a slow one doesn't hold up the rest), and make their tools. One that fails is reported
+        and left out: the session works without it."""
+        def start(item):
+            name, spec = item
+            try:
+                return name, connect(name, spec, self.ws.root, config.USER_DIR / "logs")
+            except Exception as e:                   # it didn't start, didn't answer, or speaks another version
+                return name, str(e) or type(e).__name__
+        servers = self.settings.mcp_servers
+        if servers:
+            with ThreadPoolExecutor(max_workers=len(servers)) as pool:
+                self.mcp = dict(pool.map(start, servers.items()))
+        tools = []
+        for name, server in self.mcp.items():
+            if isinstance(server, str):
+                self.ui.warn(f"warning: the MCP server '{name}' didn't start: {server}")
+            else:
+                tools += make_tools(server, lambda text: self.ui.warn(f"warning: {text}"))
+        return tools
 
     # --- skills (Lesson 49) ----------------------------------------------------------------------------
     def read_skills(self) -> dict:
@@ -827,6 +857,9 @@ class Session:
             stopped = self.tasks.close()                # a task never outlives the session
             if stopped:
                 self.ui.info(f"(stopped {stopped} background task{'s' if stopped != 1 else ''} still running)")
+        for server in self.mcp.values():                # a server never outlives the session either
+            if not isinstance(server, str):
+                server.close()
         if self.tasks_temp is not None:
             shutil.rmtree(self.tasks_temp, ignore_errors=True)
         if self.history_temp is not None:               # chats aren't saved, so neither is what could undo them

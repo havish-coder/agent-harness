@@ -26,6 +26,10 @@ is below 1.0, minor releases may contain breaking changes.
   `/skills`; setting `skills`. User guide: [skills](docs/user-guide/skills.md).
 - Tool search (ADR 0048): tools marked deferrable (the notes and journal tools, `web_fetch`, the task tools) are described to the model only after it finds them with `tool_search(query)` when their definitions take more than 15% of the window (always in an 8K window; setting `tool_search`: `auto`, `on`,
   `off`). The search is the words of the query against the words of each tool's name and description. The prompt names the held-back tools and stays stable when one is loaded. User guide: [tool search](docs/user-guide/tool-search.md).
+- MCP servers (ADR 0049): programs listed in `mcp_servers` in your **user** settings are started with the session and their tools join the built-in ones as `mcp__<server>__<tool>`, over stdio JSON-RPC
+  (`harness/mcp.py`, stdlib only; protocol 2025-06-18, also 2025-03-26 and 2024-11-05). Every MCP tool asks (a server's `readOnlyHint` is ignored), is deferrable, and returns untrusted content: fenced, and tainting the chat, unless the server is marked
+  `"trusted": true`. A server gets no secret-looking environment variables except those its `env` names. Servers start in parallel; one that fails is reported and left out; calls time out after 120 s and are cancelled; images are named, not shown;
+  stderr goes to `~/.harness/logs/mcp-<name>.log`. In tool search's `auto` mode a server's tools are held back only when they alone take more than 15% of the window. Project settings and `settings.local.json` can't add servers. Permission rules and hooks can name a whole server (`mcp__github`). `/mcp [NAME]`. User guide: [MCP servers](docs/user-guide/mcp.md).
 - `Tool.enabled`: a tool can be hidden from the model, and refused, while some condition is false. `list` (a list of anything) is accepted as a tool argument type. A local command can return `Send(text)` to also send a request to the agent.
 
 ## [0.6.0] - 2026-10-07

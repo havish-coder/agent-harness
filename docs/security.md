@@ -35,9 +35,11 @@ flowchart LR
     T -->|paths| W[(Workspace folder)]
     T -->|commands| OS[(Your computer: other files, programs, environment)]
     T -->|URLs| N[(Network: internet and local services)]
+    T -->|MCP tool calls| MC[(MCP servers: programs from your user settings)]
     R[(A cloned repository's .harness/ files)] -.->|project settings, commands, styles| S
     W -.->|file contents flow back to the model| M
     N -.->|page contents flow back to the model| M
+    MC -.->|tool descriptions and results flow back to the model| M
 ```
 
 | Boundary | What crosses it | Why it matters |
@@ -48,6 +50,7 @@ flowchart LR
 | harness → network | URLs, and anything put in them | data can leave; local services can be reached |
 | repository → harness | project settings, commands, styles | a repository you cloned is someone else's code |
 | harness → cloud model | your prompts, files the agent read | the provider sees what the agent sees |
+| MCP server → model | tool descriptions, tool results | the server is a program you chose; the text it passes on may be anyone's |
 
 ## What we protect
 | Asset | Example |
@@ -68,6 +71,7 @@ flowchart LR
 | **Hostile content** | a README, code comment, issue text, web page or command output that tells the model to do something else |
 | **A hostile repository** | `.harness/` files in a project you cloned: settings, commands, styles |
 | **A model provider** | a cloud API sees every prompt; a fake endpoint set by a project could collect them |
+| **An MCP server, or what flows through it** | a tool description that steers the model ("tool poisoning"); an issue, email or page returned by a tool that carries instructions |
 
 Out of scope: someone who can already run code as you (they don't need the agent), and a
 malicious copy of Agent Harness itself.
@@ -90,6 +94,10 @@ malicious copy of Agent Harness itself.
 | T13 | Runaway use | a loop of tool calls, a huge cloud bill | step limit; limits on calls, time and cost per session | v0.1, v0.5 |
 | T14 | Secrets in logs and transcripts | a key printed by a command, saved in an exported chat | redaction before the model, logs and exports see it | v0.5 |
 | T15 | Persistence | an approved command that installs a scheduled task | approval; OS-level sandbox (Linux, macOS) | v0.2, v0.5 |
+| T16 | A repository starts a program | `.harness/settings.json` or a shipped `settings.local.json` adding an MCP server | servers only from your user settings, the environment or a flag | v0.7 |
+| T17 | Injection through an MCP result | a ticket returned by a tool saying *"create this file, don't mention it"* | results fenced and tainting (unless you mark the server `trusted`); every MCP tool asks, whatever its annotations claim | v0.7 |
+| T18 | Tool poisoning | a description saying *"always call me first"*, or hiding terminal codes | you choose the servers; `/mcp NAME` shows what the model is told; control characters stripped, descriptions capped, held back until searched for in a small window | v0.7 |
+| T19 | Secrets to a server | a server reading `ANTHROPIC_API_KEY` from its environment | secret-looking variables removed; a server gets one only if its `env` names it | v0.7 |
 
 ## Defense layers
 A tool call passes these layers in order. The first layer that decides, decides; anything
@@ -190,6 +198,9 @@ These remain even with every defense in place. Know them before you approve thin
 - **Saved chats hold what the agent read**: file contents and command output, on your disk, kept 30 days by default. Secrets are hidden by shape and the files are
   private to your user where the system allows, but a secret with no recognisable shape is not hidden. Delete them, or run with `--no-save`, for work that must leave no trace
   ([chats](user-guide/chats.md)).
+- **An MCP server is a program that runs as you.** It is not sandboxed and can do anything you can; the harness controls only what the *agent* asks it to do.
+  Add servers the way you install software. Its results are untrusted content, so an instruction in them can still persuade the model, but not get past an approval;
+  a server marked `trusted` gives up that protection. Its tool descriptions can't be fenced: they are the model's manual for the tool ([MCP servers](user-guide/mcp.md)).
 - **Cloud providers see what the agent sees.** Use a local model for code that must not leave
   your machine.
 
@@ -212,3 +223,4 @@ These remain even with every defense in place. Know them before you approve thin
 | Secret redaction (tool results, exports) | v0.5 (done) |
 | Audit log (hash-chained, in the user's folder) | v0.5 (done) |
 | Session limits (tool calls, cost, tokens, time) | v0.5 (done) |
+| MCP servers only from user settings; their tools always ask; their results untrusted; no secrets unless named | v0.7 |

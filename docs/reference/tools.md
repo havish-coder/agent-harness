@@ -24,6 +24,7 @@ Tools the model can call. Paths are relative to the workspace root.
 | `ask_user` | yes | no | no | Ask the user a question, with up to four choices; offered only where the interface can ask. |
 | `exit_plan_mode` | yes | no | no | Show the user a plan to approve; offered **only in plan mode**. Only the user's answer changes the mode. |
 | `update_progress` | no | no | no | Write one section of the project's progress journal (unless `journal` is `off`). |
+| `mcp__<server>__<tool>` | no | no | no | A tool of an MCP server in your settings. Always asks (a server's `readOnlyHint` is ignored); deferrable; its results are untrusted content unless the server is `trusted` ([MCP servers](../user-guide/mcp.md)). |
 
 Results longer than a tool's limit (8,000 characters by default) are shortened: the agent
 keeps the first 80% and the last 20% and says how much was cut in the middle.

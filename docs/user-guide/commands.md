@@ -27,6 +27,7 @@ send a ready-made request to the model.
 | `/config` | the settings in effect and which file each came from |
 | `/model [name]` | show the model, or switch to another one; the conversation is kept |
 | `/tools` | the tools the agent can use, and which ones only read |
+| `/mcp [NAME]` | the MCP servers, whether each is running, how many tools it gives, and its log; with a name, that server's tools and what the model is told about each ([MCP servers](mcp.md)) |
 | `/style [name]` | list [output styles](styles-and-status.md), or switch to one |
 | `/mode [name]` | show the [permission modes](permissions.md), or switch to one |
 | `/trust`, `/untrust` | trust this folder, or stop: [untrusted content](untrusted-content.md) |

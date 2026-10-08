@@ -81,8 +81,12 @@ class Rule:
     def __str__(self) -> str:
         return self.tool if self.pattern is None else f"{self.tool}({self.pattern})"
 
+    def names(self, tool_name: str) -> bool:
+        """Is the rule about this tool? Its name, `*`, or an MCP server's name for all of that server's tools (`mcp__github`, Lesson 51)."""
+        return self.tool in ("*", tool_name) or (self.tool.startswith("mcp__") and tool_name.startswith(self.tool + "__"))
+
     def matches(self, tool_name: str, subject: str | None, kind: str | None) -> bool:
-        if self.tool not in ("*", tool_name):
+        if not self.names(tool_name):
             return False
         if self.pattern is None:
             return True
@@ -347,7 +351,7 @@ class Permissions:
         command inside it, with wrappers and the program's directory removed."""
         if analysis is None or kind != "command" or rule.pattern is None or rule.exact:
             return rule.matches(tool_name, subject, kind)
-        if rule.tool not in ("*", tool_name):
+        if not rule.names(tool_name):
             return False
         texts = [subject.strip()] + [t for p in analysis.parts for t in (p.text, p.plain_text)]
         return any(match_command(rule.pattern, t, ignore_case=True) for t in texts)
@@ -359,7 +363,7 @@ class Permissions:
         is not allowed by `pytest*`. Commands run with a changed environment or through a wrapper
         (`env`, `sudo`, `NAME=value`) are never covered by a pattern: it isn't the command the
         user allowed."""
-        allows = [r for r in self.rules if r.action == "allow" and r.tool in ("*", tool_name)]
+        allows = [r for r in self.rules if r.action == "allow" and r.names(tool_name)]
         if not broad:                                  # after untrusted content: only what was spelled out
             allows = [r for r in allows if r.pattern is not None]
         for rule in allows:
@@ -398,7 +402,7 @@ class Permissions:
     def unknown_tools(self, names: list[str]) -> list[str]:
         """Warnings for rules naming tools that don't exist (usually a typo)."""
         return [f"permission rule {rule} ({rule.source}) names an unknown tool '{rule.tool}'"
-                for rule in self.rules if rule.tool != "*" and rule.tool not in names]
+                for rule in self.rules if rule.tool != "*" and not any(rule.names(n) for n in names)]
 
 
 class AskForChanges:

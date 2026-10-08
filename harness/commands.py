@@ -368,7 +368,7 @@ def _permissions(session, args):
         return str(e)
     names = [t.name for t in session.agent.tools]
     perms.remember(rule)
-    note = "" if rule.tool in names or rule.tool == "*" else f" (warning: there is no tool named {rule.tool})"
+    note = "" if rule.tool == "*" or any(rule.names(n) for n in names) else f" (warning: there is no tool named {rule.tool})"
     return f"{verb} {rule} for this session{note}"
 
 
@@ -643,6 +643,34 @@ def _export(session, args):
     return f"wrote {written}"
 
 
+def _mcp(session, args):
+    """/mcp [NAME]: the MCP servers, or the tools one of them gives the agent (Lesson 51)."""
+    from harness.mcp import UNSAFE, tool_name
+    if not session.mcp:
+        return "no MCP servers: add one to \"mcp_servers\" in ~/.harness/settings.json (docs/user-guide/mcp.md)"
+    name = args.strip()
+    if name:
+        server = session.mcp.get(name)
+        if server is None:
+            return f"no MCP server '{name}' (yours: {', '.join(session.mcp)})"
+        if isinstance(server, str):
+            return f"{name} didn't start: {server}"
+        tools = [t for t in session.agent.tools if t.name.startswith(tool_name(name, ""))]
+        return "\n".join(f"{t.name}\n    {t.description.splitlines()[0] if t.description else ''}" for t in tools) or f"{name} offers no tools"
+    rows = []
+    for name, server in session.mcp.items():
+        if isinstance(server, str):
+            rows.append(f"{name:<14} failed   {server}")
+            continue
+        about = server.info.get("serverInfo") if isinstance(server.info.get("serverInfo"), dict) else {}
+        what = UNSAFE.sub("", f"{about.get('name', '')} {about.get('version', '')}".strip())[:60]   # the server's own words: no terminal codes
+        count = sum(t.name.startswith(tool_name(name, "")) for t in session.agent.tools)
+        state = "stopped" if server.closed else "running"
+        rows.append(f"{name:<14} {state:<8} {count} tool{'s' if count != 1 else ''}{', trusted' if server.trusted else ''}"
+                    f"{f'  ({what})' if what else ''}  log: {server.log}")
+    return "\n".join(rows) + "\n/mcp NAME lists a server's tools."
+
+
 def _tools(session, args):
     rows = []
     registry = session.agent.tools
@@ -709,6 +737,7 @@ def builtin_commands() -> list[Command]:
         Command("config", "the settings in effect and where each came from", run=_config),
         Command("model", "show the model, or switch to another one", run=_model, argument_hint="[name]"),
         Command("tools", "the tools the agent can use", run=_tools),
+        Command("mcp", "the MCP servers and their tools", run=_mcp, argument_hint="[NAME]"),
         Command("style", "list output styles, or switch to one", run=_style, argument_hint="[name]"),
         Command("mode", "show the permission mode, or switch to another one", run=_mode, argument_hint="[mode]"),
         Command("trust", "trust this folder: its files are yours, not untrusted content", run=_trust_command(True)),

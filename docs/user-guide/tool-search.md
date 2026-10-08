@@ -22,7 +22,7 @@ Tools that declare themselves **deferrable** (rarely used): `remember`, `recall`
 ## When it is on
 | `"tool_search"` | |
 |---|---|
-| `"auto"` (default) | on **only when the definitions take more than 15% of the model's window**: always in the 8K window of a small local model, never in a 200K one |
+| `"auto"` (default) | on **only when the definitions take more than 15% of the model's window**: always in the 8K window of a small local model, never in a 200K one. The tools of [MCP servers](mcp.md) are judged on their own: held back only when *they* take more than 15% |
 | `"on"` | always |
 | `"off"` | never: every definition in every request |
 
