@@ -105,6 +105,33 @@ button, select, textarea { font: inherit; color: inherit; }
 .call pre { margin: 0; padding: 8px 10px; border-top: 1px solid var(--line); max-height: 280px; overflow: auto; color: var(--dim); white-space: pre-wrap; overflow-wrap: anywhere; }
 .call.error pre { color: var(--red); }
 .sub { margin-left: 18px; font: 12px var(--mono); color: var(--violet); }
+.call.waiting .state { background: var(--amber); animation: pulse .8s ease-in-out infinite; }
+
+/* questions from the agent (Lesson 55) */
+.ask { border: 1px solid rgba(255, 63, 216, .6); border-radius: 10px; padding: 10px 12px; background: rgba(255, 63, 216, .05);
+       box-shadow: var(--glow-magenta); display: flex; flex-direction: column; gap: 6px; }
+.ask.done { box-shadow: none; border-color: var(--line-2); background: rgba(255, 255, 255, .015); }
+.ask.plan { border-color: rgba(156, 123, 255, .6); background: rgba(156, 123, 255, .05); box-shadow: none; }
+.ask-title { font-weight: 600; color: #ffe1f8; }
+.ask.plan .ask-title { color: #e2d9ff; }
+.ask-title .q { color: var(--magenta); margin-right: 6px; font-family: var(--mono); }
+.ask-title b { font-family: var(--mono); color: var(--cyan); }
+.danger { color: var(--red); font-weight: 600; }
+.ask-reason, .ask-note { font-size: 12.5px; color: var(--amber); }
+.ask-note.danger { color: var(--red); }
+.ask pre { margin: 0; padding: 8px 10px; border-radius: 6px; background: #05080c; border: 1px solid var(--line); font: 12.5px/1.5 var(--mono);
+           max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ask-command { color: var(--cyan); }
+.diff .add { color: var(--green); } .diff .del { color: var(--red); } .diff .hunk { color: var(--cyan); } .diff .head { color: var(--dim); }
+.ask-input { background: #070c12; border: 1px solid var(--line-2); border-radius: 6px; padding: 6px 8px; resize: vertical; }
+.ask-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { border-radius: 8px; padding: 5px 14px; cursor: pointer; border: 1px solid var(--line-2); background: #0a1219; font-size: 13px; }
+.btn.yes { border-color: rgba(34, 224, 255, .7); color: #e8fbff; background: rgba(34, 224, 255, .14); }
+.btn.always { border-color: rgba(255, 63, 216, .6); color: #ffd6f6; }
+.btn.option { border-color: rgba(34, 224, 255, .4); }
+.btn:hover:not(:disabled) { filter: brightness(1.25); }
+.btn:disabled { opacity: .35; cursor: default; }
+.ask-answer { font: 12px var(--mono); color: var(--dim); }
 @keyframes pulse { 50% { opacity: .25; } }
 
 .viewer { display: flex; flex-direction: column; }
@@ -141,6 +168,7 @@ button, select, textarea { font: inherit; color: inherit; }
 .node.running circle { animation: pulse 1s ease-in-out infinite; }
 .node.error circle { stroke: var(--red); fill: #2b0b10; filter: drop-shadow(0 0 5px rgba(255, 90, 110, .8)); }
 .node.denied circle { stroke: var(--magenta); fill: transparent; stroke-dasharray: 2 2; filter: none; }
+.node.waiting circle { stroke: var(--amber); fill: #2b2108; animation: pulse .8s ease-in-out infinite; filter: drop-shadow(0 0 6px rgba(255, 200, 87, .8)); }
 .node.stale { opacity: .35; }
 .node text { font: 10px var(--mono); fill: var(--dim); text-anchor: middle; pointer-events: none; }
 .node.request text { fill: #f3c9ec; }
@@ -191,6 +219,8 @@ select.pill { cursor: pointer; }
 /* composer */
 .composer { flex-direction: row; align-items: stretch; gap: 8px; padding: 8px; border-color: var(--line-2); }
 .composer:focus-within { border-color: rgba(34, 224, 255, .5); box-shadow: var(--glow-cyan); }
+.composer.nudge { animation: nudge .4s; border-color: var(--amber); }
+@keyframes nudge { 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
 .composer textarea { flex: 1; resize: none; background: transparent; border: 0; outline: none; padding: 4px 6px; line-height: 1.45; }
 .composer-buttons { display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; }
 .send, .stop { width: 40px; height: 40px; border-radius: 10px; border: 1px solid; cursor: pointer; font-size: 16px; }

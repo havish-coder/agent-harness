@@ -11,11 +11,15 @@ Python's own http.server, one thread per request (ADR 0051). The page talks to i
 - GET  /events        the live stream from that number on (a reconnecting page says where it got to)
 - POST /api/send      a request or a slash command; 409 while one is running
 - POST /api/stop      stop the running request, as Esc does in the terminal
+- GET  /api/files     a folder of the workspace, for the explorer (Lesson 54)
+- GET  /api/file      a text file of the workspace, for the viewer, with secrets hidden
+- POST /api/answer    {"id", "answer"}: answer the question the agent is waiting on: an approval, a choice, text (Lesson 55)
 
 Only this computer can connect (127.0.0.1), the Host header must name it, and every request needs the key.
 """
 import json
 import os
+import re
 import secrets
 import socket
 import threading
@@ -28,9 +32,11 @@ from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 
 from harness.cli import announce, handle_line
+from harness.security.permissions import CHANGES
 from harness.security.redact import redacted
 from harness.session import Session
 from harness.tui.latex import render_math
+from harness.tui.plain import always_label
 from harness.web import DEFAULT_PORT
 from harness.workspace import IGNORED_DIRS, Workspace
 
@@ -43,6 +49,8 @@ RESULT_CHARS = 4000          # of a tool result, sent to the page
 MAX_BODY = 1_000_000
 FILE_BYTES = 200_000         # of a file shown in the viewer
 FOLDER_ENTRIES = 500         # of a folder shown in the explorer
+PREVIEW_CHARS = 20_000       # of a diff shown with an approval question
+ANSWER_CHARS = 4_000         # of an answer typed in the page
 NOT_RUN = ("tool_denied", "tool_refused")
 
 
@@ -122,6 +130,15 @@ def event_json(kind: str, data) -> dict | None:
     return None
 
 
+FENCED = re.compile(r'<untrusted source="[^"]*">\n(.*?)\n</untrusted>', re.DOTALL)
+
+
+def unfenced(content: str) -> str:
+    """A result as the tool returned it: the model read it fenced (Lesson 31), the page shows the text, as it does live."""
+    found = FENCED.match(content)
+    return found.group(1) + content[found.end():] if found else content
+
+
 def transcript(messages) -> list[dict]:
     """The conversation so far, as the same events the page gets live, so one renderer draws both."""
     out = []
@@ -133,7 +150,7 @@ def transcript(messages) -> list[dict]:
                 out.append({"type": "answer", "text": m.content, "markdown": render_math(m.content)})
             out += [{"type": "tool_call"} | call_json(c) for c in m.tool_calls]
         elif m.role == "tool":
-            out.append(result_json(m.tool_call_id, m.tool_name, m.content))
+            out.append(result_json(m.tool_call_id, m.tool_name, unfenced(m.content)))
     return out
 
 
@@ -161,13 +178,78 @@ def file_json(ws: Workspace, path: str) -> dict:
     return {"path": ws.display(p), "text": redacted(data[:FILE_BYTES].decode("utf-8", "replace")), "truncated": len(data) > FILE_BYTES}
 
 
+class Question:
+    """What the agent waits for (Lesson 55): shown in every open page, answered by the first one that answers."""
+
+    def __init__(self, payload: dict, default):
+        self.payload, self.default, self.answer = payload, default, default
+        self.done = threading.Event()
+
+
+def check_answer(payload: dict, answer) -> str | None:
+    """Why `answer` can't answer this question, or None. The page is trusted no more than its form fields."""
+    kind = payload["kind"]
+    if kind == "approval":
+        allowed = {"yes", "no"} | ({"always"} if payload["always"] else set())
+        return None if answer in allowed else f"answer one of: {', '.join(sorted(allowed))}"
+    if kind == "choice":
+        return None if answer == "" or answer in payload["options"] else "answer one of the options"
+    return None if isinstance(answer, str) and len(answer) <= ANSWER_CHARS else f"answer with text of at most {ANSWER_CHARS:,} characters"
+
+
 class WebUI:
-    """The Session's ui in the browser: every event and message becomes an event in the hub."""
+    """The Session's ui in the browser: every event and message becomes an event in the hub, and a question waits for a page."""
 
     def __init__(self, hub: Hub):
         self.hub = hub
         self.stop = threading.Event()      # /api/stop: the next event in the turn's thread raises KeyboardInterrupt
         self.turn: threading.Thread | None = None
+        self.question: Question | None = None
+        self.asked = 0
+        self.lock = threading.Lock()
+
+    # --- questions (Lesson 55): the agent's thread waits; a page's POST /api/answer, or Stop, wakes it -------------------------
+    def ask(self, payload: dict, default):
+        with self.lock:
+            self.asked += 1
+            question = self.question = Question(payload | {"type": "question", "id": f"q{self.asked}"}, default)
+        self.hub.publish(question.payload)
+        if self.stop.is_set():                   # Stop came first: don't wait for an answer nobody will give
+            self.cancel()
+        question.done.wait()
+        with self.lock:
+            self.question = None
+        shown = question.answer if payload["kind"] != "text" else bool(question.answer)    # typed text isn't repeated to every page
+        self.hub.publish({"type": "answered", "id": question.payload["id"], "answer": shown})
+        return question.answer
+
+    def reply(self, qid, answer) -> str | None:
+        """A page's answer: None when it was taken, else why not."""
+        with self.lock:
+            question = self.question
+            if question is None or question.payload["id"] != qid or question.done.is_set():
+                return "that question isn't waiting (answered already, or stopped)"
+            why = check_answer(question.payload, answer)
+            if why is None:
+                question.answer = answer
+                question.done.set()
+            return why
+
+    def cancel(self) -> None:
+        """Stop: the waiting question gets its safe answer (no, or nothing)."""
+        with self.lock:
+            if self.question is not None and not self.question.done.is_set():
+                self.question.answer = self.question.default
+                self.question.done.set()
+
+    def ask_choice(self, question: str, options: dict[str, str]) -> str:
+        return self.ask({"kind": "choice", "question": question, "options": options}, "")
+
+    def ask_text(self, question: str) -> str:
+        return self.ask({"kind": "text", "question": question}, "")
+
+    def show_plan(self, plan: str) -> None:
+        self.hub.publish({"type": "plan", "text": plan, "markdown": render_math(plan)})
 
     def __call__(self, kind, data):
         if self.stop.is_set() and threading.current_thread() is self.turn:
@@ -201,6 +283,25 @@ class WebUI:
     def retry(self, notice):
         self.warn(f"{notice.error}: " + ("switching to the fallback model" if notice.fallback else
                                          f"retrying in {notice.delay:.1f} s (retry {notice.attempt})"))
+
+
+class WebApprover:
+    """Asks the page about a call the permissions sent to "ask" (Lesson 55): the terminal's question, with the diff, the command, the
+    reason and the risks. yes, no, or always (when the permissions offer a rule to remember)."""
+
+    def __init__(self, ui: WebUI):
+        self.ui = ui
+
+    def __call__(self, call, tool, decision=None) -> bool | str:
+        try:
+            preview = tool.preview(**call.arguments) if tool.preview else ""
+        except Exception as e:                      # a preview that fails mustn't stop the question
+            preview = f"(no preview: {e})"
+        answer = self.ui.ask({"kind": "approval", "call_id": call.id, "tool": tool.name, "args": call.arguments,
+                              "preview": preview[:PREVIEW_CHARS], "destructive": tool.is_destructive(call.arguments),
+                              "reason": decision.reason if decision and decision.reason != CHANGES else "",
+                              "notes": list(decision.notes) if decision else [], "always": always_label(decision)}, "no")
+        return {"yes": True, "always": "always"}.get(answer, False)
 
 
 class WebApp:
@@ -246,6 +347,7 @@ class WebApp:
         if not self.busy:
             return False
         self.ui.stop.set()       # ponytail: noticed at the next event, so a long shell command finishes first; a thread can't be killed safely
+        self.ui.cancel()         # a question waiting for you is answered no
         return True
 
     def status(self) -> dict:
@@ -257,7 +359,7 @@ class WebApp:
         tasks = [{"id": t.id, "command": t.command, "text": t.describe(), "running": t.running}
                  for t in (s.tasks.tasks.values() if s.tasks else [])]
         return {"status": self.status(), "messages": self.notes + transcript(list(s.agent.messages)), "last_event": last,
-                "todos": s.todos.as_data(), "tasks": tasks}
+                "todos": s.todos.as_data(), "tasks": tasks, "question": self.ui.question.payload if self.ui.question else None}
 
 
 class Server(ThreadingHTTPServer):
@@ -359,6 +461,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.json({"ok": True}) if app.send(text.strip()) else self.json({"error": "a request is running"}, 409)
         if url.path == "/api/stop":
             return self.json({"stopping": app.stop()})
+        if url.path == "/api/answer":
+            why = app.ui.reply(body.get("id"), body.get("answer"))
+            return self.json({"ok": True}) if why is None else self.json({"error": why}, 409 if "waiting" in why else 400)
         self.reply(404, "text/plain", b"not found")
 
     def static(self, name: str) -> None:
@@ -398,7 +503,7 @@ def start(session: Session, commands, port: int = DEFAULT_PORT) -> Server:
 def serve(settings, ws, commands, styles, port: int = DEFAULT_PORT, open_browser: bool = True, fresh: bool = False) -> None:
     """`harness --web`: make the session with the browser as its interface and serve it until Ctrl+C."""
     ui = WebUI(Hub())
-    session = Session(settings, ws, ui, None, styles, interface="web", fresh=fresh)   # no approver yet: asking calls are refused (Lesson 55)
+    session = Session(settings, ws, ui, WebApprover(ui), styles, interface="web", fresh=fresh)
     session.commands = commands
     try:
         server = start(session, commands, port)

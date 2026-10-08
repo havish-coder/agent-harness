@@ -2,10 +2,12 @@
 
     python scripts/web_lab.py latency      # publish -> page, per event, with 1 and 5 pages open (scripted model)
     python scripts/web_lab.py throughput   # events per second through one stream
+    python scripts/web_lab.py approval     # Lesson 55: an approval question to the page, and the click to the result
     python scripts/web_lab.py live         # Ollama: time to the first word, terminal session vs. the page
 
 The page is played by httpx reading /events, in the same process, so both ends use one clock.
 """
+import json
 import statistics
 import sys
 import tempfile
@@ -124,6 +126,60 @@ def throughput(n=20000):
         print(f"{len(seen):,} of {n:,} events in {took:.2f} s: {len(seen) / took:,.0f} events/s through one stream")
 
 
+def approval(runs=20):
+    """Lesson 55: from the click (POST /api/answer) to the tool's result in the page, and from the question being asked to the page."""
+    from harness.messages import ToolCall
+    from harness.web.server import WebApprover
+    with tempfile.TemporaryDirectory() as root:
+        replies = []
+        for n in range(runs):
+            replies += [Reply(Message("assistant", tool_calls=[ToolCall(f"c{n}", "write_file", {"path": f"f{n}.txt", "content": "x"})]), "tool_calls", Usage()),
+                        Reply(Message("assistant", "done"), "end", Usage())]
+
+        class Script:
+            model = "script"
+
+            def chat(self, messages, tools):
+                return replies.pop(0)
+        session = Session(Settings(**BASE), Workspace(root), WebUI(Hub()), None, interface="web")
+        session.agent.approve = WebApprover(session.ui)
+        session.agent._approve_takes_decision = True
+        session.agent.provider = Script()
+        server = start(session, load_commands(Path(root)), port=0)
+        threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True).start()
+        client, to_page, to_result = page(server), [], []
+        for n in range(runs):
+            after = session.ui.hub.last
+            published = {}
+            hub, original = session.ui.hub, session.ui.hub.publish
+
+            def stamped(event, hub=hub, original=original, published=published):
+                now = time.perf_counter()
+                original(event)
+                published[hub.last] = now
+            hub.publish = stamped
+            client.post("/api/send", json={"text": f"write f{n}.txt"})
+            with client.stream("GET", f"/events?after={after}") as r:
+                event_id = None
+                for line in r.iter_lines():
+                    if line.startswith("id: "):
+                        event_id = int(line[4:])
+                    elif '"type": "question"' in line:
+                        to_page.append(1000 * (time.perf_counter() - published[event_id]))
+                        qid = json.loads(line[6:])["id"]
+                        clicked = time.perf_counter()
+                        threading.Thread(target=client.post, args=("/api/answer",), kwargs={"json": {"id": qid, "answer": "yes"}}).start()
+                    elif '"type": "tool_result"' in line:
+                        to_result.append(1000 * (time.perf_counter() - clicked))
+                    elif finished(line):
+                        break
+            hub.publish = original
+        server.closing = True
+        server.shutdown()
+        print(f"{runs} approvals: question -> page median {statistics.median(to_page):.2f} ms; "
+              f"click -> the tool's result in the page median {statistics.median(to_result):.2f} ms (max {max(to_result):.2f} ms)")
+
+
 def live(runs=3, request="Say hello in five words."):
     """Time to the first piece of the answer: the agent called directly (as the terminal does) vs. through the server."""
     with tempfile.TemporaryDirectory() as root:
@@ -154,4 +210,4 @@ def live(runs=3, request="Say hello in five words."):
 
 
 if __name__ == "__main__":
-    {"latency": latency, "throughput": throughput, "live": live}[sys.argv[1] if len(sys.argv) > 1 else "latency"]()
+    {"latency": latency, "throughput": throughput, "approval": approval, "live": live}[sys.argv[1] if len(sys.argv) > 1 else "latency"]()

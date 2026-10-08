@@ -1,4 +1,4 @@
-"""Lesson 53: the web server. A real server on a free port, a scripted model that streams, and httpx as the browser."""
+"""Lessons 53-55: the web server. A real server on a free port, a scripted model that streams, and httpx as the browser."""
 import json
 import threading
 import time
@@ -16,7 +16,7 @@ from harness.messages import Message, Reply, ToolCall, Usage
 from harness.providers.base import TextDelta
 from harness.session import Session
 from harness.web import DEFAULT_PORT
-from harness.web.server import Hub, WebUI, event_json, start
+from harness.web.server import Hub, WebApprover, WebUI, check_answer, event_json, start
 from harness.workspace import Workspace
 
 
@@ -77,12 +77,13 @@ class Web:
 def web(tmp_path, monkeypatch):
     servers = []
 
-    def make(replies, delay=0.0, **settings):
+    def make(replies, delay=0.0, approver=True, **settings):
         monkeypatch.setattr(config, "USER_DIR", tmp_path / "home")
         root = tmp_path / "proj"
         root.mkdir(exist_ok=True)
         base = {"save_chats": False, "auto_memory": "off", "journal": "off", "file_history": False, "todo": False}
-        session = Session(Settings(**(base | settings)), Workspace(root), WebUI(Hub()), None, interface="web")
+        ui = WebUI(Hub())
+        session = Session(Settings(**(base | settings)), Workspace(root), ui, WebApprover(ui) if approver else None, interface="web")
         session.agent.provider = Streamer(replies, delay)
         server = start(session, load_commands(root), port=0)
         threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True).start()
@@ -152,9 +153,9 @@ def test_tool_calls_and_their_results_reach_the_page(web, tmp_path):
     assert result["id"] == "c1" and "notes.txt" in result["text"] and result["error"] is False
 
 
-def test_a_call_that_needs_approval_is_refused_until_the_page_can_ask(web, tmp_path):
-    """Fail-closed: there is no approver yet (Lesson 55 adds one), so a call that would ask doesn't run."""
-    w = web([wants(ToolCall("c1", "write_file", {"path": "a.txt", "content": "x"})), answer("I couldn't.")])
+def test_without_an_approver_a_call_that_would_ask_is_refused(web, tmp_path):
+    """Fail-closed: a session made without one (a script) refuses the call instead of waiting for ever."""
+    w = web([wants(ToolCall("c1", "write_file", {"path": "a.txt", "content": "x"})), answer("I couldn't.")], approver=False)
     w.send("write a.txt")
     result = next(e for e in w.events() if e["type"] == "tool_result")
     assert result["text"] == NO_APPROVER and result["error"] and not (tmp_path / "proj" / "a.txt").exists()
@@ -200,6 +201,112 @@ def test_slash_commands_work_in_the_page(web):
         w.send(line)
         said = [e for e in w.events(after=after) if e["type"] in ("info", "warn")]
         assert said and said[0]["type"] == kind and words in said[0]["text"]
+
+
+# --- questions from the agent (Lesson 55) ---------------------------------------------------------------------------
+
+def without_ids(events):
+    return [{k: v for k, v in e.items() if k != "_id"} for e in events]
+
+
+def asked(w, after=0):
+    return w.events(after=after, until=lambda e: e["type"] == "question")[-1]
+
+
+def reply(w, q, value):
+    return w.client.post("/api/answer", json={"id": q["id"], "answer": value})
+
+
+def test_an_approval_shows_the_diff_and_yes_runs_the_call(web, tmp_path):
+    w = web([wants(ToolCall("c1", "write_file", {"path": "a.txt", "content": "hello\n"})), answer("Done.")])
+    w.send("write a.txt")
+    q = asked(w)
+    assert (q["kind"], q["tool"], q["call_id"], q["args"]["path"]) == ("approval", "write_file", "c1", "a.txt")
+    assert "new file a.txt" in q["preview"] and "+hello" in q["preview"] and q["always"] == "every write_file call"
+    assert w.client.get("/api/state").json()["question"]["id"] == q["id"]          # a page that opens now sees it too
+    assert reply(w, q, "yes").json() == {"ok": True}
+    got = w.events(after=q["_id"])
+    assert {"type": "answered", "id": q["id"], "answer": "yes"} in without_ids(got)
+    assert not next(e for e in got if e["type"] == "tool_result")["error"] and (tmp_path / "proj" / "a.txt").read_text() == "hello\n"
+    assert w.client.get("/api/state").json()["question"] is None
+
+
+def test_no_denies_the_call_and_only_the_first_answer_counts(web, tmp_path):
+    w = web([wants(ToolCall("c1", "write_file", {"path": "a.txt", "content": "x"})), answer("OK, I won't.")])
+    w.send("write a.txt")
+    q = asked(w)
+    assert reply(w, q, "maybe").status_code == 400 and w.client.post("/api/answer", json={"id": "q99", "answer": "yes"}).status_code == 409
+    assert reply(w, q, "no").status_code == 200
+    assert reply(w, q, "yes").status_code == 409                                       # another tab, too late
+    got = w.events(after=q["_id"])
+    assert any(e["type"] == "tool_denied" for e in got) and not (tmp_path / "proj" / "a.txt").exists()
+
+
+def test_always_allows_the_rest_of_the_session_without_asking(web, tmp_path):
+    w = web([wants(ToolCall("c1", "write_file", {"path": "a.txt", "content": "1"})),
+             wants(ToolCall("c2", "write_file", {"path": "b.txt", "content": "2"})), answer("Both written.")])
+    w.send("write two files")
+    q = asked(w)
+    reply(w, q, "always")
+    got = w.events(after=q["_id"])
+    assert [e["type"] for e in got].count("question") == 0 and (tmp_path / "proj" / "b.txt").read_text() == "2"
+
+
+def test_stop_while_the_agent_waits_answers_no_and_rolls_back(web, tmp_path):
+    w = web([wants(ToolCall("c1", "write_file", {"path": "a.txt", "content": "x"})), answer("never sent")])
+    w.send("write a.txt")
+    q = asked(w)
+    assert w.client.post("/api/stop", json={}).json() == {"stopping": True}
+    got = without_ids(w.events(after=q["_id"]))
+    assert {"type": "answered", "id": q["id"], "answer": "no"} in got and {"type": "error", "text": "cancelled"} in got
+    assert not (tmp_path / "proj" / "a.txt").exists() and [m.role for m in w.session.agent.messages] == ["system"]
+
+
+def test_the_agents_questions_are_answered_from_the_page(web):
+    w = web([wants(ToolCall("c1", "ask_user", {"question": "Which discount?", "options": ["10%", "20%"]})),
+             wants(ToolCall("c2", "ask_user", {"question": "Your favourite colour?"})), answer("Thanks.")])
+    w.send("set up the shop")
+    choice = asked(w)
+    assert choice["kind"] == "choice" and choice["question"] == "The agent asks: Which discount?"
+    assert choice["options"] == {"1": "10%", "2": "20%", "t": "something else (type it)"}
+    assert reply(w, choice, "9").status_code == 400 and reply(w, choice, "2").status_code == 200
+    text = asked(w, after=choice["_id"])
+    assert text["kind"] == "text" and reply(w, text, 42).status_code == 400 and reply(w, text, "blue").status_code == 200
+    got = w.events(after=text["_id"])
+    assert [e["text"] for e in got if e["type"] == "tool_result"] == ["The user answered: blue"]
+    assert {"type": "answered", "id": text["id"], "answer": True} in without_ids(got)          # typed text isn't sent to every page
+    assert next(m for m in w.session.agent.messages if m.role == "tool").content == "The user answered: 20%"
+
+
+def test_a_plan_is_shown_and_approved_in_the_page(web):
+    plan = "Goal: fix the cart.\n1. Edit shop/cart.py: multiply by quantity\n2. Run the tests"
+    w = web([wants(ToolCall("c1", "exit_plan_mode", {"plan": plan})), answer("Starting.")], todo=True)
+    w.session.set_mode("plan")
+    w.send("plan the fix")
+    upto = w.events(until=lambda e: e["type"] == "question")
+    q, shown = upto[-1], next(e for e in upto if e["type"] == "plan")
+    assert shown["text"] == plan and q["question"] == "Go ahead with this plan?" and set(q["options"]) == {"y", "a", "n", "f"}
+    reply(w, q, "y")
+    w.events(after=q["_id"])
+    assert w.session.permissions.mode == "default"
+    assert [t.content for t in w.session.todos.items] == ["Edit shop/cart.py: multiply by quantity", "Run the tests"]
+
+
+def test_a_reloaded_page_shows_results_without_the_fence_the_model_read(web, tmp_path):
+    """Results in the conversation are fenced for the model (Lesson 31); live, the page gets them plain, and a reload must too."""
+    w = web([wants(ToolCall("c1", "read_file", {"path": "notes.txt"})), answer("Read it.")], fence_untrusted=True)
+    (tmp_path / "proj" / "notes.txt").write_text("hello")
+    w.send("read notes.txt")
+    w.events()
+    assert "<untrusted" in next(m for m in w.session.agent.messages if m.role == "tool").content       # what the model read
+    shown = next(e for e in w.client.get("/api/state").json()["messages"] if e["type"] == "tool_result")["text"]
+    assert "<untrusted" not in shown and "hello" in shown
+
+
+def test_what_an_answer_must_be():
+    approval = {"kind": "approval", "always": None}
+    assert check_answer(approval, "yes") is None and check_answer(approval, "always") and check_answer(approval | {"always": "x"}, "always") is None
+    assert check_answer({"kind": "choice", "options": {"1": "a"}}, "") is None and check_answer({"kind": "text"}, "x" * 5000)
 
 
 # --- the explorer and the file viewer (Lesson 54) --------------------------------------------------------------------

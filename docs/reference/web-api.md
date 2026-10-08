@@ -9,10 +9,11 @@ Everything is JSON over HTTP on `127.0.0.1`; every request needs the key (see [w
 | `GET /?key=KEY` | | `303` to `/`, with the cookie `harness_key_PORT` (`HttpOnly; SameSite=Strict`) |
 | `GET /` | | the page |
 | `GET /static/NAME` | | the page's script and style (only the files that ship with it) |
-| `GET /api/state` | | `{"status": {...}, "messages": [event, ...], "last_event": N, "todos": [...], "tasks": [...]}` |
+| `GET /api/state` | | `{"status": {...}, "messages": [event, ...], "last_event": N, "todos": [...], "tasks": [...], "question": {...} or null}` |
 | `GET /events?after=N` | | the event stream from event `N + 1` on (see below) |
 | `POST /api/send` | `{"text": "..."}` | `{"ok": true}`, or `409` while a request runs, `400` for no text |
 | `POST /api/stop` | `{}` | `{"stopping": true}`, or `false` when nothing runs |
+| `POST /api/answer` | `{"id": "q3", "answer": ...}` | answer the waiting question: `"yes"`, `"no"` or `"always"` (if offered) for an approval, an option's key (or `""`) for a choice, text (at most 4,000 characters) for text. `{"ok": true}`, `400` for an answer it can't be, `409` when that question isn't waiting (answered already, or stopped) |
 | `GET /api/files?path=P` | | `{"path", "entries": [{"name", "path", "dir"}]}`: folder `P` of the workspace (`""` for its root), folders first, without the folders the tools skip (`.git`, `node_modules` ...); `403` outside the workspace, `404` if it isn't a folder |
 | `GET /api/file?path=P` | | `{"path", "text", "truncated"}` (the first 200 KB, secrets hidden), or `{"path", "binary": true}`; `403` outside the workspace, `404` if it isn't a file |
 
@@ -22,7 +23,8 @@ that isn't a JSON object (or is over 1 MB).
 `status` is what the status line shows: `provider`, `model`, `context_tokens`, `context_window`, `cost` (`null` when the
 price is unknown), `style`, `mode`, `tasks_running`, `workspace`, `turns`, `busy`.
 
-`todos` is the todo list (`[{content, status}]`), `tasks` the background commands (`[{id, command, text, running}]`).
+`todos` is the todo list (`[{content, status}]`), `tasks` the background commands (`[{id, command, text, running}]`), `question` the
+question the agent is waiting on (the `question` event below), if any.
 
 `messages` is the conversation so far, as the same events the stream carries (`user`, `answer`, `tool_call`,
 `tool_result`), preceded by what the server said at start-up (`info`, `warn`). Draw them, then stream from `last_event`.
@@ -56,6 +58,9 @@ and a `: ping` comment every 15 s when nothing happens. A client that reconnects
 | `todos` | `items`: `[{content, status}]` | the todo list changed |
 | `task` | `id`, `command`, `text` | a background command ended |
 | `subagent` | `name`, `what` (`start`, `tool_call`, `end`), `info` | a sub-agent started, called a tool, finished |
+| `question` | `id`, `kind`; for `approval`: `call_id`, `tool`, `args`, `preview` (the diff), `reason`, `notes`, `destructive`, `always` (what "always" would allow, or `null`); for `choice`: `question`, `options` (`{key: label}`); for `text`: `question` | the agent waits for an answer (`POST /api/answer`) |
+| `answered` | `id`, `answer` (`true`/`false` for text: whether something was typed) | a question was answered, or Stop answered it |
+| `plan` | `text`, `markdown` | plan mode proposes a plan; a `choice` question follows |
 | `rolled_back` | | a request that failed or was stopped was removed from the conversation |
 | `note` | `text` | the harness did something worth a line: cleared old results, summarised, a limit, hid a secret |
 | `info`, `warn`, `error` | `text` | messages, as the terminal prints them |

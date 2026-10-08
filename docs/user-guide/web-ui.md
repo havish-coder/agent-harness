@@ -70,10 +70,31 @@ updated if there is one, and background commands and MCP servers are stopped.
   *[image: ...]* stand in for them), and links open only `http` and `https` addresses, in a new tab. The page loads nothing
   from other sites.
 
-### Approvals
-In this version the page can't answer approval questions yet. A call that would ask (an edit, a command that changes
-something) is refused, and the model is told it can't run here. Calls your [rules](permissions.md#rules) or
-[mode](permissions.md) allow still run. For changes that need your yes, use the terminal app for now.
+### Approvals and questions
+What runs without asking, what asks and what is refused are decided exactly as in the terminal
+([permissions](permissions.md)). When a call asks, a card appears in the conversation:
+
+```text
+? edit_file wants to run
+--- a/project/shop/cart.py
++++ b/project/shop/cart.py
+@@ -13,5 +13,5 @@
+-        return sum(price for _, price, qty in self.items)
++        return sum(price * qty for _, price, qty in self.items)
+[ Yes ]  [ No ]  [ Always allow every edit_file call (this session) ]
+```
+
+- An edit shows its **diff** (new lines green, removed lines red); a command shows the **command**; other tools their arguments.
+- When the permissions explain themselves, the card says why it asks and lists the risks they found (*deletes files*, *rewrites
+  history* ...) in red, as the terminal does. A call that may destroy data says so.
+- **Always allow** appears when the permissions can offer a rule: for a command, that exact command; for an edit tool, every call of
+  it; for a web page, that site. It lasts until the server stops.
+- The agent's own questions (`ask_user`) show their choices as buttons, or a box for a typed answer. Plan mode shows the proposed
+  plan and asks *Go ahead with this plan?* The progress journal's offer is a question too.
+- While the agent waits, the tab's title starts with ● and the waiting call pulses amber in the graph. The question waits as long
+  as it takes; every open tab shows it, and the first answer counts.
+- **Stop** while a question waits answers it *no* and stops the request.
+- Pressing Enter while the agent works sends nothing: one request at a time. The box shakes and says so.
 
 ## Who can open it
 - The server listens on **127.0.0.1**: other computers on your network can't reach it.
@@ -82,8 +103,8 @@ something) is refused, and the model is told it can't run here. Calls your [rule
 - Requests that name another site in their `Host` header are refused. This stops a web page you visit from pointing a
   domain at 127.0.0.1 and talking to the server through it (DNS rebinding).
 
-Anyone with the address (key included) can drive the agent with your permissions until the server stops: don't paste it
-anywhere.
+Anyone with the address (key included) can drive the agent and answer its questions, with your permissions, until the
+server stops: don't paste it anywhere.
 
 ## Troubleshooting
 | You see | Do |

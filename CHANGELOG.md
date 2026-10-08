@@ -15,6 +15,10 @@ is below 1.0, minor releases may contain breaking changes.
   rebinding, and on Windows an exclusive port (Python's default lets a second server bind the same one). Calls that would ask are refused in the page for now.
   `--no-browser`. Measured: an event reaches the page 0.34 ms after it is published. User guide: [the web UI](docs/user-guide/web-ui.md); reference:
   [web API](docs/reference/web-api.md).
+- Approvals and questions in the web UI (ADR 0053): a call that asks shows in the conversation as a card with the diff (or the command), why it asks,
+  the risks and whether it may destroy data, answered **Yes**, **No** or **Always allow ...** (when offered). The agent's questions (`ask_user`), plan
+  review and the progress journal's offer work in the page too. One question at a time, shown in every open tab; the first answer counts; Stop answers
+  no. The tab's title says when the agent is waiting for you. `POST /api/answer`; events `question`, `answered`, `plan`.
 - The web UI's dashboard (ADR 0052): the conversation with Markdown answers (tables, code with highlighting, math as Unicode), each tool call with its result,
   a **run graph** of the agent's work (requests, tool calls, sub-agents, answers; failed calls red, calls that didn't run dashed), a file explorer that marks
   what the agent changed and a viewer (secrets hidden), terminal output, a log, the control center (model, mode, context, cost, current task) and the task

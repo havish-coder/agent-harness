@@ -241,6 +241,80 @@ function notRun(e, live) {
   logLine("warn", `○ not run: ${e.reason}`, live);
 }
 
+// --- questions from the agent (Lesson 55): an approval, a choice, or text; the first page to answer wins ---------------------------
+const cards = new Map();           // question id -> {card, payload}
+const RISKY = /^(deletes|rewrites|overwrites|runs as administrator)/;
+function diffView(text) {
+  const pre = el("pre", "diff");
+  for (const line of text.split("\n")) {
+    const cls = /^(\+\+\+|---|new file)/.test(line) ? "head" : line.startsWith("@@") ? "hunk" : line.startsWith("+") ? "add" : line.startsWith("-") ? "del" : "";
+    pre.appendChild(el("span", cls, line + "\n"));
+  }
+  return pre;
+}
+function choiceButton(box, label, cls, id, value) {
+  const b = box.appendChild(el("button", "btn " + cls, label));
+  b.type = "button";
+  b.addEventListener("click", async () => {
+    const r = await api("/api/answer", { id, answer: typeof value === "function" ? value() : value });
+    if (r.error) system("warn", r.error);
+  });
+  return b;
+}
+function question(e) {
+  if (cards.has(e.id)) return;
+  const card = el("div", "ask " + e.kind), title = card.appendChild(el("div", "ask-title")), buttons = el("div", "ask-buttons");
+  if (e.kind === "approval") {
+    title.append(el("span", "q", "?"), el("b", "", e.tool), document.createTextNode(" wants to run"));
+    if (e.destructive) title.appendChild(el("span", "danger", "  may destroy data"));
+    if (e.reason) card.appendChild(el("div", "ask-reason", "asking because " + e.reason));
+    for (const note of e.notes) card.appendChild(el("div", "ask-note" + (RISKY.test(note) ? " danger" : ""), "! " + note));
+    if (e.tool === "run_shell" && typeof e.args.command === "string") card.appendChild(el("pre", "ask-command", e.args.command));
+    if (e.preview) card.appendChild(diffView(e.preview));
+    else if (e.tool !== "run_shell") card.appendChild(el("pre", "ask-args", JSON.stringify(e.args, null, 2)));
+    choiceButton(buttons, "Yes", "yes", e.id, "yes");
+    choiceButton(buttons, "No", "no", e.id, "no");
+    if (e.always) choiceButton(buttons, `Always allow ${e.always} (this session)`, "always", e.id, "always");
+    graph.setStatus(e.call_id, "waiting");
+    const call = calls.get(e.call_id);
+    if (call) call.box.className = "call waiting";
+  } else if (e.kind === "choice") {
+    title.textContent = e.question;
+    for (const [key, label] of Object.entries(e.options)) choiceButton(buttons, label, "option", e.id, key);
+  } else {
+    title.textContent = e.question;
+    const input = card.appendChild(el("textarea", "ask-input"));
+    input.rows = 2;
+    choiceButton(buttons, "Answer", "yes", e.id, () => input.value);
+    choiceButton(buttons, "Skip", "no", e.id, "");
+  }
+  card.appendChild(buttons);
+  chatItem(card);
+  card.scrollIntoView({ block: "nearest" });
+  cards.set(e.id, { card, payload: e });
+  setState("waiting for you");
+  $("busy-chip").textContent = "waiting for you";
+  document.title = "● Agent Harness: waiting for you";
+}
+function answered(e) {
+  const found = cards.get(e.id);
+  document.title = "Agent Harness";
+  if (!found) return;
+  const { card, payload } = found;
+  card.classList.add("done");
+  card.querySelectorAll("button, textarea").forEach((b) => (b.disabled = true));
+  const said = payload.kind === "choice" ? payload.options[e.answer] || "no answer" : payload.kind === "text" ? (e.answer ? "answered" : "no answer") : e.answer;
+  card.appendChild(el("div", "ask-answer", "→ " + said));
+  if (payload.kind === "approval" && e.answer !== "no") {
+    graph.setStatus(payload.call_id, "running");
+    const call = calls.get(payload.call_id);
+    if (call) call.box.className = "call running";
+  }
+  setState(busy ? "thinking…" : "idle");
+  $("busy-chip").textContent = busy ? "working" : "idle";
+  logLine(e.answer === "no" ? "warn" : "dim", `you answered: ${said}`, true);
+}
+
 // --- every event, live or from the saved state, comes through here ---------------------------------------------------------------
 function show(e, live = true) {
   switch (e.type) {
@@ -359,6 +433,19 @@ function show(e, live = true) {
       }
       break;
     }
+    case "question":
+      question(e);
+      break;
+    case "answered":
+      answered(e);
+      break;
+    case "plan": {
+      const card = el("div", "ask plan");
+      card.appendChild(el("div", "ask-title", "Proposed plan"));
+      card.appendChild(el("div", "md")).innerHTML = md(e.markdown || e.text);
+      chatItem(card);
+      break;
+    }
     case "rolled_back":
       if (request) {
         request.els.forEach((x) => x.classList.add("rolled"));
@@ -436,6 +523,7 @@ async function folder(path, depth, box) {
     const open = expanded.has(entry.path);
     row.append(el("span", "chev", entry.dir ? (open ? "▾" : "▸") : ""), el("span", "icon", entry.dir ? "▣" : "▢"), el("span", "name", entry.name));
     if (changed.has(entry.path)) row.appendChild(el("span", "badge", "M"));
+    else if (entry.dir && [...changed].some((p) => p.startsWith(entry.path + "/"))) row.appendChild(el("span", "badge", "•"));
     if (entry.path === $("file-tab").dataset.path) row.classList.add("open-file");
     const children = box.appendChild(el("div"));
     if (entry.dir) {
@@ -498,10 +586,18 @@ async function send(words) {
 $("composer").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const words = text.value.trim();
-  if (words && !busy && (await send(words))) text.value = "";
+  if (words && busy) {                      // one request at a time: say so instead of doing nothing (seen live, Lesson 55)
+    const box = $("composer");
+    box.classList.remove("nudge");
+    void box.offsetWidth;                   // restart the animation
+    box.classList.add("nudge");
+    setState("still working: wait for it, or press ■ to stop");
+  } else if (words && (await send(words))) {
+    text.value = "";
+  }
 });
 text.addEventListener("keydown", (ev) => {
-  if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); $("send").click(); }
+  if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); $("composer").requestSubmit(); }
 });
 $("stop").addEventListener("click", () => api("/api/stop", {}));
 $("mode").addEventListener("change", (ev) => send("/mode " + ev.target.value));
@@ -512,6 +608,7 @@ $("mode").addEventListener("change", (ev) => send("/mode " + ev.target.value));
   for (const e of state.messages) show(e, false);
   lastStreamed = null;
   show({ type: "busy", busy: state.status.busy, status: state.status }, false);
+  if (state.question) show(state.question, false);           // the agent was already waiting when this page opened
   todos(state.todos);
   tasks(state.tasks);
   refreshTree();

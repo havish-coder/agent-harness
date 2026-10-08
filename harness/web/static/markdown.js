@@ -17,6 +17,7 @@ function inline(s) {
 }
 
 const BLOCK = /^\s*(```|#{1,6}\s|>|[-*+]\s|\d+[.)]\s|\|)/;
+const ITEM = /^\s*([-*+]|\d+[.)])\s+/;
 function md(source) {
   const lines = source.replace(/\r/g, "").split("\n"), out = [];
   let i = 0, m;
@@ -38,15 +39,18 @@ function md(source) {
       const quoted = [];
       while (i < lines.length && /^\s*>/.test(lines[i])) quoted.push(lines[i++].replace(/^\s*> ?/, ""));
       out.push(`<blockquote>${md(quoted.join("\n"))}</blockquote>`);
-    } else if (/^\s*([-*+]|\d+[.)])\s+/.test(line)) {
-      const ordered = /^\s*\d/.test(line), items = [];
-      while (i < lines.length && (/^\s*([-*+]|\d+[.)])\s+/.test(lines[i]) || (/^\s{2,}\S/.test(lines[i]) && items.length))) {
+    } else if (ITEM.test(line)) {
+      const ordered = /^\s*\d/.test(line), items = [], start = ordered ? parseInt(line.match(/\d+/)[0], 10) : 1;
+      for (;;) {
+        // a blank line between two items of the same list doesn't end it (models write "1. a\n\n2. b")
+        if (i + 1 < lines.length && !lines[i].trim() && ITEM.test(lines[i + 1]) && /^\s*\d/.test(lines[i + 1]) === ordered && items.length) i++;
+        if (!(i < lines.length && (ITEM.test(lines[i]) || (/^\s{2,}\S/.test(lines[i]) && items.length)))) break;
         const item = lines[i].match(/^(\s*)(?:[-*+]|\d+[.)])\s+(.*)/);
         if (item) items.push(`<li${item[1].length >= 2 ? ' class="sub"' : ""}>${inline(item[2])}</li>`);
         else items[items.length - 1] = items[items.length - 1].replace(/<\/li>$/, " " + inline(lines[i].trim()) + "</li>");
         i++;
       }
-      out.push(ordered ? `<ol>${items.join("")}</ol>` : `<ul>${items.join("")}</ul>`);
+      out.push(ordered ? `<ol${start > 1 ? ` start="${start}"` : ""}>${items.join("")}</ol>` : `<ul>${items.join("")}</ul>`);
     } else if (/^\s*\|.*\|\s*$/.test(line) && /^\s*\|?[\s:|-]*-[\s:|-]*$/.test(lines[i + 1] || "")) {
       const cells = (row) => row.trim().replace(/^\||\|$/g, "").split("|").map((c) => inline(c.trim()));
       let html = "<table><tr>" + cells(line).map((c) => `<th>${c}</th>`).join("") + "</tr>";

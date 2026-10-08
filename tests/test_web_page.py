@@ -31,8 +31,8 @@ def only_our_tags(html: str) -> None:
         assert tag.lower() in TAGS, tag
         assert re.fullmatch(r'(\s+[a-z]+="[^"]*")*\s*', attrs), attrs       # nothing but name="value" pairs (a quote in a value is &quot;)
         pairs = dict(re.findall(r'\s+([a-z]+)="([^"]*)"', attrs))
-        assert set(pairs) <= {"class", "href", "target", "rel"}, attrs
-        assert re.match(r"https?://", pairs.get("href", "https://")), attrs
+        assert set(pairs) <= {"class", "href", "target", "rel", "start"}, attrs
+        assert re.match(r"https?://", pairs.get("href", "https://")) and pairs.get("start", "1").isdigit(), attrs
 
 
 ATTACKS = [
@@ -69,6 +69,13 @@ def test_the_markdown_an_agent_writes():
     assert "<ul><li>one</li><li>two</li></ul><ol><li>first</li></ol>" in html
     assert "<table><tr><th>a</th><th>b</th></tr><tr><td>1</td><td>2</td></tr></table>" in html
     assert "<blockquote><p>½ + x²</p></blockquote>" in html and '<span class="n">1</span>' in html
+
+
+def test_a_numbered_list_with_blank_lines_is_one_list():
+    """Models often write "1. a", a blank line, "2. b": each became its own list numbered 1 (seen live, Lesson 55)."""
+    one, later = run(["md", "1. first\n\n2. second\n\n3. third"], ["md", "4. four\n5. five"])
+    assert one == "<ol><li>first</li><li>second</li><li>third</li></ol>"
+    assert later == '<ol start="4"><li>four</li><li>five</li></ol>'
 
 
 def test_code_is_highlighted_and_still_escaped():
