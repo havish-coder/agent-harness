@@ -8,6 +8,17 @@ is below 1.0, minor releases may contain breaking changes.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-08
+
+The web release. `harness --web` opens the same agent in your browser: the conversation streamed as Markdown, a graph of the agent's
+run, the workspace's files, terminal output, the todo list, approvals with diffs, the agent's questions, saved chats, other projects and
+models, and the progress journal, in a dashboard of charcoal, cyan and magenta. It is Python's own HTTP server with Server-Sent Events and a
+page of plain HTML, CSS and JavaScript (about 70 KB, nothing loaded from elsewhere), so it needs nothing to install. It was attacked before
+release: 18 attacks from a hostile page, a hostile model and other programs on the computer, 11 blocked as first built, 18 now. Building
+it found three bugs: redaction took quadratic time on long words, Windows let a second server take the same port, and a refused
+request could reset the connection before its answer arrived. 1,615 tests.
+Start with [the web UI](docs/user-guide/web-ui.md).
+
 ### Added
 - The web UI, first part (ADR 0051): `harness --web [PORT]` serves the same session to your browser. Requests and slash commands go in over `POST`, every event
   comes back numbered over Server-Sent Events (a page that reconnects gets what it missed, a page that opens late loads the conversation first), Stop rolls the
@@ -392,7 +403,8 @@ Start with [the security model](docs/security.md).
   the system prompt.
 - Terminal chat (`harness`) with tool-call display, `/reset`, `/bye` and per-turn token counts.
 
-[Unreleased]: https://github.com/havish-coder/agent-harness/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/havish-coder/agent-harness/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/havish-coder/agent-harness/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/havish-coder/agent-harness/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/havish-coder/agent-harness/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/havish-coder/agent-harness/compare/v0.4.0...v0.5.0

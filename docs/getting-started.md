@@ -83,6 +83,16 @@ harness --workspace C:\path\to\a\project
 > changes something asks you first, showing the diff or the command. Commands you approve run with your
 > rights, so read them. If the project is yours, `/trust` it. See [SECURITY.md](../SECURITY.md).
 
+## 6. Or use it in your browser
+```bash
+harness --web --workspace workspace
+```
+
+The same agent opens as a page in your browser: type requests at the bottom right, watch the answer stream in the middle,
+the run graph grow beside it and commands print below, and answer approvals with **Yes** or **No** under the diff. The
+server listens on this computer only and needs the key in the address it prints; Ctrl+C in its terminal stops it. See
+[the web UI](user-guide/web-ui.md).
+
 ## Next steps
-- [User guide](user-guide/README.md): everything the terminal app can do.
+- [User guide](user-guide/README.md): everything the terminal app and the web UI can do.
 - [Architecture](architecture.md): what happens between your question and the answer.

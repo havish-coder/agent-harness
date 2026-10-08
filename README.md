@@ -5,7 +5,7 @@ written from scratch in Python, without agent frameworks. It talks to a local mo
 [Ollama](https://ollama.com) or to a cloud API, inspects and edits files, runs commands, and
 explains every step it takes.
 
-> **Status: v0.7, pre-release.** The agent reads, searches and edits code, runs commands and
+> **Status: v0.8, pre-release.** The agent reads, searches and edits code, runs commands and
 > fetches web pages, and what it may do is decided by code, not by the model: a workspace
 > boundary, permission modes and rules, command analysis, untrusted-content handling, hooks,
 > secret redaction, an audit log and limits (and an OS sandbox on Linux and macOS). It keeps its
@@ -14,8 +14,8 @@ explains every step it takes.
 > keeps a todo list, hands jobs to sub-agents, runs commands in the background, loads skills,
 > uses tools from MCP servers and works in a git worktree of its own. It streams its answers and
 > runs on Ollama, Claude or any OpenAI-compatible service, in a terminal app with Markdown
-> rendering, slash commands, output styles and typeset math. A web UI is next on the
-> [roadmap](#roadmap).
+> rendering, slash commands, output styles and typeset math, or in a web UI in your browser
+> with a live graph of its run, approvals with diffs, chats, projects and models.
 > See the [changelog](CHANGELOG.md) for what changed in each release.
 
 ![The agent fixing a bug: it reads the file, proposes a diff, runs the tests](docs/images/demo.svg)
@@ -76,6 +76,9 @@ plus [`httpx`](https://www.python-httpx.org/). Every design decision is written 
 | ✅ | Skills loaded when a task needs them; tool search for rarely used tools | v0.7 |
 | ✅ | MCP servers over stdio: their tools ask, their results are untrusted (`/mcp`) | v0.7 |
 | ✅ | `--worktree NAME`: a git worktree for each session, removed only if nothing in it would be lost | v0.7 |
+| ✅ | A web UI (`harness --web`): the conversation streamed as Markdown, a run graph, files, terminal output, the todo list | v0.8 |
+| ✅ | Approvals with diffs, the agent's questions and plan review in the browser; chats, projects, models and the journal | v0.8 |
+| ✅ | Web UI security: 127.0.0.1 only, a key per start, origin and host checks, a strict Content-Security-Policy; an attack lab with 18 attacks | v0.8 |
 
 ## Quickstart
 Requirements: Python 3.10+, [Ollama](https://ollama.com/download), about 3 GB of disk.
@@ -89,6 +92,9 @@ python -m venv .venv
 pip install -e ".[tui,dev]"
 harness --workspace workspace
 ```
+
+Prefer a browser? `harness --web --workspace workspace` opens the same agent as a dashboard
+([the web UI](docs/user-guide/web-ui.md)).
 
 Cloud models work too, e.g. `harness --provider anthropic` with `ANTHROPIC_API_KEY` set; see
 [choosing a model](docs/user-guide/models.md).
@@ -113,7 +119,7 @@ Then ask something like *"How many TODOs are in my notes?"*. Full walkthrough:
 | v0.5 ✅ | Security: path jail, permission modes and rules, shell hardening, hooks, audit log |
 | v0.6 ✅ | Context: token budgets, compaction, sessions, project and auto memory, journal, undo |
 | v0.7 ✅ | Workflows: todo list, plan mode, asking, sub-agents, background tasks, skills, tool search, MCP, worktrees |
-| v0.8 | Web UI with streaming, approvals and settings |
+| v0.8 ✅ | Web UI: streaming, a run graph, approvals with diffs, chats, projects, models; attacked before release |
 | v1.0 | Evals, tracing, packaging, CI |
 
 ## Development
