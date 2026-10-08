@@ -64,19 +64,24 @@ approve**, and you see exactly what would change:
     +++ b/project/shop/cart.py
     -        return sum(price for _, price, qty in self.items)
     +        return sum(price * qty for _, price, qty in self.items)
-    allow? [y]es / [n]o / [a]lways for edit_file: y
+    allow? [y]es / [n]o: y
 ```
 
-Running the tests asks for approval too. Afterwards, undo the change with
-`git checkout workspace/project`.
+Running the tests asks for approval too. Afterwards, `/undo` puts the file back (or
+`git checkout workspace/project`).
+
+In a folder you have trusted (`/trust`), the question also offers `[a]lways`, to stop asking for that tool in this
+session. In a folder you haven't, it doesn't once the agent has read something there: see
+[untrusted content](user-guide/untrusted-content.md).
 
 ## 5. Point it at your own folder
 ```bash
 harness --workspace C:\path\to\a\project
 ```
 
-> **Safety:** in this version paths aren't confined to the workspace yet. Use a folder you
-> don't mind the agent reading. See [SECURITY.md](../SECURITY.md).
+> **Safety:** the file tools only reach the workspace folder (and folders you add), and anything that
+> changes something asks you first, showing the diff or the command. Commands you approve run with your
+> rights, so read them. If the project is yours, `/trust` it. See [SECURITY.md](../SECURITY.md).
 
 ## Next steps
 - [User guide](user-guide/README.md): everything the terminal app can do.
