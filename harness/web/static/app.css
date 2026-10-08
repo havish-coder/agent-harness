@@ -1,0 +1,14 @@
+body { margin: 0; font: 14px/1.5 system-ui, sans-serif; background: #111; color: #ddd; display: flex; flex-direction: column; height: 100vh; }
+header { padding: 8px 16px; border-bottom: 1px solid #333; }
+#status { color: #888; margin-left: 8px; }
+main { flex: 1; overflow-y: auto; padding: 8px 16px; }
+.line { white-space: pre-wrap; margin: 2px 0; }
+.user { color: #fff; font-weight: 600; margin-top: 12px; }
+.answer { color: #eee; }
+.tool_call { color: #4dd; font-family: ui-monospace, Consolas, monospace; }
+.tool_result, .info, .note, .usage { color: #888; font-family: ui-monospace, Consolas, monospace; }
+.warn { color: #db4; } .error { color: #f66; }
+form { display: flex; gap: 8px; padding: 8px 16px; border-top: 1px solid #333; }
+textarea { flex: 1; background: #1a1a1a; color: #eee; border: 1px solid #444; padding: 6px; font: inherit; }
+button { background: #234; color: #eee; border: 1px solid #456; padding: 0 16px; }
+button:disabled { opacity: .4; }

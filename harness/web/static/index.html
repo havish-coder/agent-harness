@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Harness</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header><b>Agent Harness</b> <span id="status">connecting…</span></header>
+<main id="log"></main>
+<form id="composer">
+  <textarea id="text" rows="2" placeholder="Ask the agent, or type a /command. Enter sends, Shift+Enter is a new line."></textarea>
+  <button id="send" type="submit">Send</button>
+  <button id="stop" type="button" disabled>Stop</button>
+</form>
+<script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,59 @@
+# Web API reference
+
+What the page and `harness --web` say to each other ([ADR 0051](../adr/0051-a-standard-library-web-server-with-server-sent-events.md)).
+Everything is JSON over HTTP on `127.0.0.1`; every request needs the key (see [who can open it](../user-guide/web-ui.md#who-can-open-it)).
+
+## Endpoints
+| Method and path | Body | Answer |
+|---|---|---|
+| `GET /?key=KEY` | | `303` to `/`, with the cookie `harness_key_PORT` (`HttpOnly; SameSite=Strict`) |
+| `GET /` | | the page |
+| `GET /static/NAME` | | the page's script and style (only the files that ship with it) |
+| `GET /api/state` | | `{"status": {...}, "messages": [event, ...], "last_event": N}` |
+| `GET /events?after=N` | | the event stream from event `N + 1` on (see below) |
+| `POST /api/send` | `{"text": "..."}` | `{"ok": true}`, or `409` while a request runs, `400` for no text |
+| `POST /api/stop` | `{}` | `{"stopping": true}`, or `false` when nothing runs |
+
+Refusals: `403` when the `Host` header isn't `127.0.0.1:PORT` or `localhost:PORT`; `401` without the key; `400` for a body
+that isn't a JSON object (or is over 1 MB).
+
+`status` is what the status line shows: `provider`, `model`, `context_tokens`, `context_window`, `cost` (`null` when the
+price is unknown), `style`, `mode`, `tasks_running`, `workspace`, `turns`, `busy`.
+
+`messages` is the conversation so far, as the same events the stream carries (`user`, `answer`, `tool_call`,
+`tool_result`), preceded by what the server said at start-up (`info`, `warn`). Draw them, then stream from `last_event`.
+
+## The event stream
+`GET /events` is [Server-Sent Events](https://html.spec.whatwg.org/multipage/server-sent-events.html): one block per event,
+
+```text
+id: 42
+data: {"type": "tool_call", "id": "c1", "name": "read_file", "args": {"path": "notes.txt"}}
+
+```
+
+and a `: ping` comment every 15 s when nothing happens. A client that reconnects sends `Last-Event-ID: 42` (the browser's
+`EventSource` does it by itself) and gets everything after 42 that the server still has (the newest 5,000 events).
+
+| `type` | Fields | When |
+|---|---|---|
+| `user` | `text` | a request was accepted (shown in every open page) |
+| `busy` | `busy`, `status` (when it ends) | a request started or ended |
+| `context` | `tokens`, `window`, `level` | before each model call ([context](../user-guide/context.md)) |
+| `model_call` | | the model is being asked |
+| `text_delta` | `text` | a piece of the answer |
+| `thinking_delta` | `text` | a piece of a thinking model's reasoning |
+| `model_reply` | `input_tokens`, `output_tokens` | a reply is complete |
+| `tool_call` | `id`, `name`, `args` | the model asked for a call |
+| `tool_result` | `id`, `name`, `text` (first 4,000 characters), `chars`, `error` | after every call, run or not |
+| `tool_denied`, `tool_refused` | `id`, `reason` | you said no; the permissions refused it |
+| `answer` | `text`, `markdown` (math shown as Unicode) | the final answer of a request |
+| `usage` | `text` | tokens and cost of the request |
+| `todos` | `items`: `[{content, status}]` | the todo list changed |
+| `task` | `id`, `command`, `text` | a background command ended |
+| `subagent` | `name`, `what` (`start`, `tool_call`, `end`), `info` | a sub-agent started, called a tool, finished |
+| `rolled_back` | | a request that failed or was stopped was removed from the conversation |
+| `note` | `text` | the harness did something worth a line: cleared old results, summarised, a limit, hid a secret |
+| `info`, `warn`, `error` | `text` | messages, as the terminal prints them |
+
+The `events.md` [reference](events.md) describes the agent events these come from.

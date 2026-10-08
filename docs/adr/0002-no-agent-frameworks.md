@@ -21,6 +21,9 @@ Python standard library and `httpx`. User interfaces may use UI libraries: `rich
 `prompt_toolkit` for the terminal, `fastapi` and `uvicorn` for the web. These live in optional
 dependency groups (`tui`, `web`). Any new runtime dependency needs its own ADR.
 
+*Update (Lesson 53):* the web interface ended up needing no library at all: it is the standard library's `http.server`
+([ADR 0051](0051-a-standard-library-web-server-with-server-sent-events.md)), and the `web` group is empty.
+
 ## Consequences
 - The whole agent stays small enough to read and audit.
 - We implement things frameworks give for free: retries, streaming parsers, schema

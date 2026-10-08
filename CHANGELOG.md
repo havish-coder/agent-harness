@@ -9,9 +9,18 @@ is below 1.0, minor releases may contain breaking changes.
 ## [Unreleased]
 
 ### Added
+- The web UI, first part (ADR 0051): `harness --web [PORT]` serves the same session to your browser. Requests and slash commands go in over `POST`, every event
+  comes back numbered over Server-Sent Events (a page that reconnects gets what it missed, a page that opens late loads the conversation first), Stop rolls the
+  request back as Esc does. Python's own `http.server`, on 127.0.0.1 only, with a key swapped for a cookie on the first visit, a `Host` check against DNS
+  rebinding, and on Windows an exclusive port (Python's default lets a second server bind the same one). Calls that would ask are refused in the page for now.
+  `--no-browser`. Measured: an event reaches the page 0.34 ms after it is published. User guide: [the web UI](docs/user-guide/web-ui.md); reference:
+  [web API](docs/reference/web-api.md).
 - `--context-window TOKENS`: change the model's window for one run (also the `context_window` setting and `HARNESS_CONTEXT_WINDOW`); values under 4,096 are refused.
   The context guide has a new section, [a bigger window](docs/user-guide/context.md#a-bigger-window): how to change it, what it costs in memory and speed on a
   4 GB GPU (measured), and the two Ollama options (flash attention, an 8-bit KV cache) that make a 16K window faster than the default 8K one.
+
+### Changed
+- The `web` extra is empty: the web UI needs no library (`pip install ".[web]"` still works).
 
 ## [0.7.0] - 2026-10-08
 

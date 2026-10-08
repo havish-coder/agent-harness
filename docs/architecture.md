@@ -9,24 +9,28 @@ updates it.
 ```mermaid
 flowchart LR
     U[User] -->|types| CLI["Terminal app<br/>harness/cli.py + tui/"]
+    U -->|browser| WEB["Web server<br/>harness/web/"]
     CLI -->|run| A["Agent loop<br/>harness/agent.py"]
+    WEB -->|run| A
     A -->|messages + tool schemas| P["Provider<br/>harness/providers/"]
     P -->|HTTP| M[(Model server<br/>Ollama)]
     A -->|tool calls| T["Tools<br/>harness/tools/"]
     T -->|read| W[(Workspace folder)]
     A -.->|events| CLI
+    A -.->|events| WEB
 ```
 
 | Part | Responsibility | Knows about |
 |---|---|---|
 | **Terminal app** | reading input, printing answers and events | the agent, the event names |
+| **Web server** | the same, for a page in your browser: requests in over HTTP, events out as a stream | the agent, the event names |
 | **Agent loop** | calling the model, running tools, keeping the history | the provider interface, tools |
 | **Provider** | translating between our messages and one vendor's API | one model server |
 | **Tools** | doing things in the workspace, returning text | the workspace |
 
 The arrows only go one way. The agent loop never prints and never imports the terminal app;
 providers never see tools' code; tools never see messages. This is what lets the same agent
-run in a terminal today and in a web server later.
+run in a terminal and in a web server ([below](#two-interfaces-one-session)).
 
 ## A request, step by step
 
@@ -170,6 +174,32 @@ that has no result, which some APIs reject.
 The agent emits events through an `on_event(kind, data)` callback. Interfaces decide what to
 show. See the [events reference](reference/events.md).
 
+## Two interfaces, one session
+Both interfaces build the same `Session` (`harness/session.py`: settings, workspace, provider, tools, agent, costs) and hand it two
+things: a **ui**, a callable that receives every event plus a few messages (`info`, `warn`, `answer` ...), and an **approver** that
+answers "may this call run?". Slash commands run against the session, so `/cost` means the same thing in both
+(`harness.cli.handle_line`).
+
+```mermaid
+flowchart LR
+    subgraph Terminal
+        R[LineReader] --> H1[handle_line]
+        H1 --> S1[Session]
+        S1 -.events.-> RU[RichUI / PlainUI]
+    end
+    subgraph Browser
+        P[page] -- POST /api/send --> H2[worker thread: handle_line]
+        H2 --> S2[Session]
+        S2 -.events.-> WU[WebUI] --> HUB[Hub: numbered events] -- GET /events, SSE --> P
+    end
+```
+
+In the browser, a request runs on a worker thread, and its events go to a **hub** that numbers them and keeps the newest 5,000.
+Every open page reads them as [Server-Sent Events](reference/web-api.md); a page that loses its connection reconnects with the last
+number it saw and gets what it missed. A page that opens later loads the conversation from `/api/state`, then streams from that
+point. Stop works by raising `KeyboardInterrupt` at the next event in the worker thread: the agent's ordinary cancel path rolls the
+turn back. The server is Python's own `http.server`, listening on 127.0.0.1 only and asking for a key ([ADR 0051](adr/0051-a-standard-library-web-server-with-server-sent-events.md)).
+
 ## Source layout
 
 ```
@@ -177,7 +207,7 @@ harness/
   agent.py          the agent loop: steps, tool calls, approvals, hooks, context checks, rollback
   messages.py       provider-neutral message types
   session.py        one running session: settings, workspace, provider, tools, agent, costs, UI
-  cli.py            the `harness` command: flags, the input loop, command dispatch, --worktree
+  cli.py            the `harness` command: flags, the input loop, command dispatch (shared with the web server), --worktree, --web
   commands.py       slash commands: built-in, Markdown-defined, and skills started by name
   styles.py         output styles added to the system prompt
   export.py         /export: chats as Markdown, LaTeX (pandoc) or PDF (pandoc + Tectonic)
@@ -223,6 +253,7 @@ harness/
                     secrets and redaction, the OS sandbox
   tui/              terminal interfaces: rich (Markdown, diffs, spinner) and plain; the line editor (prompt.py),
                     the Esc/type-ahead key watcher (keys.py), LaTeX math to Unicode (latex.py)
+  web/              the browser interface: server.py (HTTP, the event stream, the key) and static/ (the page)
 scripts/            setup check, the labs that measure each feature, demo rendering
 tests/              unit and integration tests, recorded runs, a test MCP server
 workspace/          a sample folder to try the agent on

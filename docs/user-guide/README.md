@@ -4,6 +4,7 @@ How-to guides for using Agent Harness. Start with [Getting started](../getting-s
 you haven't installed it yet.
 
 - [Using the terminal app](terminal.md): starting, asking, cancelling, commands
+- [The web UI](web-ui.md): the same agent in your browser; who can open it
 - [Choosing a model and provider](models.md): local or cloud, API keys
 - [The workspace and its boundary](workspace.md): which files the agent can use, and allowing more folders
 - [Permissions: modes and rules](permissions.md): what runs without asking, what asks, what's refused

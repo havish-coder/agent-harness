@@ -1,7 +1,7 @@
 # CLI reference
 
 ```text
-harness [--provider NAME] [--model MODEL] [--base-url URL] [--fallback-model MODEL] [--workspace PATH] [--max-steps N] [--context-window TOKENS] [--mode MODE] [--yes] [--no-stream] [--think] [--plain] [--show-config] [-c] [-r [CHAT]] [--no-save] [--fresh] [--worktree NAME]
+harness [--provider NAME] [--model MODEL] [--base-url URL] [--fallback-model MODEL] [--workspace PATH] [--max-steps N] [--context-window TOKENS] [--mode MODE] [--yes] [--no-stream] [--think] [--plain] [--show-config] [-c] [-r [CHAT]] [--no-save] [--fresh] [--worktree NAME] [--web [PORT]] [--no-browser]
 ```
 
 | Flag | Default | Description |
@@ -23,9 +23,11 @@ harness [--provider NAME] [--model MODEL] [--base-url URL] [--fallback-model MOD
 | `--fresh` | off | Don't read the project's progress journal this time ([journal](../user-guide/journal.md)). |
 | `--no-save` | off | Don't save this conversation (the `save_chats` setting, for one run). |
 | `--worktree NAME` | | Work in a git worktree of your own: `<repository>/.harness/worktrees/NAME` on branch `harness/NAME`, made from the commit checked out now, or resumed. Removed when you leave if nothing in it changed; otherwise kept, with the commands to carry on, merge or remove it ([worktrees](../user-guide/worktrees.md)). |
+| `--web [PORT]` | | Open the agent in your browser instead of the terminal: a server on `127.0.0.1`, port 8765 unless you give one (`0` picks a free one). Prints the address with its key and opens it ([web UI](../user-guide/web-ui.md)). |
+| `--no-browser` | off | With `--web`: print the address, don't open a browser. |
 | `--think` | off | For thinking models (e.g. `qwen3:4b`): ask for reasoning in a separate field and show it dimmed. |
 
 Flags override settings files and `HARNESS_*` environment variables; see
 [configuration](configuration.md).
 
-Exit: `/bye`, Ctrl+D, or Ctrl+C at the prompt.
+Exit: `/bye`, Ctrl+D, or Ctrl+C at the prompt. With `--web`: Ctrl+C in the server's terminal.

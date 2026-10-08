@@ -6,3 +6,4 @@ Exact, complete descriptions for looking things up.
 - [Configuration](configuration.md): every setting
 - [Tools](tools.md): every tool the model can call
 - [Events](events.md): what the agent loop reports while it works
+- [Web API](web-api.md): the web UI's endpoints and event stream

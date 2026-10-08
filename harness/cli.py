@@ -25,6 +25,7 @@ from harness.tui import make_ui
 from harness.tui.keys import KeyWatcher
 from harness.tui.prompt import LineReader
 from harness.usage import format_cost
+from harness.web import DEFAULT_PORT
 from harness.workspace import Workspace
 
 __all__ = ["SYSTEM_PROMPT", "main"]
@@ -60,6 +61,9 @@ def parse_args(argv=None):
     p.add_argument("--worktree", default=None, metavar="NAME",
                    help="work in a git worktree of your own: .harness/worktrees/NAME on branch harness/NAME, made or resumed; "
                         "removed at the end if nothing in it changed")
+    p.add_argument("--web", nargs="?", type=int, const=DEFAULT_PORT, default=None, metavar="PORT",
+                   help=f"open the agent in your browser instead of the terminal (port {DEFAULT_PORT} unless you give one; 0 picks a free one)")
+    p.add_argument("--no-browser", action="store_true", help="with --web: print the address, don't open a browser")
     return p.parse_args(argv)
 
 
@@ -120,6 +124,54 @@ def run_turn(session: Session, watcher: KeyWatcher, message: str) -> None:
     session.after_turn(getattr(ui, "ask_choice", None))        # keep the progress journal up to date, or offer one (Lesson 42b)
 
 
+def announce(session: Session) -> None:
+    """What to know before the first request: the journal read, the sandbox, a mode other than default, untrusted files.
+    Shared by the terminal and the web page."""
+    ui, settings = session.ui, session.settings
+    banner = session.journal_banner()
+    if banner:
+        ui.info(banner)
+    if session.sandbox is not None:
+        ui.info(session.sandbox.describe(settings.sandbox_network))
+    if settings.permission_mode != "default":
+        ui.warn(f"permission mode {settings.permission_mode}: {MODE_HELP[settings.permission_mode]}")
+    broad = settings.permission_mode in ("accept-edits", "bypass") or any(
+        e["action"] == "allow" and "(" not in e["rule"] for e in settings.permissions)
+    if broad and not session.permissions.taint.trusted:
+        ui.warn("this folder isn't trusted: after the agent reads files or runs commands here, only rules "
+                "with a pattern run without asking. /trust if the files are yours.")
+    if any(not f.trusted for f in session.memory):
+        names = ", ".join(f.label for f in session.memory if not f.trusted)
+        ui.warn(f"{names} found, but this folder isn't trusted, so the agent reads it as information and not as your "
+                "instructions. /trust if you wrote it; /memory shows what was read.")
+
+
+def handle_line(session: Session, watcher, commands, line: str) -> bool:
+    """One line from the user: a request for the agent or a slash command. False for /bye. Shared by the terminal
+    and the web server (Lesson 53), so a command behaves the same in both."""
+    ui = session.ui
+    parsed = commands.parse(line)
+    if parsed is None:
+        run_turn(session, watcher, line[1:] if line.startswith("//") else line)   # //x sends "/x"
+        return True
+    command, rest = parsed
+    if command is None:
+        ui.warn(f"unknown command /{rest}. /help lists them; start with // to send a message beginning with /")
+    elif command.name == "bye":
+        return False
+    elif command.kind == "local":
+        output = command.run(session, rest)
+        if isinstance(output, Send):                    # the command also has a request for the agent (Lesson 45)
+            if output.notice:
+                ui.info(output.notice)
+            run_turn(session, watcher, str(output))
+        elif output:
+            ui.info(output)
+    else:
+        run_turn(session, watcher, command.expand(rest))
+    return True
+
+
 def main(argv=None):
     args = parse_args(argv)
     sys.stdout.reconfigure(encoding="utf-8")
@@ -156,6 +208,13 @@ def main(argv=None):
     if args.show_config:
         print(describe(settings))
         return
+    if args.web is not None:                                   # Lesson 53: the same session, driven from a browser
+        from harness.web.server import serve
+        try:
+            serve(settings, ws, commands, styles, port=args.web, open_browser=not args.no_browser, fresh=args.fresh)
+        except (ProviderError, OSError) as e:
+            sys.exit(f"error: {e}")
+        return
 
     try:
         session = Session(settings, ws, ui, approver, styles, interface="terminal", fresh=args.fresh)
@@ -171,26 +230,11 @@ def main(argv=None):
     ui.info(f"/help commands · @file attaches a file · {stop_keys}")
     if wt is not None:
         ui.info(f"worktree {wt.name} ({'new' if wt.created else 'resumed'}), branch {wt.branch}: your own checkout is not changed")
-    banner = session.journal_banner()
-    if banner:
-        ui.info(banner)
+    announce(session)
     if args.continue_chat or args.resume is not None:
         info = choose_chat(session, args.resume, args.continue_chat, ui)
         if info is not None:
             ui.info(resume_text(session, info))
-    if session.sandbox is not None:
-        ui.info(session.sandbox.describe(settings.sandbox_network))
-    if settings.permission_mode != "default":
-        ui.warn(f"permission mode {settings.permission_mode}: {MODE_HELP[settings.permission_mode]}")
-    broad = settings.permission_mode in ("accept-edits", "bypass") or any(
-        e["action"] == "allow" and "(" not in e["rule"] for e in settings.permissions)
-    if broad and not session.permissions.taint.trusted:
-        ui.warn("this folder isn't trusted: after the agent reads files or runs commands here, only rules "
-                "with a pattern run without asking. /trust if the files are yours.")
-    if any(not f.trusted for f in session.memory):
-        names = ", ".join(f.label for f in session.memory if not f.trusted)
-        ui.warn(f"{names} found, but this folder isn't trusted, so the agent reads it as information and not as your "
-                "instructions. /trust if you wrote it; /memory shows what was read.")
 
     while True:
         session.announce_tasks()                 # background tasks that ended while you were thinking (Lesson 48)
@@ -199,27 +243,8 @@ def main(argv=None):
             line = reader.read(default=watcher.take_typeahead(), toolbar=session.status_text()).strip()
         except (EOFError, KeyboardInterrupt):
             break
-        if not line:
-            continue
-        parsed = commands.parse(line)
-        if parsed is None:
-            run_turn(session, watcher, line[1:] if line.startswith("//") else line)   # //x sends "/x"
-            continue
-        command, rest = parsed
-        if command is None:
-            ui.warn(f"unknown command /{rest}. /help lists them; start with // to send a message beginning with /")
-        elif command.name == "bye":
+        if line and not handle_line(session, watcher, commands, line):
             break
-        elif command.kind == "local":
-            output = command.run(session, rest)
-            if isinstance(output, Send):                    # the command also has a request for the agent (Lesson 45)
-                if output.notice:
-                    ui.info(output.notice)
-                run_turn(session, watcher, str(output))
-            elif output:
-                ui.info(output)
-        else:
-            run_turn(session, watcher, command.expand(rest))
 
     session.close()
     if session.costs.models:

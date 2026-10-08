@@ -15,11 +15,14 @@ dependencies = [
 
 [project.optional-dependencies]
 tui = ["rich>=13", "prompt_toolkit>=3.0"]
-web = ["fastapi>=0.110", "uvicorn>=0.29"]
+web = []   # the web UI needs nothing extra since Lesson 53 (ADR 0051); kept so ".[web]" still installs
 dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.5"]
 
 [tool.setuptools.packages.find]
 include = ["harness*"]
+
+[tool.setuptools.package-data]
+"harness.web" = ["static/*"]   # the web page ships inside the package (Lesson 53)
 
 [project.scripts]
 harness = "harness.cli:main"   # `harness` command inside the venv
