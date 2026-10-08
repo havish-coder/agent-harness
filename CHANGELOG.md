@@ -15,9 +15,18 @@ is below 1.0, minor releases may contain breaking changes.
   rebinding, and on Windows an exclusive port (Python's default lets a second server bind the same one). Calls that would ask are refused in the page for now.
   `--no-browser`. Measured: an event reaches the page 0.34 ms after it is published. User guide: [the web UI](docs/user-guide/web-ui.md); reference:
   [web API](docs/reference/web-api.md).
+- The web UI's dashboard (ADR 0052): the conversation with Markdown answers (tables, code with highlighting, math as Unicode), each tool call with its result,
+  a **run graph** of the agent's work (requests, tool calls, sub-agents, answers; failed calls red, calls that didn't run dashed), a file explorer that marks
+  what the agent changed and a viewer (secrets hidden), terminal output, a log, the control center (model, mode, context, cost, current task) and the task
+  queue (todo list, background commands). Plain HTML, CSS and JavaScript, about 52 KB, no outside requests; model text becomes HTML only through a renderer
+  that escapes first, never loads pictures and links only to http(s). Works on a phone. New endpoints `/api/files` and `/api/file`.
 - `--context-window TOKENS`: change the model's window for one run (also the `context_window` setting and `HARNESS_CONTEXT_WINDOW`); values under 4,096 are refused.
   The context guide has a new section, [a bigger window](docs/user-guide/context.md#a-bigger-window): how to change it, what it costs in memory and speed on a
   4 GB GPU (measured), and the two Ollama options (flash attention, an 8-bit KV cache) that make a 16K window faster than the default 8K one.
+
+### Fixed
+- Hiding secrets took time quadratic in the length of a word: a tool result of 8,000 characters of base64 took about 1 s to check, 200 KB took minutes.
+  The two patterns that caused it start only where a word starts and are bounded; the same result now takes about 1 ms.
 
 ### Changed
 - The `web` extra is empty: the web UI needs no library (`pip install ".[web]"` still works).

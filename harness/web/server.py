@@ -28,9 +28,11 @@ from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 
 from harness.cli import announce, handle_line
+from harness.security.redact import redacted
 from harness.session import Session
 from harness.tui.latex import render_math
 from harness.web import DEFAULT_PORT
+from harness.workspace import IGNORED_DIRS, Workspace
 
 STATIC = Path(__file__).parent / "static"
 TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
@@ -39,6 +41,8 @@ KEEP = 5000                  # events kept for a page that reconnects; more than
 PING = 15                    # seconds between keep-alive comments on a quiet stream (also how a closed tab is noticed)
 RESULT_CHARS = 4000          # of a tool result, sent to the page
 MAX_BODY = 1_000_000
+FILE_BYTES = 200_000         # of a file shown in the viewer
+FOLDER_ENTRIES = 500         # of a folder shown in the explorer
 NOT_RUN = ("tool_denied", "tool_refused")
 
 
@@ -133,6 +137,30 @@ def transcript(messages) -> list[dict]:
     return out
 
 
+def folder_json(ws: Workspace, path: str) -> dict:
+    """One folder for the explorer: what the agent's list_dir would see (the jail, without the folders it skips)."""
+    folder = ws.path(path or ".")
+    if not folder.is_dir():
+        raise FileNotFoundError(f"'{path}' is not a folder")
+    entries = []
+    for p in sorted(folder.iterdir(), key=lambda p: (p.is_file(), p.name.lower()))[:FOLDER_ENTRIES]:
+        if not (p.is_dir() and p.name in IGNORED_DIRS) and not ws.leads_outside(p):
+            entries.append({"name": p.name, "path": ws.display(p), "dir": p.is_dir()})
+    return {"path": ws.display(folder), "entries": entries}
+
+
+def file_json(ws: Workspace, path: str) -> dict:
+    """A text file for the viewer: through the jail, the start of a big one, secrets hidden (the page may be on a shared screen)."""
+    p = ws.path(path)
+    if not p.is_file():
+        raise FileNotFoundError(f"'{path}' is not a file")
+    with p.open("rb") as f:
+        data = f.read(FILE_BYTES + 1)
+    if b"\0" in data[:8000]:
+        return {"path": ws.display(p), "binary": True}
+    return {"path": ws.display(p), "text": redacted(data[:FILE_BYTES].decode("utf-8", "replace")), "truncated": len(data) > FILE_BYTES}
+
+
 class WebUI:
     """The Session's ui in the browser: every event and message becomes an event in the hub."""
 
@@ -225,7 +253,11 @@ class WebApp:
 
     def state(self) -> dict:
         last = self.ui.hub.last                     # read first: an event after this is in the stream, not lost
-        return {"status": self.status(), "messages": self.notes + transcript(list(self.session.agent.messages)), "last_event": last}
+        s = self.session
+        tasks = [{"id": t.id, "command": t.command, "text": t.describe(), "running": t.running}
+                 for t in (s.tasks.tasks.values() if s.tasks else [])]
+        return {"status": self.status(), "messages": self.notes + transcript(list(s.agent.messages)), "last_event": last,
+                "todos": s.todos.as_data(), "tasks": tasks}
 
 
 class Server(ThreadingHTTPServer):
@@ -298,6 +330,14 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(self.server.app.state())
         if url.path == "/events":
             return self.events(url)
+        if url.path in ("/api/files", "/api/file"):
+            path = parse_qs(url.query).get("path", [""])[0]
+            try:
+                return self.json((folder_json if url.path == "/api/files" else file_json)(self.server.app.session.ws, path))
+            except PermissionError as e:                  # outside the workspace (OutsideWorkspace), or the system said no
+                return self.json({"error": str(e)}, 403)
+            except OSError as e:
+                return self.json({"error": str(e)}, 404)
         self.reply(404, "text/plain", b"not found")
 
     def do_POST(self):

@@ -100,7 +100,7 @@ def web(tmp_path, monkeypatch):
 def test_the_server_listens_on_this_computer_only_and_the_page_needs_the_key(web):
     w = web([])
     assert w.server.server_address[0] == "127.0.0.1"
-    stranger = httpx.Client(base_url=w.base)
+    stranger = httpx.Client(base_url=w.base, timeout=10)
     assert stranger.get("/").status_code == 401 and stranger.get("/events").status_code == 401
     assert stranger.get("/?key=wrong").status_code == 401 and stranger.post("/api/send", json={"text": "hi"}).status_code == 401
     first = stranger.get(w.server.url)
@@ -200,6 +200,54 @@ def test_slash_commands_work_in_the_page(web):
         w.send(line)
         said = [e for e in w.events(after=after) if e["type"] in ("info", "warn")]
         assert said and said[0]["type"] == kind and words in said[0]["text"]
+
+
+# --- the explorer and the file viewer (Lesson 54) --------------------------------------------------------------------
+
+def test_the_explorer_lists_what_list_dir_would_and_stays_in_the_workspace(web, tmp_path):
+    w = web([])
+    root = tmp_path / "proj"
+    for name in ("src/app.py", "notes.txt", ".git/config", "node_modules/x.js"):
+        (root / name).parent.mkdir(parents=True, exist_ok=True)
+        (root / name).write_text("x")
+    top = w.client.get("/api/files").json()
+    assert [(e["name"], e["dir"]) for e in top["entries"]] == [("src", True), ("notes.txt", False)]      # folders first; .git skipped
+    assert w.client.get("/api/files", params={"path": "src"}).json()["entries"] == [{"name": "app.py", "path": "src/app.py", "dir": False}]
+    for outside in ("..", "../..", str(tmp_path), "C:/Windows"):
+        assert w.client.get("/api/files", params={"path": outside}).status_code == 403
+    assert w.client.get("/api/files", params={"path": "missing"}).status_code == 404
+
+
+def test_the_viewer_shows_text_with_secrets_hidden_and_only_inside_the_workspace(web, tmp_path):
+    w = web([])
+    root = tmp_path / "proj"
+    (root / "app.py").write_text('KEY = "sk-ant-' + "a" * 30 + '"\nprint(1)\n')
+    (root / "logo.png").write_bytes(b"\x89PNG\x00\x00binary")
+    (root / "big.txt").write_text("x" * 300_000)
+    (tmp_path / "secret.txt").write_text("outside")
+    shown = w.client.get("/api/file", params={"path": "app.py"}).json()
+    assert shown["path"] == "app.py" and "print(1)" in shown["text"] and "sk-ant-" not in shown["text"] and shown["truncated"] is False
+    assert w.client.get("/api/file", params={"path": "logo.png"}).json() == {"path": "logo.png", "binary": True}
+    big = w.client.get("/api/file", params={"path": "big.txt"}).json()
+    assert big["truncated"] and len(big["text"]) == 200_000
+    assert w.client.get("/api/file", params={"path": "../secret.txt"}).status_code == 403
+    assert w.client.get("/api/file", params={"path": "."}).status_code == 404
+
+
+def test_the_state_carries_the_todo_list_and_the_background_tasks(web):
+    w = web([])
+    w.session.todos.items = []
+    state = w.client.get("/api/state").json()
+    assert state["todos"] == [] and state["tasks"] == []
+
+
+def test_the_page_and_its_files_are_served(web):
+    w = web([])
+    page = w.client.get("/").text
+    for name in ("app.js", "markdown.js", "app.css", "icon.svg"):
+        assert name in page or name == "app.css" and name in page
+        assert w.client.get(f"/static/{name}").status_code == 200
+    assert w.client.get("/static/icon.svg").headers["content-type"] == "image/svg+xml"
 
 
 # --- the pieces --------------------------------------------------------------------------------------------------------

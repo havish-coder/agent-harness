@@ -58,3 +58,4 @@ Copy [the template](template.md) to `NNNN-short-title.md` with the next number.
 | [0049](0049-mcp-servers-are-yours-their-words-are-not.md) | Connect MCP servers over stdio, from your user settings only, with tools that ask and results that are untrusted | Accepted |
 | [0050](0050-a-worktree-per-session-removed-only-if-nothing-is-lost.md) | A git worktree per session on request, removed at the end only if nothing in it would be lost | Accepted |
 | [0051](0051-a-standard-library-web-server-with-server-sent-events.md) | The web interface is a standard-library HTTP server that streams events with Server-Sent Events | Accepted |
+| [0052](0052-the-page-is-plain-html-css-and-javascript.md) | The page is plain HTML, CSS and JavaScript, and model text becomes HTML only through an escape-first renderer | Accepted |

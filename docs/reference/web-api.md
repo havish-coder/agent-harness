@@ -9,16 +9,20 @@ Everything is JSON over HTTP on `127.0.0.1`; every request needs the key (see [w
 | `GET /?key=KEY` | | `303` to `/`, with the cookie `harness_key_PORT` (`HttpOnly; SameSite=Strict`) |
 | `GET /` | | the page |
 | `GET /static/NAME` | | the page's script and style (only the files that ship with it) |
-| `GET /api/state` | | `{"status": {...}, "messages": [event, ...], "last_event": N}` |
+| `GET /api/state` | | `{"status": {...}, "messages": [event, ...], "last_event": N, "todos": [...], "tasks": [...]}` |
 | `GET /events?after=N` | | the event stream from event `N + 1` on (see below) |
 | `POST /api/send` | `{"text": "..."}` | `{"ok": true}`, or `409` while a request runs, `400` for no text |
 | `POST /api/stop` | `{}` | `{"stopping": true}`, or `false` when nothing runs |
+| `GET /api/files?path=P` | | `{"path", "entries": [{"name", "path", "dir"}]}`: folder `P` of the workspace (`""` for its root), folders first, without the folders the tools skip (`.git`, `node_modules` ...); `403` outside the workspace, `404` if it isn't a folder |
+| `GET /api/file?path=P` | | `{"path", "text", "truncated"}` (the first 200 KB, secrets hidden), or `{"path", "binary": true}`; `403` outside the workspace, `404` if it isn't a file |
 
 Refusals: `403` when the `Host` header isn't `127.0.0.1:PORT` or `localhost:PORT`; `401` without the key; `400` for a body
 that isn't a JSON object (or is over 1 MB).
 
 `status` is what the status line shows: `provider`, `model`, `context_tokens`, `context_window`, `cost` (`null` when the
 price is unknown), `style`, `mode`, `tasks_running`, `workspace`, `turns`, `busy`.
+
+`todos` is the todo list (`[{content, status}]`), `tasks` the background commands (`[{id, command, text, running}]`).
 
 `messages` is the conversation so far, as the same events the stream carries (`user`, `answer`, `tool_call`,
 `tool_result`), preceded by what the server said at start-up (`info`, `warn`). Draw them, then stream from `last_event`.
@@ -47,7 +51,7 @@ and a `: ping` comment every 15 s when nothing happens. A client that reconnects
 | `tool_call` | `id`, `name`, `args` | the model asked for a call |
 | `tool_result` | `id`, `name`, `text` (first 4,000 characters), `chars`, `error` | after every call, run or not |
 | `tool_denied`, `tool_refused` | `id`, `reason` | you said no; the permissions refused it |
-| `answer` | `text`, `markdown` (math shown as Unicode) | the final answer of a request |
+| `answer` | `text`, `markdown` (math converted to Unicode: draw this one) | the final answer of a request |
 | `usage` | `text` | tokens and cost of the request |
 | `todos` | `items`: `[{content, status}]` | the todo list changed |
 | `task` | `id`, `command`, `text` | a background command ended |

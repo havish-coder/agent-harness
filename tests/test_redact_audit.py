@@ -186,3 +186,14 @@ def test_reset_starts_counting_again():
     assert limits.exceeded()
     limits.reset()
     assert limits.exceeded() is None and time.monotonic() - limits.started < 1
+
+
+@pytest.mark.parametrize("unit", ["x", "abcd-", "eyJ-", "ab.", "sk-", "a1_"])
+def test_redaction_takes_linear_time_on_long_runs(unit):
+    """A long word with no "=" (base64, minified code) once made the NAME=value pattern try every letter to the end and back:
+    200 KB took minutes (found by the web UI's file viewer, Lesson 54). Quadratic would be minutes here, linear is milliseconds."""
+    text = (unit * 100_000)[:100_000]
+    started = time.perf_counter()
+    redacted(text)
+    assert time.perf_counter() - started < 2
+    assert redacted("--api-key=supersecret123 " + text[:50]).startswith("--api-key=[REDACTED")

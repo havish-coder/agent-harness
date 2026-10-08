@@ -4,16 +4,96 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Agent Harness</title>
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-<header><b>Agent Harness</b> <span id="status">connecting…</span></header>
-<main id="log"></main>
-<form id="composer">
-  <textarea id="text" rows="2" placeholder="Ask the agent, or type a /command. Enter sends, Shift+Enter is a new line."></textarea>
-  <button id="send" type="submit">Send</button>
-  <button id="stop" type="button" disabled>Stop</button>
-</form>
+<header class="top">
+  <div class="brand"><img src="/static/icon.svg" alt=""><b>AGENT HARNESS</b></div>
+  <div class="where"><span class="label">Workspace</span> <span id="workspace">…</span></div>
+  <div class="top-right">
+    <span id="busy-chip" class="chip">idle</span>
+    <span id="conn" class="conn">connecting</span>
+  </div>
+</header>
+
+<div class="app" id="app">
+  <nav class="rail" aria-label="Panels">
+    <button class="rail-btn on" data-toggle="explorer" title="File explorer">
+      <svg viewBox="0 0 24 24"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2h8.5A1.5 1.5 0 0 1 21 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z"/></svg>
+    </button>
+    <button class="rail-btn on" data-toggle="graph" title="Run graph">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.5"/><circle cx="5" cy="6" r="1.8"/><circle cx="19" cy="6" r="1.8"/><circle cx="6" cy="19" r="1.8"/><circle cx="18.5" cy="18" r="1.8"/><path d="M10.2 10.6 6.4 7.2M13.8 10.6l3.8-3.4M10.5 13.8 7.2 17.6M13.9 13.5l3.4 3.3"/></svg>
+    </button>
+    <button class="rail-btn on" data-toggle="terminal" title="Terminal output">
+      <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m7 10 3 2-3 2M12.5 15H17"/></svg>
+    </button>
+  </nav>
+
+  <section class="panel explorer" id="explorer">
+    <h2>File Explorer</h2>
+    <div id="tree" class="scroll tree"></div>
+  </section>
+
+  <section class="panel main" id="main">
+    <div class="tabs">
+      <button class="tab on" data-tab="chat">Conversation</button>
+      <button class="tab" data-tab="file" id="file-tab">File</button>
+    </div>
+    <div id="chat" class="scroll chat"></div>
+    <div id="file" class="scroll viewer hidden"><div class="file-head" id="file-head"></div><div class="code-view"><pre class="gutter" id="gutter"></pre><pre class="code" id="code"></pre></div></div>
+  </section>
+
+  <section class="panel graph" id="graph-panel">
+    <h2>Run Graph <span class="h-note" id="graph-count"></span></h2>
+    <svg id="graph" class="graph-svg" role="img" aria-label="The agent's run: requests, tool calls and sub-agents"></svg>
+    <div class="legend">
+      <span><i class="dot request"></i>Request</span><span><i class="dot tool"></i>Tool call</span>
+      <span><i class="dot agent"></i>Sub-agent</span><span><i class="dot answer"></i>Answer</span>
+      <span><i class="dot error"></i>Error</span><span><i class="dot denied"></i>Not run</span>
+    </div>
+  </section>
+
+  <section class="panel terminal" id="terminal">
+    <h2>System Status &amp; Terminal Output</h2>
+    <div id="term" class="scroll term"></div>
+  </section>
+
+  <aside class="side">
+    <section class="panel control">
+      <h2>Agent Control Center</h2>
+      <div class="control-body">
+        <div class="row"><span class="label">Model</span><span id="model" class="pill magenta">…</span></div>
+        <div class="row"><span class="label">Mode</span>
+          <select id="mode" class="pill">
+            <option value="default">default</option><option value="accept-edits">accept-edits</option>
+            <option value="plan">plan</option><option value="bypass">bypass</option>
+          </select>
+        </div>
+        <div class="row"><span class="label">Context</span><span class="meter"><span id="meter-fill"></span></span><span id="context" class="small">…</span></div>
+        <div class="row"><span class="label">Cost</span><span id="cost" class="small">…</span><span class="label">Requests</span><span id="turns" class="small">0</span></div>
+        <div class="label">Current task</div>
+        <div id="current" class="current"><div id="current-text" class="current-text">nothing yet</div><div id="current-state" class="current-state">idle</div></div>
+      </div>
+    </section>
+    <section class="panel log">
+      <h2>Agent Log</h2>
+      <div id="log" class="scroll log-body"></div>
+    </section>
+    <section class="panel queue">
+      <h2>Task Queue <span class="h-note" id="todo-count"></span></h2>
+      <div class="scroll queue-body"><div id="todos"></div><div id="tasks"></div></div>
+    </section>
+    <form id="composer" class="panel composer">
+      <textarea id="text" rows="3" placeholder="Ask the agent, or type a /command…  (Enter sends, Shift+Enter: new line)"></textarea>
+      <div class="composer-buttons">
+        <button id="stop" type="button" class="stop" title="Stop the request" hidden>■</button>
+        <button id="send" type="submit" class="send" title="Send">➤</button>
+      </div>
+    </form>
+  </aside>
+</div>
+<script src="/static/markdown.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>
