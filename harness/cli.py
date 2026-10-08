@@ -7,15 +7,18 @@ Lessons 07-25. The screen is drawn by harness/tui (rich when available, plain ot
 running app is a harness.session.Session; slash commands live in harness/commands.py.
 """
 import argparse
+import atexit
 import sys
 from pathlib import Path
 
+from harness import worktree
 from harness.commands import Send, load_commands, resume_text
 from harness.config import USER_DIR, ConfigError, describe, load_dotenv, load_settings
 from harness.mentions import expand_mentions
 from harness.providers.base import ProviderError
 from harness.providers.factory import PROVIDERS
 from harness.security.permissions import MODE_HELP, MODES
+from harness.security.trust import is_trusted, set_trusted
 from harness.session import SYSTEM_PROMPT, Session
 from harness.styles import load_styles
 from harness.tui import make_ui
@@ -52,6 +55,9 @@ def parse_args(argv=None):
                         "(with no value: choose from a list)")
     p.add_argument("--no-save", action="store_true", help="don't save this conversation")
     p.add_argument("--fresh", action="store_true", help="don't read the project's progress journal this time")
+    p.add_argument("--worktree", default=None, metavar="NAME",
+                   help="work in a git worktree of your own: .harness/worktrees/NAME on branch harness/NAME, made or resumed; "
+                        "removed at the end if nothing in it changed")
     return p.parse_args(argv)
 
 
@@ -125,11 +131,20 @@ def main(argv=None):
              "fallback_model": args.fallback_model, "max_steps": args.max_steps,
              "stream": False if args.no_stream else None, "think": True if args.think else None,
              "permission_mode": "bypass" if args.yes else args.mode, "save_chats": False if args.no_save else None}
+    wt = None
     try:
-        _, env_warnings = load_dotenv(workspace)
+        _, env_warnings = load_dotenv(workspace)          # from your own folder: a worktree has no copy of a .env git ignores
+        if args.worktree:                                  # Lesson 52
+            wt = worktree.enter(workspace, args.worktree)
+            if is_trusted(workspace, USER_DIR) and not is_trusted(wt.workspace, USER_DIR):
+                set_trusted(wt.workspace, USER_DIR, True)  # the same files you trusted, on another branch
+            workspace = wt.workspace
+            atexit.register(lambda: ui.info(worktree.leave(wt)))   # after session.close(), and on every way out
         settings, warnings = load_settings(workspace, flags)
     except ConfigError as e:
         sys.exit(f"settings error: {e}")
+    except worktree.WorktreeError as e:
+        sys.exit(f"worktree: {e}")
     # Relative folders are relative to the workspace, like every other path the agent uses.
     ws = Workspace(workspace, extra_dirs=[workspace / Path(d).expanduser() for d in settings.additional_directories])
     commands = load_commands(workspace)
@@ -152,6 +167,8 @@ def main(argv=None):
     stop_keys = "Esc or Ctrl+C stops a running task" if watcher.available else "Ctrl+C stops a running task"
     ui.banner("Agent harness", f"{settings.provider} · {session.provider.model} · {workspace}")
     ui.info(f"/help commands · @file attaches a file · {stop_keys}")
+    if wt is not None:
+        ui.info(f"worktree {wt.name} ({'new' if wt.created else 'resumed'}), branch {wt.branch}: your own checkout is not changed")
     banner = session.journal_banner()
     if banner:
         ui.info(banner)

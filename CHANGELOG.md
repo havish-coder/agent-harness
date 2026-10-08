@@ -30,6 +30,9 @@ is below 1.0, minor releases may contain breaking changes.
   (`harness/mcp.py`, stdlib only; protocol 2025-06-18, also 2025-03-26 and 2024-11-05). Every MCP tool asks (a server's `readOnlyHint` is ignored), is deferrable, and returns untrusted content: fenced, and tainting the chat, unless the server is marked
   `"trusted": true`. A server gets no secret-looking environment variables except those its `env` names. Servers start in parallel; one that fails is reported and left out; calls time out after 120 s and are cancelled; images are named, not shown;
   stderr goes to `~/.harness/logs/mcp-<name>.log`. In tool search's `auto` mode a server's tools are held back only when they alone take more than 15% of the window. Project settings and `settings.local.json` can't add servers. Permission rules and hooks can name a whole server (`mcp__github`). `/mcp [NAME]`. User guide: [MCP servers](docs/user-guide/mcp.md).
+- Worktrees (ADR 0050): `harness --worktree NAME` starts the session in a git worktree of its own (`.harness/worktrees/NAME`, branch `harness/NAME`, made from the commit checked out now, or resumed), so two sessions, or you and the agent,
+  can change one project at once without touching each other's files. When the session ends it is removed if nothing in it would be lost (no uncommitted change or new file, no commit only on its branch); otherwise it is kept and the
+  harness says how to carry on, merge or remove it. A trusted folder's worktree is trusted; the `.env` of your own folder is still read. User guide: [worktrees](docs/user-guide/worktrees.md).
 - `Tool.enabled`: a tool can be hidden from the model, and refused, while some condition is false. `list` (a list of anything) is accepted as a tool argument type. A local command can return `Send(text)` to also send a request to the agent.
 
 ## [0.6.0] - 2026-10-07

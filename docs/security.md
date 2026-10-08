@@ -198,6 +198,8 @@ These remain even with every defense in place. Know them before you approve thin
 - **Saved chats hold what the agent read**: file contents and command output, on your disk, kept 30 days by default. Secrets are hidden by shape and the files are
   private to your user where the system allows, but a secret with no recognisable shape is not hidden. Delete them, or run with `--no-save`, for work that must leave no trace
   ([chats](user-guide/chats.md)).
+- **A worktree is a separate checkout, not a sandbox.** It keeps one session's edits out of another's files; the agent in it is jailed to the worktree like any workspace, but commands it runs
+  can still reach the rest of your disk as they always could, and it shares the repository's history, branches and hooks ([worktrees](user-guide/worktrees.md)).
 - **An MCP server is a program that runs as you.** It is not sandboxed and can do anything you can; the harness controls only what the *agent* asks it to do.
   Add servers the way you install software. Its results are untrusted content, so an instruction in them can still persuade the model, but not get past an approval;
   a server marked `trusted` gives up that protection. Its tool descriptions can't be fenced: they are the model's manual for the tool ([MCP servers](user-guide/mcp.md)).
