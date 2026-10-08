@@ -119,6 +119,11 @@ What runs without asking, what asks and what is refused are decided exactly as i
   address bar, so it isn't left in your history or shared in a screenshot. A new server makes a new key.
 - Requests that name another site in their `Host` header are refused. This stops a web page you visit from pointing a
   domain at 127.0.0.1 and talking to the server through it (DNS rebinding).
+- Other sites open in your browser can't use it: the cookie is never sent with their requests, a request that says it comes
+  from another site is refused, and so is anything that isn't JSON (what an HTML form sends). The page can't be put in a frame
+  on another site (where a hidden *Yes* could be under your click), and it runs only its own scripts.
+- `--web` opens your browser through a private file that redirects to the address, so the key isn't on the browser's command line,
+  where other users of the computer could read it. The file is deleted when the server stops.
 
 Anyone with the address (key included) can drive the agent and answer its questions, with your permissions, until the
 server stops: don't paste it anywhere.

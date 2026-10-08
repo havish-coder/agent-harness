@@ -22,8 +22,13 @@ Everything is JSON over HTTP on `127.0.0.1`; every request needs the key (see [w
 | `GET /api/files?path=P` | | `{"path", "entries": [{"name", "path", "dir"}]}`: folder `P` of the workspace (`""` for its root), folders first, without the folders the tools skip (`.git`, `node_modules` ...); `403` outside the workspace, `404` if it isn't a folder |
 | `GET /api/file?path=P` | | `{"path", "text", "truncated"}` (the first 200 KB, secrets hidden), or `{"path", "binary": true}`; `403` outside the workspace, `404` if it isn't a file |
 
-Refusals: `403` when the `Host` header isn't `127.0.0.1:PORT` or `localhost:PORT`; `401` without the key; `400` for a body
-that isn't a JSON object (or is over 1 MB).
+Refusals: `403` when the `Host` header isn't `127.0.0.1:PORT` or `localhost:PORT`; `401` without the key. For a POST: `403` when an
+`Origin` header names anything but this server; `415` unless `Content-Type` is `application/json`; `413` for a body over 1 MB; `400` for a
+body that isn't a JSON object.
+
+Every answer carries `Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self';
+base-uri 'none'; form-action 'none'; frame-ancestors 'none'`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
+`Referrer-Policy: no-referrer`, `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Resource-Policy: same-origin`, and no CORS headers.
 
 `status` is what the status line shows: `provider`, `model`, `context_tokens`, `context_window`, `cost` (`null` when the
 price is unknown), `style`, `mode`, `tasks_running`, `workspace`, `turns`, `busy`.

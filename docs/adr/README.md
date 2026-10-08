@@ -61,3 +61,4 @@ Copy [the template](template.md) to `NNNN-short-title.md` with the next number.
 | [0052](0052-the-page-is-plain-html-css-and-javascript.md) | The page is plain HTML, CSS and JavaScript, and model text becomes HTML only through an escape-first renderer | Accepted |
 | [0053](0053-the-agents-questions-wait-in-the-page.md) | The agent's questions wait in the page: one at a time, the first answer counts, Stop answers no | Accepted |
 | [0054](0054-the-page-switches-by-rebuilding-the-session.md) | The page opens other chats with slash commands, and other projects and models by rebuilding the session; it never takes a key, nor a folder you haven't used | Accepted |
+| [0055](0055-web-ui-security-headers-origin-and-a-private-opener.md) | Web UI security: an attack lab, then an origin check, JSON-only requests, security headers and a private opener | Accepted |

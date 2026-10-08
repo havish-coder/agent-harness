@@ -33,7 +33,15 @@ is below 1.0, minor releases may contain breaking changes.
   The context guide has a new section, [a bigger window](docs/user-guide/context.md#a-bigger-window): how to change it, what it costs in memory and speed on a
   4 GB GPU (measured), and the two Ollama options (flash attention, an 8-bit KV cache) that make a 16K window faster than the default 8K one.
 
+### Security
+- The web UI was attacked before release (`scripts/web_attack_lab.py`, 18 attacks: ADR 0055). Before: 11 blocked. Now 18: a POST must come from
+  the page when the browser says where it comes from (`Origin`), must be JSON (an HTML form can't send it), and is refused over 1 MB before it is
+  read; every answer carries a Content-Security-Policy that runs only the page's own scripts, `X-Frame-Options: DENY`, `nosniff` and
+  `no-referrer`; `--web` opens the browser through a private redirect file, so the key isn't on a command line other users can read.
+
 ### Fixed
+- The web server read a request's body only after deciding to accept it: a refused request's unread body made Windows reset the connection,
+  so the client often got no answer instead of 401 or 403.
 - Hiding secrets took time quadratic in the length of a word: a tool result of 8,000 characters of base64 took about 1 s to check, 200 KB took minutes.
   The two patterns that caused it start only where a word starts and are bounded; the same result now takes about 1 ms.
 

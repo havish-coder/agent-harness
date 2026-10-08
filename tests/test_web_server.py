@@ -1,7 +1,11 @@
-"""Lessons 53-56: the web server. A real server on a free port, a scripted model that streams, and httpx as the browser."""
+"""Lessons 53-57: the web server. A real server on a free port, a scripted model that streams, and httpx as the browser."""
 import json
+import os
+import re
+import socket
 import threading
 import time
+import webbrowser
 
 import httpx
 import pytest
@@ -17,7 +21,17 @@ from harness.messages import Message, Reply, ToolCall, Usage
 from harness.providers.base import TextDelta
 from harness.session import Session
 from harness.web import DEFAULT_PORT
-from harness.web.server import Hub, WebApprover, WebUI, check_answer, event_json, ollama_models, start
+from harness.web.server import (
+    STATIC,
+    Hub,
+    WebApprover,
+    WebUI,
+    check_answer,
+    event_json,
+    ollama_models,
+    open_page,
+    start,
+)
 from harness.workspace import Workspace
 
 
@@ -122,6 +136,64 @@ def test_a_second_server_cannot_take_the_same_port(web):
         start(w.session, load_commands(w.session.ws.root), port=w.server.server_port)
 
 
+def test_every_answer_carries_the_security_headers(web):
+    """Lesson 57: no framing (a Yes clicked through an invisible frame), nothing loaded but our own files, no sniffing, no referrer."""
+    w = web([])
+    for path in ("/", "/static/app.js", "/api/state"):
+        h = w.client.get(path).headers
+        assert h["x-frame-options"] == "DENY" and h["x-content-type-options"] == "nosniff" and h["referrer-policy"] == "no-referrer"
+        csp = h["content-security-policy"]
+        assert "frame-ancestors 'none'" in csp and "script-src 'self'" in csp and "unsafe" not in csp and "default-src 'none'" in csp
+        assert "access-control-allow-origin" not in h
+    assert "x-frame-options" in httpx.get(f"{w.base}/").headers                    # refusals too (401 without the key)
+
+
+def test_the_page_needs_nothing_the_policy_forbids():
+    """The CSP allows only our own files: no inline script or style, no outside address, in the page we ship."""
+    page = (STATIC / "index.html").read_text(encoding="utf-8")
+    assert all('src="/static/' in tag for tag in re.findall(r"<script[^>]*>", page)) and "<style" not in page and " style=" not in page
+    assert "http" not in page and not re.search(r"\son[a-z]+\s*=", page)               # no outside address, no onclick= handlers
+    for name in ("app.js", "markdown.js"):
+        code = (STATIC / name).read_text(encoding="utf-8")
+        assert "eval(" not in code and "new Function" not in code and 'setAttribute("style"' not in code
+
+
+def test_a_post_from_another_origin_or_an_html_form_is_refused(web):
+    """SameSite=Strict keeps the cookie off other sites' requests; for a browser that ignores it, Origin and the content type hold."""
+    w = web([answer("hi")])
+    assert w.client.post("/api/send", json={"text": "x"}, headers={"Origin": "https://evil.example"}).status_code == 403
+    assert w.client.post("/api/send", json={"text": "x"}, headers={"Origin": "null"}).status_code == 403
+    form = w.client.post("/api/send", content=json.dumps({"text": "x"}), headers={"Content-Type": "text/plain"})
+    assert form.status_code == 415
+    assert w.client.post("/api/stop", data={"a": "b"}).status_code == 415                       # application/x-www-form-urlencoded
+    cookie = f"{w.server.cookie}={w.server.key}"                                   # a raw request: it claims 5 MB and sends none of it
+    with socket.create_connection(("127.0.0.1", w.server.server_port), timeout=5) as raw:
+        raw.sendall(f"POST /api/send HTTP/1.1\r\nHost: 127.0.0.1:{w.server.server_port}\r\nCookie: {cookie}\r\n"
+                    "Content-Type: application/json\r\nContent-Length: 5000000\r\n\r\n".encode())
+        assert raw.recv(64).startswith(b"HTTP/1.0 413")                             # answered at once, the body never read
+    stranger = httpx.Client(base_url=w.base, timeout=10)
+    for _ in range(30):          # a refusal with the body left unread reset the connection on Windows: the client saw no answer
+        assert stranger.post("/api/send", json={"text": "x" * 200_000}).status_code == 401
+        assert w.client.post("/api/send", json={"text": "x" * 200_000}, headers={"Origin": "https://evil.example"}).status_code == 403
+    own = w.client.post("/api/send", json={"text": "hello"}, headers={"Origin": f"http://localhost:{w.server.server_port}"})
+    assert own.status_code == 200
+    w.events()
+
+
+def test_the_browser_is_opened_without_the_key_on_its_command_line(monkeypatch):
+    opened = []
+    monkeypatch.setattr(webbrowser, "open", lambda url, *a, **k: opened.append(url))
+    page = open_page("http://127.0.0.1:8765/?key=SECRET-KEY")
+    try:
+        assert len(opened) == 1 and opened[0].startswith("file:") and "SECRET-KEY" not in opened[0]
+        text = page.read_text(encoding="utf-8")
+        assert 'content="0;url=http://127.0.0.1:8765/?key=SECRET-KEY"' in text
+        if os.name != "nt":
+            assert page.stat().st_mode & 0o077 == 0                       # readable by you only
+    finally:
+        page.unlink()
+
+
 def test_a_host_header_naming_another_site_is_refused_even_with_the_key(web):
     """DNS rebinding: a page on evil.example makes its name resolve to 127.0.0.1; the browser then sends Host: evil.example."""
     w = web([])
@@ -168,7 +240,7 @@ def test_one_request_at_a_time(web):
     second = w.send("second")
     assert second.status_code == 409 and "running" in second.json()["error"]
     w.events()
-    assert w.client.post("/api/send", content=b"not json").status_code == 400
+    assert w.client.post("/api/send", content=b"not json", headers={"Content-Type": "application/json"}).status_code == 400
     assert w.send("   ").status_code == 400
 
 

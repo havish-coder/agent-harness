@@ -3,7 +3,7 @@
 Agent Harness lets a language model run tools on your computer. Treat it like any program
 that can read your files, change them, run commands and fetch web pages.
 
-## Current security model (v0.7)
+## Current security model (v0.8)
 - **Path jail.** File tools only reach the workspace (and folders you list in `additional_directories`),
   however a path is written: `..`, absolute paths, drive letters, links, Windows junctions and device names.
 - **Permissions.** Anything that changes something asks, unless you choose a mode (`accept-edits`, `plan`,
@@ -29,6 +29,9 @@ that can read your files, change them, run commands and fetch web pages.
   they return is untrusted content unless you mark the server trusted, and a server gets a secret environment variable only if you name it.
 - **A `settings.local.json` that git tracks** came with the repository: until you trust the folder it has a project file's limits.
 - **A worktree separates files, not permissions**: commands run in one still reach the rest of your disk.
+- **The web UI** (`harness --web`) listens on 127.0.0.1 only and needs a new key at every start, kept in a `SameSite=Strict`, `HttpOnly`
+  cookie; it refuses requests that name another host or come from another site, and sends a Content-Security-Policy. Nothing the model
+  writes runs in the page, and pictures in answers are never loaded. Approvals in the page are the terminal's, decided by the same rules.
 - Details, and what each defense does *not* cover, are in [docs/security.md](docs/security.md).
 
 Earlier basics still hold:

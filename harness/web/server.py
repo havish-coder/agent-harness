@@ -19,11 +19,13 @@ Python's own http.server, one thread per request (ADR 0051). The page talks to i
 
 Only this computer can connect (127.0.0.1), the Host header must name it, and every request needs the key.
 """
+import html
 import json
 import os
 import re
 import secrets
 import socket
+import tempfile
 import threading
 import webbrowser
 from contextlib import nullcontext
@@ -63,6 +65,15 @@ FOLDER_ENTRIES = 500         # of a folder shown in the explorer
 PREVIEW_CHARS = 20_000       # of a diff shown with an approval question
 ANSWER_CHARS = 4_000         # of an answer typed in the page
 NOT_RUN = ("tool_denied", "tool_refused")
+SECURITY_HEADERS = {         # Lesson 57: what the page may load and who may frame it; the page needs nothing else
+    "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; "
+                               "base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+    "X-Frame-Options": "DENY",                       # the same for browsers without frame-ancestors: no clickjacking a Yes
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",                # a link in an answer doesn't tell the site where it came from
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Cross-Origin-Resource-Policy": "same-origin",
+}
 
 
 class Hub:
@@ -494,6 +505,7 @@ class Server(ThreadingHTTPServer):
         self.app, self.key, self.closing = app, secrets.token_urlsafe(24), False
         port = self.server_port
         self.hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
+        self.origins = {f"http://{host}" for host in self.hosts}          # what a browser says in Origin on our own page's POSTs
         self.cookie = f"harness_key_{port}"                   # cookies don't separate ports: two servers mustn't share one
         self.url = f"http://127.0.0.1:{port}/?key={self.key}"
 
@@ -504,6 +516,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, format, *args):           # quiet: the terminal is for the server's address and errors
         pass
+
+    def end_headers(self):
+        for name, value in SECURITY_HEADERS.items():   # on every answer, the page and the API alike (Lesson 57)
+            self.send_header(name, value)
+        super().end_headers()
 
     # --- who may ask ---------------------------------------------------------------------------------
     def allowed(self, url) -> bool:
@@ -565,11 +582,22 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         url = urlparse(self.path)
-        if not self.allowed(url):
-            return
         try:
             size = int(self.headers.get("Content-Length") or 0)
-            body = json.loads(self.rfile.read(size) or b"{}") if 0 <= size <= MAX_BODY else None
+        except ValueError:
+            size = -1
+        if not 0 <= size <= MAX_BODY:
+            return self.json({"error": f"the body must be at most {MAX_BODY:,} bytes"}, 413)      # closed with it unread
+        raw = self.rfile.read(size)    # read before any refusal: a socket closed with unread data resets, and the client sees no answer (Windows)
+        if not self.allowed(url):
+            return
+        # SameSite=Strict already keeps the cookie off other sites' requests; these two hold for a browser that ignores it (Lesson 57)
+        if self.headers.get("Origin") not in (None, *self.server.origins):
+            return self.json({"error": "requests must come from this server's own page"}, 403)
+        if self.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/json":
+            return self.json({"error": "send JSON (Content-Type: application/json)"}, 415)     # an HTML form can't
+        try:
+            body = json.loads(raw or b"{}")
         except ValueError:
             body = None
         if not isinstance(body, dict):
@@ -625,6 +653,18 @@ def start(session: Session, commands, port: int = DEFAULT_PORT, flags: dict | No
     return Server(WebApp(session, commands, flags), port)
 
 
+def open_page(url: str) -> Path:
+    """Open the page in the browser without putting its key on a command line, where other users of this computer can read it
+    (a process list; /proc on Linux): the browser is given a private file that redirects to the address. Returns the file, which
+    holds the key until the server stops and deletes it (Lesson 57)."""
+    fd, name = tempfile.mkstemp(prefix="harness-open-", suffix=".html")       # readable by you only (0600 on POSIX)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(f'<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0;url={html.escape(url)}">'
+                f'<a href="{html.escape(url)}">Open Agent Harness</a>')
+    webbrowser.open(Path(name).as_uri())
+    return Path(name)
+
+
 def serve(workspace: Path, flags: dict, port: int = DEFAULT_PORT, open_browser: bool = True, fresh: bool = False) -> None:
     """`harness --web`: make the session with the browser as its interface and serve it until Ctrl+C."""
     ui = WebUI(Hub())
@@ -636,8 +676,7 @@ def serve(workspace: Path, flags: dict, port: int = DEFAULT_PORT, open_browser: 
         raise OSError(f"can't listen on port {port} ({e.strerror or e}): another program may be using it. Try --web 0 for a free port") from e
     server.app.notes = [json.loads(data) for _, data in ui.hub.events]
     print(f"Agent harness in your browser: {server.url}\n(only this computer can open it; Ctrl+C here stops the server)", flush=True)
-    if open_browser:
-        webbrowser.open(server.url)
+    opener = open_page(server.url) if open_browser else None
     try:
         server.serve_forever(poll_interval=0.5)
     except KeyboardInterrupt:
@@ -645,6 +684,8 @@ def serve(workspace: Path, flags: dict, port: int = DEFAULT_PORT, open_browser: 
     finally:
         server.closing = True
         server.server_close()
+        if opener is not None:
+            opener.unlink(missing_ok=True)
         session = server.app.session              # the page may have opened another project or model since
         session.close()
         if session.costs.models:
