@@ -16,7 +16,7 @@ from contextlib import nullcontext
 from pathlib import Path
 
 from harness import config
-from harness.agent import Agent
+from harness.agent import Agent, _accepts
 from harness.agents import (
     MAX_REPORT_CHARS,
     MAX_TASK_CHARS,
@@ -54,11 +54,13 @@ from harness.mcp import Server, connect, make_tools
 from harness.memory import MIN_FILE_TOKENS, MemoryFile, load_memory, nested_files, note_text, section_text
 from harness.plan import (
     CHOICES,
+    IMPLEMENT,
     MAX_PLAN_CHARS,
     MIN_PLAN_CHARS,
     PLAN_RULE,
     age,
     latest_plan,
+    looks_like_plan,
     make_plan_tools,
     plan_items,
     save_plan,
@@ -82,10 +84,16 @@ from harness.usage import CostTracker, format_cost
 from harness.workspace import Workspace
 
 # Short and direct works best for small models (see course/07-first-tools-and-repl.md).
-ROLE = """You are a helpful agent. Use tools to inspect the workspace; never guess file contents.
+ROLE = """You are a coding agent for any task in any programming language (C++, Rust, JavaScript, Python, shell ...): write new code and new files, fix, explain, run commands.
+The workspace is where you work, not a limit on what you may do: a request doesn't have to be about the files already here, and a file that doesn't exist yet is one to create.
+Use tools to inspect the workspace; never guess file contents.
 Find files with glob, search inside them with grep, explore folders with list_dir.
 To find where something is defined or used, grep for a likely word (e.g. grep 'timeout' to find a timeout setting).
 Paths are relative to the workspace root. Be concise."""
+# The last word of the system prompt, after the workspace listing, so it is what the model read most recently.
+LAST_WORD = "The user's next message is your task. It can be about anything, in any language: do it."
+# The first two lines and LAST_WORD, Lesson 58: a 4B model with a journal about a Python project in its prompt refused a C++ trie as
+# "unrelated to the current project". Six off-topic requests, 3 runs each: 9 of 18 refused before, 0 of 18 after (scripts/generic_lab.py).
 WORKSPACE_HEADER = "Workspace files (snapshot at session start; may have changed since):"
 LISTING_LINES = 50            # the longest workspace listing in the prompt; a small window shrinks it
 # Said only when old results may be cleared (Lesson 38): what a note means, and the one thing the model can do about it.
@@ -94,7 +102,7 @@ CLEARING_RULE = ("When the window fills, old tool results are replaced by a note
 # Said only when the todo tool is on (Lesson 44). Measured: with the tool's own description alone, a 4B model never called it.
 TODO_RULE = ("When a request has several parts, first call todo_write with one item per part. Then do the items one at a time, and mark each "
              "completed as soon as it is done. Do not give your final answer while an item is still pending.")
-SYSTEM_PROMPT = ROLE + "\n\n" + WORKSPACE_HEADER + "\n{snapshot}"   # the whole prompt in one string: for scripts and recordings
+SYSTEM_PROMPT = ROLE + "\n\n" + WORKSPACE_HEADER + "\n{snapshot}\n\n" + LAST_WORD   # the whole prompt in one string: for scripts and recordings
 
 
 class Session:
@@ -127,6 +135,7 @@ class Session:
         self.asked = 0                                   # questions the agent has put to the user in this request (Lesson 46)
         self.mode_before_plan: str | None = None         # where /plan came from, so leaving plan mode goes back there (Lesson 45)
         self.plan_text = ""                               # the last plan the agent proposed in this session
+        self.plan_reviewed = False                       # exit_plan_mode was used in this request: the harness doesn't offer the plan again
         self.todos = TodoList()                          # the agent's checklist for the request in hand (Lesson 44)
         self.history: FileHistory | None = None          # copies of files before the agent changes them, for /undo and /rewind (Lesson 43)
         self.history_temp: Path | None = None            # where it lives when chats aren't saved: gone when this session ends
@@ -246,6 +255,7 @@ class Session:
             self.save_event(kind, data)
         if kind == "message" and data.role == "user" and data.checkpoint:
             self.asked = 0
+            self.plan_reviewed = False
             if self.todos.done:                     # a finished list belongs to the request before this one
                 self.todos.clear()
             if self.history is not None:
@@ -364,13 +374,13 @@ class Session:
         with (getattr(self.approver, "pause", None) or nullcontext)():       # the keyboard watcher steps aside, as it does for an approval
             return ask(question, options)
 
-    def ask_text(self, question: str) -> str | None:
-        """Ask the user for a line of text; None when this interface can't ask."""
+    def ask_text(self, question: str, default: str = "") -> str | None:
+        """Ask the user for text; None when this interface can't ask. `default` fills the box where the interface can edit text (the page)."""
         ask = getattr(self.ui, "ask_text", None)
         if ask is None:
             return None
         with (getattr(self.approver, "pause", None) or nullcontext)():
-            return ask(question)
+            return ask(question, default=default) if default and _accepts(ask, "default") else ask(question)
 
     # --- tool search (Lesson 50) -------------------------------------------------------------------------
     def apply_tool_search(self) -> None:
@@ -584,6 +594,44 @@ class Session:
         self.set_mode(back)
         return back
 
+    def plan_choice(self, plan: str) -> tuple[str | None, str, str]:
+        """Show the plan and ask what to do with it (Lessons 45, 58): (the key chosen, or None when nobody can be asked; the plan, as the user
+        may have edited it; the user's words for a revision). Editing is offered where the interface can edit text (the web page)."""
+        options = CHOICES if _accepts(getattr(self.ui, "ask_text", None), "default") else {k: v for k, v in CHOICES.items() if k != "e"}
+        taint = self.permissions.taint
+        while True:
+            self.plan_text = plan
+            show = getattr(self.ui, "show_plan", None)
+            if show is not None:
+                show(plan)
+            if taint.active:
+                self.ui.warn("this chat has read content you may not trust (" + ", ".join(taint.sources[:2]) + "): read each step before you approve")
+            key = self.ask_user("What should happen with this plan?", options)
+            if key != "e":
+                break
+            edited = (self.ask_text("Edit the plan, then send it:", default=plan) or "").strip()
+            if edited:
+                plan = edited[:MAX_PLAN_CHARS]
+        self.audit("plan", answer=key or "none", chars=len(plan), tainted=taint.active or None)
+        words = (self.ask_text("What should change?") or "") if key == "r" else ""
+        return key, plan, words
+
+    def approve_plan(self, plan: str, key: str) -> str:
+        """The user said yes: switch the mode, keep a copy, and make the numbered steps the todo list. Returns a note for the model."""
+        self.set_mode("default" if key == "y" else "accept-edits")
+        try:
+            save_plan(self.plans_dir, plan)
+        except OSError:
+            pass                                     # the plan is still in the conversation; losing the copy is not worth stopping for
+        items = plan_items(plan) if self.settings.todo else []
+        if len(items) < 2:
+            return ""
+        taint = self.permissions.taint
+        self.todos.items = items
+        self.todos.tainted, self.todos.sources = taint.active, list(taint.sources) if taint.active else []
+        self.todos_changed(self.todos)
+        return f" Its {len(items)} numbered steps are now your todo list: mark each completed as you finish it."
+
     def review_plan(self, plan: str) -> str:
         """The `exit_plan_mode` tool: show the plan, ask, and say what the user answered. Only a yes from the user changes the mode."""
         plan = plan.strip()
@@ -591,39 +639,36 @@ class Session:
             raise ValueError("the plan is too short to review: write the goal, then numbered steps that each name the file and the change")
         if len(plan) > MAX_PLAN_CHARS:
             plan = plan[:MAX_PLAN_CHARS].rstrip() + "\n... (the rest was cut: keep plans short)"
-        self.plan_text = plan
-        show = getattr(self.ui, "show_plan", None)
-        if show is not None:
-            show(plan)
-        taint = self.permissions.taint
-        if taint.active:
-            self.ui.warn("this chat has read content you may not trust (" + ", ".join(taint.sources[:2]) + "): read each step before you approve")
-        answer = self.ask_user("Go ahead with this plan?", CHOICES)
-        if answer is None:
+        self.plan_reviewed = True
+        proposed = plan
+        key, plan, words = self.plan_choice(plan)
+        if key is None:
             return "Error: the plan can't be shown to the user in this session, so it can't be approved. Describe it in your answer instead."
-        self.audit("plan", answer=answer or "none", chars=len(plan), tainted=taint.active or None)
-        if answer in ("y", "a"):
-            self.set_mode("default" if answer == "y" else "accept-edits")
-            try:
-                save_plan(self.plans_dir, plan)
-            except OSError:
-                pass                                     # the plan is still in the conversation; losing the copy is not worth stopping for
-            seeded = ""
-            items = plan_items(plan) if self.settings.todo else []
-            if len(items) >= 2:
-                self.todos.items = items
-                self.todos.tainted, self.todos.sources = taint.active, list(taint.sources) if taint.active else []
-                self.todos_changed(self.todos)
-                seeded = f" Its {len(items)} numbered steps are now your todo list: mark each completed as you finish it."
-            return (f"The user approved the plan. The permission mode is now '{self.permissions.mode}'. Carry it out step by step, "
+        if key in ("y", "a"):
+            seeded = self.approve_plan(plan, key)
+            edited = "" if plan == proposed else f" They edited it first; this is the plan now:\n\n{plan}\n\n"
+            return (f"The user approved the plan.{edited} The permission mode is now '{self.permissions.mode}'. Carry it out step by step, "
                     f"and say what you did when you are done.{seeded}")
-        if answer == "f":
-            words = self.ask_text("What should change?")
-            if words:
-                return ("The user did not approve the plan and wrote what to change: \"" + words.replace('"', "'") + "\". "
-                        "You are still in plan mode: revise the plan and call exit_plan_mode again.")
+        if words:
+            return ("The user did not approve the plan and wrote what to change: \"" + words.replace('"', "'") + "\". "
+                    "You are still in plan mode: revise the plan and give it again.")
         return ("The user did not approve the plan. You are still in plan mode, so nothing has changed. "
-                "Ask what they would like different, or revise the plan and call exit_plan_mode again.")
+                "Ask what they would like different, or revise the plan and give it again.")
+
+    def after_plan(self, answer: str) -> str | None:
+        """Lesson 58: a plan-mode request ended with the plan as its answer (a small model rarely calls exit_plan_mode). Offer the same choices,
+        and return the request to run next: carry it out (after a yes), or revise it (still in plan mode). None: nothing to run."""
+        if (self.permissions.mode != "plan" or self.plan_reviewed or self.agent.stop_reason != "completed"
+                or not looks_like_plan(answer)):
+            return None
+        proposed = answer.strip()[:MAX_PLAN_CHARS]
+        key, plan, words = self.plan_choice(proposed)
+        if key in ("y", "a"):
+            self.approve_plan(plan, key)
+            return IMPLEMENT if plan == proposed else f"I edited your plan. Carry out this version now, step by step:\n\n{plan}"
+        if words:
+            return f"Revise your plan: {words}"
+        return None
 
     def plan_report(self) -> str:
         """The last plan (this session's, or the newest saved one), for /plan show."""
@@ -918,6 +963,7 @@ class Session:
             sections.append(Section("output style", f"# Output style: {self.style.name}\n{self.style.prompt}", 1, required=False))
         sections.append(Section("environment", environment_text(ws.root, self.shell_name), 2, required=False))
         sections.append(Section("workspace files", files, 2, required=False, shrink=listing))
+        sections.append(Section("last word", LAST_WORD, 2))
         return assemble(sections, budget=max(600, int(self.context.window * PROMPT_SHARE)))
 
     # --- project memory (Lesson 41) -------------------------------------------------------------

@@ -11,7 +11,7 @@ from harness.commands import load_commands
 from harness.config import Settings
 from harness.context.prompt import MIN_TRIM, PROMPT_SHARE, Section, assemble, environment_text, git_summary
 from harness.context.tokens import estimate_tokens
-from harness.session import ROLE, SYSTEM_PROMPT, WORKSPACE_HEADER, Session
+from harness.session import LAST_WORD, ROLE, SYSTEM_PROMPT, WORKSPACE_HEADER, Session
 from harness.tui.plain import PlainApprover, PlainUI
 from harness.workspace import Workspace
 
@@ -194,7 +194,7 @@ def session(tmp_path, monkeypatch):
 
 def test_the_session_builds_its_prompt_from_sections(session):
     names = [p.name for p in session.prompt.parts]
-    assert names == ["role", "untrusted content", "clearing rule", "todo rule", "more tools", "sub-agent rule", "ask rule", "notes rule", "environment", "workspace files"]
+    assert names == ["role", "untrusted content", "clearing rule", "todo rule", "more tools", "sub-agent rule", "ask rule", "notes rule", "environment", "workspace files", "last word"]
     assert [p.stability for p in session.prompt.parts] == sorted(p.stability for p in session.prompt.parts)
     text = session.agent.messages[0].content
     assert text == session.prompt.text and text.startswith(ROLE)
@@ -215,7 +215,7 @@ def test_a_style_goes_between_the_rules_and_the_session_facts(session):
     session.set_style("pirate") if "pirate" in session.styles else session.set_style("concise")
     after = session.prompt.text
     names = [p.name for p in session.prompt.parts]
-    assert names == ["role", "untrusted content", "clearing rule", "todo rule", "more tools", "sub-agent rule", "ask rule", "notes rule", "output style", "environment", "workspace files"]
+    assert names == ["role", "untrusted content", "clearing rule", "todo rule", "more tools", "sub-agent rule", "ask rule", "notes rule", "output style", "environment", "workspace files", "last word"]
     assert session.agent.messages[0].content == after == session.agent.system_prompt
     assert os.path.commonprefix([before, after]).startswith(ROLE)           # the role is shared, so it stays cached
     assert after.index("# Output style") < after.index("# Environment")
@@ -226,7 +226,7 @@ def test_a_style_goes_between_the_rules_and_the_session_facts(session):
 def test_a_small_window_shrinks_the_listing_and_says_so(session):
     for i in range(200):
         (session.ws.root / f"module_{i:03}_with_a_long_descriptive_name.py").write_text("x", encoding="utf-8")
-    session.context.window = 1_500                                           # a budget of 600 tokens
+    session.context.window = 3_000                                           # a budget of 750 tokens
     built = session.build_prompt()
     files = next(p for p in built.parts if p.name == "workspace files")
     assert not built.over_budget and files.note.startswith("shrunk from")
@@ -241,7 +241,7 @@ def test_a_tiny_window_drops_what_is_optional_and_keeps_the_role(session):
 
 def test_the_old_one_string_prompt_still_works_for_scripts():
     text = SYSTEM_PROMPT.format(snapshot="a.txt")
-    assert text.startswith(ROLE) and text.endswith("a.txt") and WORKSPACE_HEADER in text
+    assert text.startswith(ROLE) and text.endswith("a.txt\n\n" + LAST_WORD) and WORKSPACE_HEADER in text
 
 
 # --- /prompt --------------------------------------------------------------------------------
@@ -261,7 +261,7 @@ def test_the_prompt_command_lists_the_sections(session):
 def test_the_prompt_command_says_what_was_shrunk(session):
     for i in range(200):
         (session.ws.root / f"module_{i:03}_with_a_long_descriptive_name.py").write_text("x", encoding="utf-8")
-    session.context.window = 1_500
+    session.context.window = 3_000
     session.prompt = session.build_prompt()
     assert "[shrunk from" in run_prompt(session)
 

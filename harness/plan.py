@@ -4,12 +4,16 @@ Permission mode `plan` (Lesson 29) already makes every tool that changes somethi
 lacked was the way out. A model that has finished looking has nowhere to put its plan except its answer, and nothing for the user to approve.
 
     /plan             turn plan mode on (or `--mode plan` at start)
-    ...the agent reads, then calls exit_plan_mode(plan="1. ... 2. ...")
+    ...the agent reads, then calls exit_plan_mode(plan="1. ... 2. ..."), or (Lesson 58) just writes the plan as its answer
     the plan is shown, and the user chooses:
-        [y] yes, ask me before each change      -> mode "default"
-        [a] yes, and accept file edits          -> mode "accept-edits"
-        [n] no, keep planning
-        [f] no, and I'll say what to change     -> the user's words go back to the model
+        [y] accept and implement, asking before each change   -> mode "default", and the harness asks the agent to carry it out
+        [a] accept and implement, accepting file edits        -> mode "accept-edits", the same
+        [e] edit the plan yourself (where the interface can edit text: the web page), then choose again
+        [r] revise: say what to change                         -> the user's words go back to the model, still in plan mode
+        [k] keep planning
+
+Lesson 58: a 4B model called exit_plan_mode 0 times in 5 (Lesson 45's lab); it wrote its plan as its answer, nothing was offered, and the user had to
+leave plan mode and ask again by hand. So the harness offers the same choices itself when a plan-mode request ends with an answer that looks like a plan.
 
 Three properties carry the weight, and none of them depends on the model:
   * **The refusal is the permission layer's**, not a request in a prompt. In plan mode a write_file call is denied however the model was persuaded.
@@ -29,11 +33,14 @@ from pathlib import Path
 from harness.todo import MAX_ITEMS, TodoItem, clean
 from harness.tools.base import Tool, tool
 
-PLAN_RULE = ("You are in plan mode. You can read and search, and you cannot change anything. Look at what you need to, then call exit_plan_mode with your plan: "
-             "a one-line goal, numbered steps that each name the file and the change, and anything you are unsure of. "
-             "Do not write the plan as your answer instead: the user can only approve it through exit_plan_mode.")
-CHOICES = {"y": "yes, ask me before each change", "a": "yes, and accept file edits", "n": "no, keep planning", "f": "no, I'll say what to change"}
+PLAN_RULE = ("You are in plan mode. You can read and search, and you cannot change anything. Look at what you need to, then give your plan, "
+             "with exit_plan_mode or as your answer: a one-line goal, numbered steps that each name the file and the change, and anything you are "
+             "unsure of. The user then accepts it, revises it, or asks you to keep planning.")
+CHOICES = {"y": "Accept and implement (ask before each change)", "a": "Accept and implement (accept file edits)",
+           "e": "Edit the plan myself", "r": "Revise: I'll say what to change", "k": "Keep planning"}
+IMPLEMENT = "Your plan is approved. Carry it out now, step by step, and say what you did when you are done."
 MIN_PLAN_CHARS = 20
+PLAN_ANSWER_CHARS = 200        # an answer in plan mode this long, or with two numbered steps, is offered as a plan (Lesson 58)
 MAX_PLAN_CHARS = 8_000
 STEP = re.compile(r"^\s{0,3}\d{1,2}[.)]\s+(\S.*?)\s*$")        # a numbered line at the left margin: "1. Edit cart.py"
 
@@ -42,6 +49,10 @@ def steps(plan: str) -> list[str]:
     """The numbered steps of a plan, one line each, cleaned for display. Lines indented under a step are its detail, not steps."""
     found = [clean(m.group(1)) for line in plan.splitlines() if (m := STEP.match(line))]
     return [s for s in found if s][:MAX_ITEMS]
+
+
+def looks_like_plan(answer: str) -> bool:
+    return len(steps(answer)) >= 2 or len(answer.strip()) >= PLAN_ANSWER_CHARS
 
 
 def plan_items(plan: str) -> list[TodoItem]:

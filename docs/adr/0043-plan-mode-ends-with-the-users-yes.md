@@ -1,6 +1,6 @@
 # 0043. Plan mode ends only with the user's yes, through a tool that exists only in plan mode
 
-- **Status:** Accepted
+- **Status:** Accepted; the choices amended by [ADR 0056](0056-the-harness-offers-a-plan-the-model-wrote-as-its-answer.md)
 - **Date:** 2026-10-07
 
 ## Context

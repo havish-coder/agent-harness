@@ -358,7 +358,7 @@ def test_a_plan_is_shown_and_approved_in_the_page(web):
     w.send("plan the fix")
     upto = w.events(until=lambda e: e["type"] == "question")
     q, shown = upto[-1], next(e for e in upto if e["type"] == "plan")
-    assert shown["text"] == plan and q["question"] == "Go ahead with this plan?" and set(q["options"]) == {"y", "a", "n", "f"}
+    assert shown["text"] == plan and q["question"] == "What should happen with this plan?" and set(q["options"]) == {"y", "a", "e", "r", "k"}
     reply(w, q, "y")
     w.events(after=q["_id"])
     assert w.session.permissions.mode == "default"
@@ -376,10 +376,32 @@ def test_a_reloaded_page_shows_results_without_the_fence_the_model_read(web, tmp
     assert "<untrusted" not in shown and "hello" in shown
 
 
+def test_a_plan_written_as_the_answer_is_offered_edited_and_carried_out_in_the_page(web, tmp_path):
+    """Lesson 58: the model writes its plan as its answer; the page offers the choices, the plan can be edited in a box that starts with it,
+    and accepting carries it out at once."""
+    plan = "Goal: a greeting file.\n1. Write hello.txt\n2. Say what was done"
+    w = web([answer(plan), wants(ToolCall("c1", "write_file", {"path": "hello.txt", "content": "hi"})), answer("Done: hello.txt written.")],
+            todo=False)
+    w.session.set_mode("plan")
+    w.send("plan a greeting file")
+    q = asked(w)
+    assert q["kind"] == "choice" and set(q["options"]) == {"y", "a", "e", "r", "k"}
+    reply(w, q, "e")
+    box = asked(w, after=q["_id"])
+    assert box["kind"] == "text" and box["default"] == plan
+    reply(w, box, plan.replace("Say what was done", "Tell me the file's size"))
+    again = asked(w, after=box["_id"])
+    reply(w, again, "a")
+    got = w.events(after=again["_id"])
+    sent = [e["text"] for e in got if e["type"] == "user"]
+    assert sent and sent[0].startswith("I edited your plan") and "file's size" in sent[0]
+    assert (tmp_path / "proj" / "hello.txt").read_text() == "hi" and w.session.permissions.mode == "accept-edits"
+
+
 def test_what_an_answer_must_be():
     approval = {"kind": "approval", "always": None}
     assert check_answer(approval, "yes") is None and check_answer(approval, "always") and check_answer(approval | {"always": "x"}, "always") is None
-    assert check_answer({"kind": "choice", "options": {"1": "a"}}, "") is None and check_answer({"kind": "text"}, "x" * 5000)
+    assert check_answer({"kind": "choice", "options": {"1": "a"}}, "") is None and check_answer({"kind": "text"}, "x" * 20_000)
 
 
 # --- chats, projects, the journal and the model (Lesson 56) ------------------------------------------------------------

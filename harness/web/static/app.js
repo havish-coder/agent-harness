@@ -292,7 +292,8 @@ function question(e) {
   } else {
     title.textContent = e.question;
     const input = card.appendChild(el("textarea", "ask-input"));
-    input.rows = 2;
+    input.value = e.default || "";
+    input.rows = e.default ? Math.min(18, e.default.split("\n").length + 1) : 2;
     choiceButton(buttons, "Answer", "yes", e.id, () => input.value);
     choiceButton(buttons, "Skip", "no", e.id, "");
   }

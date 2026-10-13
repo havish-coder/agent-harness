@@ -138,7 +138,8 @@ def section_text(files: list[MemoryFile], fenced: bool = True, tokens: int = FIL
     """The memory section of the system prompt, or "" when there is none."""
     if not files:
         return ""
-    head = ("# Project memory\nInstructions from the files below. Follow them; what the user says in the conversation comes first.")
+    head = ("# Project memory\nInstructions from the files below. Follow them; what the user says in the conversation comes first, "
+            "including requests that have nothing to do with these notes.")
     return head + "\n\n" + "\n\n".join(entry(f, fenced, tokens) for f in files)
 
 

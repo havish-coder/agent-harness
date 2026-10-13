@@ -63,7 +63,7 @@ MAX_BODY = 1_000_000
 FILE_BYTES = 200_000         # of a file shown in the viewer
 FOLDER_ENTRIES = 500         # of a folder shown in the explorer
 PREVIEW_CHARS = 20_000       # of a diff shown with an approval question
-ANSWER_CHARS = 4_000         # of an answer typed in the page
+ANSWER_CHARS = 10_000        # of an answer typed in the page (an edited plan, Lesson 58)
 NOT_RUN = ("tool_denied", "tool_refused")
 SECURITY_HEADERS = {         # Lesson 57: what the page may load and who may frame it; the page needs nothing else
     "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; "
@@ -267,8 +267,13 @@ class WebUI:
     def ask_choice(self, question: str, options: dict[str, str]) -> str:
         return self.ask({"kind": "choice", "question": question, "options": options}, "")
 
-    def ask_text(self, question: str) -> str:
-        return self.ask({"kind": "text", "question": question}, "")
+    def ask_text(self, question: str, default: str = "") -> str:
+        """`default` fills the box: an edited plan starts as the plan (Lesson 58)."""
+        return self.ask({"kind": "text", "question": question, "default": default}, "")
+
+    def request(self, text: str) -> None:
+        """A request the harness sends for you (carry out the approved plan, Lesson 58): drawn as your message."""
+        self.hub.publish({"type": "user", "text": text})
 
     def show_plan(self, plan: str) -> None:
         self.hub.publish({"type": "plan", "text": plan, "markdown": render_math(plan)})

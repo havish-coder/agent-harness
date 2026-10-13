@@ -122,6 +122,10 @@ def run_turn(session: Session, watcher: KeyWatcher, message: str) -> None:
     context = f" · context ~{100 * info['context_tokens'] // window}%" if window else ""
     ui.usage_line(f"{turn.input_tokens:,} input{cached} + {turn.output_tokens:,} output tokens · {money}{context}")
     session.after_turn(getattr(ui, "ask_choice", None))        # keep the progress journal up to date, or offer one (Lesson 42b)
+    follow = session.after_plan(answer)                         # a plan written as an answer: accept and implement, or revise (Lesson 58)
+    if follow:
+        (getattr(ui, "request", None) or ui.info)(follow)       # the page shows it as your next message; the terminal as a line
+        run_turn(session, watcher, follow)
 
 
 def announce(session: Session) -> None:

@@ -7,6 +7,7 @@ The same six-part request as scripts/todo_lab.py, two ways, on a throwaway copy 
 
 What is counted:
     proposed     the agent called exit_plan_mode (rather than writing its plan as an answer, or never planning)
+    offered      it wrote the plan as its answer and the harness offered it instead (Lesson 58), then carried it out on the scripted yes
     refused      calls to change something that plan mode refused before approval (the harness, not the model, stopped these)
     changed      files changed before the approval (must be 0: plan mode is the permission layer's job)
     covers       how many of the six parts the plan names (it mentions the file or the thing: cart.py, test, README, CHANGELOG, py.typed, docstring)
@@ -93,10 +94,17 @@ def run_once(variant: str, model: str) -> dict:
                 return original(plan)
             s.agent.tools.get("exit_plan_mode").fn = review
         answer = s.agent.run(TASK)
+        proposed = bool(ui.plans)                 # it called exit_plan_mode
+        if variant == "plan" and not proposed:    # Lesson 58: it wrote the plan as its answer, so the harness offers it
+            seen["changed"] = sorted(k for k, v in snapshot(root).items() if before.get(k) != v)
+            follow = s.after_plan(answer)
+            if follow:
+                answer = s.agent.run(follow)
         calls = [c for m in s.agent.messages for c in m.tool_calls]
         plan = ui.plans[0].lower() if ui.plans else ""
         done = parts(root)
-        return {"proposed": bool(ui.plans), "refused": ui.refused, "changed": len(seen.get("changed", [])) if variant == "plan" else 0,
+        return {"proposed": proposed, "offered": bool(ui.plans) and not proposed, "refused": ui.refused,
+                "changed": len(seen.get("changed", [])) if variant == "plan" else 0,
                 "covers": sum(word in plan for word in COVERS), "n": sum(done), "done": done, "calls": len(calls),
                 "mode": s.permissions.mode, "answer": answer[:100].replace("\n", " "), "plan": ui.plans[0] if ui.plans else ""}
     finally:
@@ -111,11 +119,11 @@ def main() -> None:
     ap.add_argument("--show", action="store_true")
     args = ap.parse_args()
     print(f"{args.runs} runs per variant, {args.model}; the six-part request\n")
-    print(f"{'variant':<8} {'proposed':>9} {'refused':>8} {'changed first':>14} {'plan covers':>12} {'parts done':>11} {'all six':>8} {'tool calls':>11}")
+    print(f"{'variant':<8} {'proposed':>9} {'offered':>8} {'refused':>8} {'changed first':>14} {'plan covers':>12} {'parts done':>11} {'all six':>8} {'tool calls':>11}")
     for variant in args.variants.split(","):
         rows = [run_once(variant, args.model) for _ in range(args.runs)]
         n = len(rows)
-        print(f"{variant:<8} {sum(r['proposed'] for r in rows):>7}/{n:<1} {sum(r['refused'] for r in rows) / n:>8.1f} "
+        print(f"{variant:<8} {sum(r['proposed'] for r in rows):>7}/{n:<1} {sum(r['offered'] for r in rows):>6}/{n:<1} {sum(r['refused'] for r in rows) / n:>8.1f} "
               f"{sum(r['changed'] for r in rows):>14} {sum(r['covers'] for r in rows) / n:>12.1f} {sum(r['n'] for r in rows) / n:>11.1f} "
               f"{sum(r['n'] == 6 for r in rows):>6}/{n:<1} {sum(r['calls'] for r in rows) / n:>11.1f}", flush=True)
         if args.show:

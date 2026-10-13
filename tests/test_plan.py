@@ -9,6 +9,7 @@ from harness.config import Settings
 from harness.messages import ToolCall
 from harness.plan import (
     CHOICES,
+    IMPLEMENT,
     MAX_PLAN_CHARS,
     PLAN_RULE,
     latest_plan,
@@ -220,7 +221,7 @@ def test_a_yes_from_the_user_changes_the_mode_and_the_prompt(tmp_path, monkeypat
     assert s.permissions.mode == mode and s.ui.plans == [PLAN.strip()] and "exit_plan_mode" not in tool_names(s)
     result = [m.content for m in s.agent.messages if m.role == "tool"][0]
     assert f"permission mode is now '{mode}'" in result and "step by step" in result
-    assert s.ui.questions[0][1] == CHOICES and PLAN_RULE not in s.agent.messages[0].content
+    assert s.ui.questions[0][1] == {k: v for k, v in CHOICES.items() if k != "e"} and PLAN_RULE not in s.agent.messages[0].content   # no editing in a terminal
 
 
 def test_the_approved_plan_is_saved_and_shown_again_with_plan_show(tmp_path, monkeypatch):
@@ -256,7 +257,7 @@ def test_the_list_is_not_started_when_the_todo_setting_is_off(tmp_path, monkeypa
     assert s.todos.items == [] and s.permissions.mode == "default"
 
 
-@pytest.mark.parametrize("key", ["n", ""])
+@pytest.mark.parametrize("key", ["k", ""])
 def test_no_or_no_answer_keeps_plan_mode(tmp_path, monkeypatch, key):
     s = make_session(tmp_path, monkeypatch, mode="plan")
     s.ui.answers = [key]
@@ -268,7 +269,7 @@ def test_no_or_no_answer_keeps_plan_mode(tmp_path, monkeypatch, key):
 
 def test_feedback_goes_back_to_the_model_in_the_users_words(tmp_path, monkeypatch):
     s = make_session(tmp_path, monkeypatch, mode="plan")
-    s.ui.answers, s.ui.texts = ["f"], ['use a "guard clause" instead']
+    s.ui.answers, s.ui.texts = ["r"], ['use a "guard clause" instead']
     propose(s)
     result = [m.content for m in s.agent.messages if m.role == "tool"][0]
     assert "use a 'guard clause' instead" in result and "revise the plan" in result and s.permissions.mode == "plan"
@@ -276,7 +277,7 @@ def test_feedback_goes_back_to_the_model_in_the_users_words(tmp_path, monkeypatc
 
 def test_asking_for_feedback_but_saying_nothing_is_a_plain_no(tmp_path, monkeypatch):
     s = make_session(tmp_path, monkeypatch, mode="plan")
-    s.ui.answers, s.ui.texts = ["f"], [""]
+    s.ui.answers, s.ui.texts = ["r"], [""]
     propose(s)
     assert "did not approve" in [m.content for m in s.agent.messages if m.role == "tool"][0]
 
@@ -297,14 +298,14 @@ def test_a_plan_that_is_too_short_or_too_long(tmp_path, monkeypatch):
     propose(s, "ok")
     assert "too short to review" in [m.content for m in s.agent.messages if m.role == "tool"][0] and s.ui.plans == []
     s2 = make_session(tmp_path, monkeypatch, mode="plan")
-    s2.ui.answers = ["n"]
+    s2.ui.answers = ["k"]
     propose(s2, "1. step\n" * 2000)
     assert len(s2.ui.plans[0]) <= MAX_PLAN_CHARS + 60 and "the rest was cut" in s2.ui.plans[0]
 
 
 def test_the_model_cannot_leave_plan_mode_by_itself(tmp_path, monkeypatch):
     s = make_session(tmp_path, monkeypatch, mode="plan")
-    s.ui.answers = ["n"]                                         # the user says no
+    s.ui.answers = ["k"]                                         # the user says keep planning
     s.agent.provider = ScriptedProvider([tool_calls(ToolCall("1", "exit_plan_mode", {"plan": PLAN})), tool_calls(ToolCall("2", "write_file", {"path": "x.txt", "content": "y"})), text("ok")])
     s.agent.run("go")
     assert s.permissions.mode == "plan" and not (s.ws.root / "x.txt").exists()
@@ -335,7 +336,7 @@ def test_after_a_for_file_edits_run_without_asking(tmp_path, monkeypatch):
 def test_a_chat_that_read_untrusted_content_warns_before_the_approval(tmp_path, monkeypatch):
     s = make_session(tmp_path, monkeypatch, mode="plan")
     s.permissions.taint.sources.append("web_fetch http://example.com")
-    s.ui.answers = ["n"]
+    s.ui.answers = ["k"]
     propose(s)
     assert any("may not trust" in w and "example.com" in w for w in s.ui.warnings)
 
@@ -346,6 +347,89 @@ def test_the_approval_is_in_the_audit_log(tmp_path, monkeypatch):
     propose(s)
     entries = [line for line in s.audit_log.path.read_text(encoding="utf-8").splitlines() if '"plan"' in line or '"mode"' in line]
     assert any('"answer":"y"' in e.replace(" ", "") for e in entries) and any('"after":"default"' in e.replace(" ", "") for e in entries)
+
+
+# --- a plan written as the answer (Lesson 58) --------------------------------------------------------------------------------
+
+ANSWER = "Goal: fix the cart.\n\n1. Edit shop/cart.py: multiply by quantity\n2. Add a test for quantity 0\n3. Run the tests"
+
+
+def plan_answer(s, answer=ANSWER):
+    """Plan mode, and a model that writes its plan as its answer instead of calling exit_plan_mode."""
+    s.agent.provider = ScriptedProvider([text(answer)])
+    return s.agent.run("plan the fix")
+
+
+@pytest.mark.parametrize("key,mode", [("y", "default"), ("a", "accept-edits")])
+def test_a_plan_in_the_answer_is_offered_and_a_yes_asks_for_it_to_be_carried_out(tmp_path, monkeypatch, key, mode):
+    s = make_session(tmp_path, monkeypatch, mode="plan")
+    s.ui.answers = [key]
+    follow = s.after_plan(plan_answer(s))
+    assert follow == IMPLEMENT and s.permissions.mode == mode and s.ui.plans == [ANSWER]
+    assert [i.content for i in s.todos.items] == ["Edit shop/cart.py: multiply by quantity", "Add a test for quantity 0", "Run the tests"]
+    assert len(list(s.plans_dir.glob("*.md"))) == 1
+
+
+def test_revise_sends_the_users_words_back_in_plan_mode_and_keep_does_nothing(tmp_path, monkeypatch):
+    s = make_session(tmp_path, monkeypatch, mode="plan")
+    s.ui.answers, s.ui.texts = ["r"], ["use a guard clause"]
+    assert s.after_plan(plan_answer(s)) == "Revise your plan: use a guard clause" and s.permissions.mode == "plan"
+    s.ui.answers = ["k"]
+    assert s.after_plan(plan_answer(s)) is None and s.permissions.mode == "plan"
+    s.ui.answers, s.ui.texts = ["r"], [""]                         # revise, then say nothing: nothing to send
+    assert s.after_plan(plan_answer(s)) is None
+
+
+def test_no_offer_outside_plan_mode_for_a_short_answer_or_after_exit_plan_mode(tmp_path, monkeypatch):
+    s = make_session(tmp_path, monkeypatch)
+    assert s.after_plan(plan_answer(s)) is None and s.ui.questions == []
+    s.set_mode("plan")
+    assert s.after_plan(plan_answer(s, "Which file do you mean?")) is None and s.ui.questions == []
+    s.ui.answers = ["k"]
+    propose(s, PLAN, text(ANSWER))                                   # it did call exit_plan_mode, then wrote the plan again
+    assert s.after_plan(ANSWER) is None and len(s.ui.questions) == 1
+
+
+def test_no_offer_when_the_request_did_not_finish(tmp_path, monkeypatch):
+    """Stopped by you (Esc, Stop), by a limit or by an error: half a plan isn't offered for approval."""
+    s = make_session(tmp_path, monkeypatch, mode="plan")
+    for reason in ("interrupted", "max_steps", "error"):
+        answer = plan_answer(s)
+        s.agent.stop_reason = reason
+        assert s.after_plan(answer) is None and s.ui.questions == []
+
+
+class Editor(Quiet):
+    """An interface that can edit text in place, as the web page can."""
+
+    def ask_text(self, question, default=""):
+        self.defaults = getattr(self, "defaults", []) + [default]
+        return self.texts.pop(0) if self.texts else default
+
+
+def test_the_plan_can_be_edited_where_the_interface_can_edit_text(tmp_path, monkeypatch):
+    s = make_session(tmp_path, monkeypatch, mode="plan", ui=Editor())
+    edited = ANSWER.replace("Add a test for quantity 0", "Add a test for a negative price")
+    s.ui.answers, s.ui.texts = ["e", "y"], [edited]
+    follow = s.after_plan(plan_answer(s))
+    assert "e" in s.ui.questions[0][1] and s.ui.defaults == [ANSWER] and s.ui.plans == [ANSWER, edited]      # shown again after the edit
+    assert follow.startswith("I edited your plan") and "negative price" in follow and s.permissions.mode == "default"
+    assert "negative price" in next(s.plans_dir.glob("*.md")).read_text(encoding="utf-8")
+
+
+def test_the_terminal_runs_the_follow_up_at_once(tmp_path, monkeypatch):
+    """cli.run_turn: the plan is offered when the request ends, and "accept" carries it out in the same breath."""
+    from contextlib import nullcontext
+    from types import SimpleNamespace
+
+    from harness import cli
+    s = make_session(tmp_path, monkeypatch, mode="plan", files={"cart.py": "x = 1\n"})
+    s.ui.answers = ["a"]
+    s.agent.provider = ScriptedProvider([text(ANSWER), tool_calls(ToolCall("w", "write_file", {"path": "done.txt", "content": "ok"})),
+                                         *(text("All three steps done.") for _ in range(4))])
+    cli.run_turn(s, SimpleNamespace(watching=nullcontext), "plan the fix")
+    users = [m.content for m in s.agent.messages if m.role == "user" and m.checkpoint]
+    assert users[0] == "plan the fix" and users[1].startswith(IMPLEMENT) and (s.ws.root / "done.txt").exists()
 
 
 # --- the commands ----------------------------------------------------------------------------------------------------------

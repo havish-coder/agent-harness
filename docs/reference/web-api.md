@@ -13,7 +13,7 @@ Everything is JSON over HTTP on `127.0.0.1`; every request needs the key (see [w
 | `GET /events?after=N` | | the event stream from event `N + 1` on (see below) |
 | `POST /api/send` | `{"text": "..."}` | `{"ok": true}`, or `409` while a request runs, `400` for no text |
 | `POST /api/stop` | `{}` | `{"stopping": true}`, or `false` when nothing runs |
-| `POST /api/answer` | `{"id": "q3", "answer": ...}` | answer the waiting question: `"yes"`, `"no"` or `"always"` (if offered) for an approval, an option's key (or `""`) for a choice, text (at most 4,000 characters) for text. `{"ok": true}`, `400` for an answer it can't be, `409` when that question isn't waiting (answered already, or stopped) |
+| `POST /api/answer` | `{"id": "q3", "answer": ...}` | answer the waiting question: `"yes"`, `"no"` or `"always"` (if offered) for an approval, an option's key (or `""`) for a choice, text (at most 10,000 characters: an edited plan) for text. `{"ok": true}`, `400` for an answer it can't be, `409` when that question isn't waiting (answered already, or stopped) |
 | `GET /api/chats` | | `{"current", "saving", "workspace", "chats": [{"id", "title", "age", "messages", "model"}], "projects": [{"path", "name", "current"}]}` |
 | `GET /api/journal` | | `{"mode", "active", "exists", "updated", "by", "tainted", "body"}` (secrets hidden) |
 | `GET /api/settings` | | `{"provider", "model", "base_url", "providers": [{"name", "key", "key_set"}], "models", "styles", "style", "context_window", "config"}`: `key` is the name of the variable, `key_set` whether it is set; the value is never sent |
@@ -53,7 +53,7 @@ and a `: ping` comment every 15 s when nothing happens. A client that reconnects
 
 | `type` | Fields | When |
 |---|---|---|
-| `user` | `text` | a request was accepted (shown in every open page) |
+| `user` | `text` | a request was accepted (shown in every open page), or the harness sent one for you: after you accept a plan, the request that carries it out |
 | `busy` | `busy`, `status` (when it ends) | a request started or ended |
 | `context` | `tokens`, `window`, `level` | before each model call ([context](../user-guide/context.md)) |
 | `model_call` | | the model is being asked |
@@ -68,7 +68,7 @@ and a `: ping` comment every 15 s when nothing happens. A client that reconnects
 | `todos` | `items`: `[{content, status}]` | the todo list changed |
 | `task` | `id`, `command`, `text` | a background command ended |
 | `subagent` | `name`, `what` (`start`, `tool_call`, `end`), `info` | a sub-agent started, called a tool, finished |
-| `question` | `id`, `kind`; for `approval`: `call_id`, `tool`, `args`, `preview` (the diff), `reason`, `notes`, `destructive`, `always` (what "always" would allow, or `null`); for `choice`: `question`, `options` (`{key: label}`); for `text`: `question` | the agent waits for an answer (`POST /api/answer`) |
+| `question` | `id`, `kind`; for `approval`: `call_id`, `tool`, `args`, `preview` (the diff), `reason`, `notes`, `destructive`, `always` (what "always" would allow, or `null`); for `choice`: `question`, `options` (`{key: label}`); for `text`: `question`, `default` (the text the box starts with: the plan, when you edit one) | the agent waits for an answer (`POST /api/answer`) |
 | `answered` | `id`, `answer` (`true`/`false` for text: whether something was typed) | a question was answered, or Stop answered it |
 | `plan` | `text`, `markdown` | plan mode proposes a plan; a `choice` question follows |
 | `conversation` | | the conversation was replaced or cut (another chat or project, `/rewind`, `/compact`): draw it again from `/api/state` |

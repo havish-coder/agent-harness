@@ -8,6 +8,21 @@ is below 1.0, minor releases may contain breaking changes.
 
 ## [Unreleased]
 
+### Changed
+- The agent takes any task in any language (ADR 0057). Asked for a C++ trie, it had answered that the request was unrelated to the
+  project, because the project's progress journal (a goal about a Python shop) was in its prompt. The role now opens with "a coding agent
+  for any task in any programming language" and says the workspace is where it works, not a limit. The prompt ends with a hand-over line
+  ("The user's next message is your task ..."), and the journal and memory headers say the request comes first. Measured with
+  `scripts/generic_lab.py` (six requests unrelated to the project, C++, Rust, bash, JavaScript and an essay, 3 runs each, with that
+  journal present): refused 9 of 18 before, 0 after; done 7 before, 17 after. The first wording tried (one more line in the role)
+  changed nothing.
+- Plan mode ends with your choice, also when the model writes its plan as its answer (ADR 0056). Small models rarely call
+  `exit_plan_mode`, so the harness offers a plan-shaped answer itself, with the same choices: **Accept and implement** (asking before each
+  change, or accepting file edits), **Edit the plan myself** (in the web UI, a box with the plan in it), **Revise** (say what to change) and
+  **Keep planning**. Accepting carries the plan out at once: the harness sends the request for you.
+  Measured with `scripts/plan_lab.py` (the six-part request, 5 runs): the choices came at the end of 5 runs of 5 (before 0), nothing
+  changed before the approval, and 3.8 of the six parts were done on average (before 0).
+
 ## [0.8.0] - 2026-10-08
 
 The web release. `harness --web` opens the same agent in your browser: the conversation streamed as Markdown, a graph of the agent's
