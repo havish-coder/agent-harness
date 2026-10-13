@@ -1,0 +1,24 @@
+{
+  "name": "code-review",
+  "version": "1.0.0",
+  "description": "A /review command: reviews your uncommitted changes, or a file you name, for the language and strictness you choose.",
+  "options": {
+    "language": {
+      "type": "choice",
+      "choices": ["any", "python", "cpp", "javascript", "typescript", "rust", "go", "java"],
+      "default": "any",
+      "description": "your project's language, for the conventions the review checks"
+    },
+    "strictness": {
+      "type": "choice",
+      "choices": ["gentle", "normal", "strict"],
+      "default": "normal",
+      "description": "gentle: bugs only; normal: bugs and unclear code; strict: also naming, style and missing tests"
+    },
+    "max_findings": {
+      "type": "number",
+      "default": 5,
+      "description": "at most this many findings, the most important first"
+    }
+  }
+}

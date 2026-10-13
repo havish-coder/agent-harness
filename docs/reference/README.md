@@ -7,3 +7,4 @@ Exact, complete descriptions for looking things up.
 - [Tools](tools.md): every tool the model can call
 - [Events](events.md): what the agent loop reports while it works
 - [Web API](web-api.md): the web UI's endpoints and event stream
+- [Writing a plugin](writing-a-plugin.md): `plugin.json`, options, placeholders and limits

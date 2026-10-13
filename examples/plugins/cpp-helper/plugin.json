@@ -1,0 +1,24 @@
+{
+  "name": "cpp-helper",
+  "version": "1.0.0",
+  "description": "C++ know-how for the agent (a skill it loads when a task is about C++) and a /cpp-test command that builds and runs a file.",
+  "options": {
+    "compiler": {
+      "type": "choice",
+      "choices": ["g++", "clang++", "cl"],
+      "default": "g++",
+      "description": "the compiler on your computer (cl is Microsoft's, from a Developer Command Prompt)"
+    },
+    "standard": {
+      "type": "choice",
+      "choices": ["c++17", "c++20", "c++23"],
+      "default": "c++17",
+      "description": "the C++ standard to write and compile for"
+    },
+    "warnings": {
+      "type": "boolean",
+      "default": true,
+      "description": "compile with all warnings on (-Wall -Wextra, or /W4 with cl)"
+    }
+  }
+}

@@ -573,6 +573,42 @@ async function settingsDrawer(box) {
   for (const name of s.styles) style.appendChild(new Option(name, name, false, name === s.style));
   style.addEventListener("change", () => send("/style " + style.value));
   box.appendChild(style).classList.add("pill");
+  box.appendChild(el("h3", "", "Plugins"));                              // Lesson 61: everything goes as a /plugin command
+  if (!s.plugins.length) box.appendChild(el("div", "hint", "None installed. A plugin adds commands, skills, agents and styles, with options you set."));
+  for (const p of s.plugins) {
+    const card = box.appendChild(el("div", "plugin"));
+    const on = el("input");
+    on.type = "checkbox";
+    on.checked = p.enabled;
+    on.addEventListener("change", () => send(`/plugin ${on.checked ? "enable" : "disable"} ${p.name}`));
+    const name = card.appendChild(el("label", "plugin-name"));
+    name.append(on, `${p.name} ${p.version}`);
+    card.appendChild(el("div", "hint", p.description));
+    const adds = Object.entries(p.adds).map(([kind, names]) => `${kind}: ${names.map((n) => (kind === "commands" ? "/" : "") + n).join(", ")}`);
+    card.appendChild(el("div", "hint", adds.join(" · ")));
+    for (const o of p.options) {
+      const field = card.appendChild(el("div", "field"));
+      let input;
+      if (o.type === "choice" || o.type === "boolean") {
+        input = el("select");
+        for (const c of o.type === "boolean" ? ["true", "false"] : o.choices) input.appendChild(new Option(c, c, false, String(o.value) === c));
+      } else {
+        input = el("input");
+        input.value = o.value;
+        if (o.type === "number") input.type = "number";
+      }
+      input.addEventListener("change", () => send(`/plugin config ${p.name} ${o.key} ${input.value}`));
+      field.append(el("span", "label", o.key + (o.description ? `: ${o.description}` : "")), input);
+    }
+    button(card.appendChild(el("div", "row-buttons")), "Remove", "option", () => { closeDrawer(); send(`/plugin remove ${p.name}`); });
+  }
+  const source = el("input");
+  source.placeholder = "a plugin folder, or a git address";
+  box.appendChild(el("div", "field")).appendChild(source);
+  button(box.appendChild(el("div", "row-buttons")), "Install", "yes", () => {
+    if (source.value.trim()) { closeDrawer(); send("/plugin install " + source.value.trim()); }
+  });
+  box.appendChild(el("div", "hint", "A plugin's text becomes instructions the agent follows: read it before you install it. Plugins can't run programs."));
   box.appendChild(el("h3", "", "Settings in effect"));
   box.appendChild(el("pre", "", s.config));
   box.appendChild(el("div", "hint", "Change them in ~/.harness/settings.json or the project's .harness/settings.json, then start the server again."));

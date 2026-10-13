@@ -37,7 +37,7 @@ from urllib.parse import parse_qs, urlparse
 
 import httpx
 
-from harness import config
+from harness import config, plugins
 from harness.chats import ChatStore
 from harness.cli import announce, handle_line
 from harness.commands import load_commands, resume_text
@@ -475,7 +475,7 @@ class WebApp:
                               for p in PROVIDERS],
                 "models": ollama_models(s.settings.base_url) if s.settings.provider == "ollama" else [],
                 "styles": list(s.styles), "style": s.style.name, "context_window": s.context.window, "window_reason": s.window_reason, "window_setting": s.settings.context_window,
-                "config": describe(s.settings)}
+                "config": describe(s.settings), "plugins": plugins.as_json(config.USER_DIR)}      # Lesson 61
 
     def stop(self) -> bool:
         if not self.busy:

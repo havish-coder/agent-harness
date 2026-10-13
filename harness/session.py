@@ -449,6 +449,17 @@ class Session:
         if rebuild:
             self.rebuild_prompt()
 
+    def reload_plugins(self) -> None:
+        """A plugin was installed, removed, turned on or off, or set up (Lesson 61): read its skills, agents and styles again, and the
+        prompt. The commands are read again by whoever holds the registry (cli.handle_line)."""
+        from harness.styles import load_styles
+        self.reload_skills(rebuild=False)
+        self.reload_agents()
+        self.styles = load_styles(self.ws.root)[0]
+        self.style = self.styles.get(self.style.name) or self.styles["default"]   # a plugin's style that went away: back to the default
+        self.settings.output_style = self.style.name
+        self.rebuild_prompt()
+
     # --- background tasks (Lesson 48) ------------------------------------------------------------------
     def task_notes(self) -> list[str]:
         """Background tasks that ended since this was last asked, as notes for the model (the agent says them between steps)."""

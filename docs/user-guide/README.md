@@ -16,6 +16,7 @@ you haven't installed it yet.
 - [Sub-agents](sub-agents.md): hand a job to a fresh agent and get back only its report
 - [Commands in the background](background-tasks.md): start a long command, keep working, hear when it ends
 - [Skills](skills.md): instructions loaded when they are needed, started by name
+- [Plugins](plugins.md): someone's commands, skills, agents and styles in one step, set up with your options
 - [Tool search](tool-search.md): rarely used tools are described only when the agent asks for them
 - [MCP servers](mcp.md): tools from other programs; what they may do, and why their results are untrusted
 - [Worktrees](worktrees.md): a separate checkout for each session, so two can change one project at once

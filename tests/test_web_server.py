@@ -558,3 +558,19 @@ def test_the_hub_keeps_the_newest_events_and_restarts_for_a_page_from_another_se
 
 def test_the_flag():
     assert parse_args(["--web"]).web == DEFAULT_PORT and parse_args(["--web", "0"]).web == 0 and parse_args([]).web is None
+
+
+def test_settings_show_the_plugins_with_their_options(web, tmp_path):
+    """Lesson 61: the page's Settings draw a switch and a form per plugin from this."""
+    from pathlib import Path
+
+    from harness.plugins import install, set_option
+    w = web([])
+    examples = Path(__file__).resolve().parents[1] / "examples" / "plugins"
+    assert w.client.get("/api/settings").json()["plugins"] == []
+    install(str(examples / "code-review"), tmp_path / "home")
+    set_option("code-review", "strictness", "strict", tmp_path / "home")
+    [p] = w.client.get("/api/settings").json()["plugins"]
+    assert (p["name"], p["version"], p["enabled"], p["adds"]) == ("code-review", "1.0.0", True, {"commands": ["review"]})
+    strict = next(o for o in p["options"] if o["key"] == "strictness")
+    assert (strict["type"], strict["value"], strict["default"], strict["choices"]) == ("choice", "strict", "normal", ["gentle", "normal", "strict"])

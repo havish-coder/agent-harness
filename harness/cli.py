@@ -176,6 +176,8 @@ def handle_line(session: Session, watcher, commands, line: str) -> bool:
         return False
     elif command.kind == "local":
         output = command.run(session, rest)
+        if command.name == "plugin":                    # a plugin brings commands: read them again, for both interfaces (Lesson 61)
+            commands.refill(load_commands(session.ws.root))
         if isinstance(output, Send):                    # the command also has a request for the agent (Lesson 45)
             if output.notice:
                 ui.info(output.notice)

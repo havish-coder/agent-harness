@@ -72,7 +72,8 @@ The two buttons at the bottom of the rail open drawers:
   address. The conversation carries on with the new model. API keys are never typed here: the drawer says whether the provider's variable
   (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY` ...) is set; set it in your environment or a `.env` file ([models](models.md)) and start the
   server again. Connecting restarts background commands and MCP servers. Below: the **context window** (its size and why; type a size
-  and **Apply**, or **Auto: fit my GPU**: [a bigger window](context.md#a-bigger-window)), the output style, and every setting in effect with where
+  and **Apply**, or **Auto: fit my GPU**: [a bigger window](context.md#a-bigger-window)), the output style, your **plugins** (a switch
+  and a form for each one's options, and a box to install one: [plugins](plugins.md)), and every setting in effect with where
   it came from (edit them in the settings files, [configuration](configuration.md)).
 - The **Journal** tab shows the project's [progress journal](journal.md): **Start** keeps one, **Update now** writes it, **Stop** stops
   reading and writing it (the file stays).

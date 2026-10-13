@@ -17,6 +17,13 @@ is below 1.0, minor releases may contain breaking changes.
 - `/window [TOKENS|16k|auto]` changes the window while you work (the model server, the budget, the prompt and tool search follow; a
   smaller window than the conversation clears old results to fit), and Settings in the web UI has a **Context window** section.
   `--context-window` and `HARNESS_CONTEXT_WINDOW` take `auto` too.
+- Plugins (ADR 0060): a folder of commands, skills, sub-agents and output styles with a `plugin.json` that declares **options**
+  (string, number, boolean, choice). `/plugin install PATH|GIT_URL` (a shallow clone, without its history), `enable`, `disable`, `remove`,
+  `config NAME KEY VALUE`; `{{option}}` in a plugin's text is filled with your value. Text only: a plugin can't run a program, add a hook
+  or an MCP server, or change a permission; yours win every name clash; links, plugins over 2 MB and secret-looking values are refused.
+  The web UI's Settings show each plugin with a switch and a form for its options. Two examples in `examples/plugins/`: `code-review`
+  (`/review`, with language and strictness) and `cpp-helper` (a C++ skill and `/cpp-test`, with your compiler and standard). User guide:
+  [plugins](docs/user-guide/plugins.md); reference: [writing a plugin](docs/reference/writing-a-plugin.md).
 
 ### Changed
 - The run graph is laid out once per node and never moves (ADR 0059). Requests sit on a timeline, their tool calls on rings of numbered

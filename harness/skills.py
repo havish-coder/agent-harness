@@ -62,9 +62,11 @@ def bundled_files(root: Path) -> list[str]:
 
 def load_skills(workspace: Path, user_dir: Path, trusted: bool) -> tuple[dict[str, Skill], list[str]]:
     """Your skills, then (in a trusted folder) the project's; a project's can't replace one of yours. Returns (skills, warnings)."""
+    from harness.plugins import folders
     found: dict[str, Skill] = {}
     warnings: list[str] = []
-    for folder, source in ((Path(user_dir) / "skills", "user"), (Path(workspace) / ".harness" / "skills", "project")):
+    places = [(Path(user_dir) / "skills", "user", None), (Path(workspace) / ".harness" / "skills", "project", None)]
+    for folder, source, fill in places + folders(user_dir, "skills"):        # plugins last: yours win (Lesson 61)
         if not folder.is_dir():
             continue
         entries = sorted(p for p in folder.iterdir() if (p / FILE_NAME).is_file())
@@ -73,7 +75,8 @@ def load_skills(workspace: Path, user_dir: Path, trusted: bool) -> tuple[dict[st
                 warnings.append(f"{len(entries)} skill(s) in {folder} were not read: this folder isn't trusted (/trust if you wrote them)")
             continue
         for path in entries:
-            meta, body = parse_frontmatter((path / FILE_NAME).read_text(encoding="utf-8", errors="replace"))
+            text = (path / FILE_NAME).read_text(encoding="utf-8", errors="replace")
+            meta, body = parse_frontmatter(fill(text) if fill else text)
             name = (meta.get("name") or path.name).lower()
             if not NAME.match(name):
                 warnings.append(f"{path / FILE_NAME}: skill names use a-z, 0-9 and '-'; skipped")
@@ -83,6 +86,9 @@ def load_skills(workspace: Path, user_dir: Path, trusted: bool) -> tuple[dict[st
                 continue
             if source == "project" and name in found:
                 warnings.append(f"{path / FILE_NAME}: a project can't replace your skill '{name}'; skipped")
+                continue
+            if fill and name in found:
+                warnings.append(f"{path / FILE_NAME}: {source} can't replace the skill '{name}' ({found[name].source}'s); skipped")
                 continue
             description = meta.get("description") or next((ln for ln in body.splitlines() if ln.strip()), "")
             user_only = meta.get("user-only", meta.get("user_only", "")).lower() in ("true", "yes", "1")

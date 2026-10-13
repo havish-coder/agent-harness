@@ -87,7 +87,12 @@ class CommandRegistry:
             lines.append(f"{label:<28} {c.description}{origin}{alias}")
         return "\n".join(lines)
 
-    def load_folder(self, folder: Path, source: str) -> None:
+    def refill(self, other: "CommandRegistry") -> None:
+        """Take another registry's commands in place: the terminal loop and the web server hold this object (Lesson 61)."""
+        self.commands, self.warnings = other.commands, other.warnings
+
+    def load_folder(self, folder: Path, source: str, fill=None) -> None:
+        """`fill`: a plugin's placeholders (Lesson 61); a plugin's command never replaces one that is already there."""
         if not folder.is_dir():
             return
         for path in sorted(folder.glob("*.md")):
@@ -100,7 +105,11 @@ class CommandRegistry:
                 # A cloned repository must not be able to change what /reset or /help does.
                 self.warnings.append(f"{path}: a project can't replace the built-in /{name}; skipped")
                 continue
-            meta, body = parse_frontmatter(path.read_text(encoding="utf-8"))
+            if fill and existing is not None:
+                self.warnings.append(f"{path}: {source} can't replace /{name} ({existing.source}'s); skipped")
+                continue
+            text = path.read_text(encoding="utf-8")
+            meta, body = parse_frontmatter(fill(text) if fill else text)
             if not body.strip():
                 self.warnings.append(f"{path}: empty command; skipped")
                 continue
@@ -252,6 +261,66 @@ def _skills(session, args):
         extra = ", ".join(x for x in (f"{len(s.files)} file{'s' if len(s.files) != 1 else ''}" if s.files else "", "only you can start it" if s.user_only else "") if x)
         rows.append(f"{s.name:<18} {s.source:<8} {s.description}" + (f"  ({extra})" if extra else ""))
     return "\n".join(rows)
+
+
+PLUGIN_USAGE = ("usage: /plugin · /plugin install [--force] PATH|GIT_URL · /plugin enable|disable|remove NAME · "
+                "/plugin config NAME [KEY VALUE]")
+
+
+def plugin_text(p, verbose: bool = False) -> str:
+    """One plugin for /plugin: on or off, what it adds, its options (with what each means when `verbose`)."""
+    adds = " · ".join(f"{kind} " + ", ".join(("/" if kind == "commands" else "") + n for n in names) for kind, names in p.contents().items())
+    lines = [f"{p.name} {p.version} ({'on' if p.enabled else 'off'}): {p.description}", f"  adds: {adds}"]
+    for o in p.options.values():
+        value = p.value(o.name)
+        shown = ("true" if value else "false") if isinstance(value, bool) else value
+        kind = ", ".join(o.choices) if o.type == "choice" else o.type
+        lines.append(f"  {o.name} = {shown} ({kind})" + (f": {o.description}" if verbose and o.description else ""))
+    return "\n".join(lines)
+
+
+def _plugin(session, args):
+    """/plugin [install [--force] PATH|URL | enable|disable|remove NAME | config NAME [KEY VALUE]] (Lesson 61)."""
+    from harness import config, plugins
+    user = config.USER_DIR
+    verb, _, rest = args.strip().partition(" ")
+    verb, rest = verb.lower(), rest.strip()
+    try:
+        if not verb:
+            found, warnings = plugins.installed(user)
+            if not found:
+                return ("no plugins: /plugin install PATH or GIT_URL adds one (examples/plugins in the repository has two). "
+                        "A plugin is text: commands, skills, agents and styles, with options you set")
+            return "\n".join([plugin_text(p) for p in found] + [f"warning: {w}" for w in warnings])
+        if verb == "install":
+            force = rest.startswith("--force")
+            source = rest[len("--force"):].strip() if force else rest
+            if not source:
+                return PLUGIN_USAGE
+            p = plugins.install(source.strip('"'), user, force)
+            session.reload_plugins()
+            return (f"installed {plugin_text(p)}\nA plugin's text becomes instructions the agent follows, like your own files in "
+                    f"~/.harness. Read it before you use it: {p.root}")
+        name, _, more = rest.partition(" ")
+        if verb in ("enable", "disable", "remove") and name and not more:
+            if verb == "remove":
+                plugins.remove(name, user)
+            else:
+                plugins.set_enabled(name, user, verb == "enable")
+            session.reload_plugins()
+            return f"{name}: {'removed' if verb == 'remove' else 'on' if verb == 'enable' else 'off'}"
+        if verb == "config" and name:
+            key, _, value = more.strip().partition(" ")
+            if not key:
+                return plugin_text(plugins.find(name, user), verbose=True)
+            if not value.strip():
+                return f"usage: /plugin config {name} {key} VALUE"
+            set_to = plugins.set_option(name, key, value.strip(), user)
+            session.reload_plugins()
+            return f"{name}: {key} = {('true' if set_to else 'false') if isinstance(set_to, bool) else set_to}"
+    except plugins.PluginError as e:
+        return f"plugin: {e}"
+    return PLUGIN_USAGE
 
 
 def _tasks(session, args):
@@ -751,6 +820,8 @@ def builtin_commands() -> list[Command]:
         Command("plan", "plan mode: the agent looks and proposes a plan; nothing changes until you approve it", run=_plan,
                 argument_hint="[TASK|show|off]"),
         Command("skills", "the skills the agent can load; `reload` reads them again", run=_skills, argument_hint="[reload]"),
+        Command("plugin", "plugins: someone's commands, skills, agents and styles, with your options", run=_plugin,
+                argument_hint="[install PATH|URL | enable|disable|remove NAME | config NAME [KEY VALUE]]", aliases=("plugins",)),
         Command("tasks", "the commands running in the background; `stop ID`, `output ID [LINES]`", run=_tasks, argument_hint="[stop ID | output ID [LINES]]"),
         Command("agents", "the sub-agents the agent can hand jobs to; `reload` reads the definitions again", run=_agents, argument_hint="[reload]"),
         Command("todo", "the agent's todo list for this request; `clear` empties it", run=_todo, argument_hint="[clear]"),
@@ -796,6 +867,9 @@ def load_commands(workspace: Path) -> CommandRegistry:
         registry.add(command)
     registry.load_folder(USER_DIR / "commands", "user")
     registry.load_folder(workspace / ".harness" / "commands", "project")
+    from harness import config, plugins
+    for folder, source, fill in plugins.folders(config.USER_DIR, "commands"):      # last: yours win (Lesson 61)
+        registry.load_folder(folder, source, fill)
     from harness.security.trust import is_trusted
     from harness.skills import command_text, load_skills
     skills, _ = load_skills(workspace, USER_DIR, is_trusted(workspace, USER_DIR))

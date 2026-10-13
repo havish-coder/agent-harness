@@ -15,6 +15,7 @@ send a ready-made request to the model.
 | `/agents [reload]` | the sub-agents the agent can hand jobs to ([sub-agents](sub-agents.md)) |
 | `/tasks [stop ID \| output ID [LINES]]` | the commands running in the background ([background tasks](background-tasks.md)) |
 | `/skills [reload]` | the skills the agent can load; each is also a command ([skills](skills.md)) |
+| `/plugin [install PATH\|URL \| enable\|disable\|remove NAME \| config NAME [KEY VALUE]]` | plugins: someone's commands, skills, agents and styles, set up with your options ([plugins](plugins.md)) |
 | `/todo [clear]` | the agent's todo list for this request ([todo](todo.md)) |
 | `/plan [TASK\|show\|off]` | plan mode: the agent proposes, you approve; with a task, turns it on and sends the task ([plan mode](plan-mode.md)) |
 | `/undo [show\|force]` | put back the files the last request changed; a file you edited since is left alone unless `force` ([undo](undo.md)) |

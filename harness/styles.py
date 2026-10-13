@@ -43,9 +43,12 @@ BUILTIN = [
 
 def load_styles(workspace: Path) -> tuple[dict[str, Style], list[str]]:
     """Built-ins, then ~/.harness/styles, then <workspace>/.harness/styles. Returns (styles, warnings)."""
+    from harness import config
+    from harness.plugins import folders
     styles = {s.name: s for s in BUILTIN}
     warnings = []
-    for folder, source in ((USER_DIR / "styles", "user"), (workspace / ".harness" / "styles", "project")):
+    places = [(USER_DIR / "styles", "user", None), (workspace / ".harness" / "styles", "project", None)]
+    for folder, source, fill in places + folders(config.USER_DIR, "styles"):   # plugins last: yours win (Lesson 61)
         if not folder.is_dir():
             continue
         for path in sorted(folder.glob("*.md")):
@@ -57,7 +60,11 @@ def load_styles(workspace: Path) -> tuple[dict[str, Style], list[str]]:
             if source == "project" and existing is not None and existing.source == "built-in":
                 warnings.append(f"{path}: a project can't replace the built-in style '{name}'; skipped")
                 continue
-            meta, body = parse_frontmatter(path.read_text(encoding="utf-8"))
+            if fill and existing is not None:
+                warnings.append(f"{path}: {source} can't replace the style '{name}' ({existing.source}'s); skipped")
+                continue
+            text = path.read_text(encoding="utf-8")
+            meta, body = parse_frontmatter(fill(text) if fill else text)
             if not body.strip():
                 warnings.append(f"{path}: empty style; skipped")
                 continue

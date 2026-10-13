@@ -25,6 +25,9 @@ that can read your files, change them, run commands and fetch web pages.
 - **Workflows add no way around the rules.** Sub-agents share your permissions, taint record and limits; a background command is
   `run_shell`, judged like any other; plan mode refuses changes in the permission layer and ends only with your answer; a skill is
   text, never a permission; the agent's questions are labelled, limited and warned about after untrusted reading.
+- **Plugins are text only, and yours.** A plugin adds commands, skills, agents and styles; it can't run a program, add a hook or an
+  MCP server, or change a permission. Only you install one, it never replaces a name already taken, and secret-looking option values
+  are refused. Read a plugin before installing it: its text becomes instructions the agent follows.
 - **MCP servers come only from your user settings.** Their tools always ask (a server's claim that a tool only reads is ignored), what
   they return is untrusted content unless you mark the server trusted, and a server gets a secret environment variable only if you name it.
 - **A `settings.local.json` that git tracks** came with the repository: until you trust the folder it has a project file's limits.

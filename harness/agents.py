@@ -91,9 +91,11 @@ BUILTIN = [
 
 def load_agents(workspace: Path, user_dir: Path, trusted: bool) -> tuple[dict[str, AgentDef], list[str]]:
     """Built-ins, then the user's definitions, then (in a trusted folder) the project's. Returns (definitions, warnings)."""
+    from harness.plugins import folders
     found = {a.name: replace(a) for a in BUILTIN}          # copies: a session changing one must not change them for the next
     warnings: list[str] = []
-    for folder, source in ((Path(user_dir) / "agents", "user"), (Path(workspace) / ".harness" / "agents", "project")):
+    places = [(Path(user_dir) / "agents", "user", None), (Path(workspace) / ".harness" / "agents", "project", None)]
+    for folder, source, fill in places + folders(user_dir, "agents"):        # plugins last: yours win (Lesson 61)
         if not folder.is_dir():
             continue
         files = sorted(folder.glob("*.md"))
@@ -102,13 +104,17 @@ def load_agents(workspace: Path, user_dir: Path, trusted: bool) -> tuple[dict[st
                 warnings.append(f"{len(files)} agent definition(s) in {folder} were not read: this folder isn't trusted (/trust if you wrote them)")
             continue
         for path in files:
-            meta, body = parse_frontmatter(path.read_text(encoding="utf-8", errors="replace"))
+            text = path.read_text(encoding="utf-8", errors="replace")
+            meta, body = parse_frontmatter(fill(text) if fill else text)
             name = (meta.get("name") or path.stem).lower()
             if not NAME.match(name):
                 warnings.append(f"{path}: agent names use a-z, 0-9 and '-'; skipped")
                 continue
             if source == "project" and name in found and found[name].source == "built-in":
                 warnings.append(f"{path}: a project can't replace the built-in agent '{name}'; skipped")
+                continue
+            if fill and name in found:
+                warnings.append(f"{path}: {source} can't replace the agent '{name}' ({found[name].source}'s); skipped")
                 continue
             if not body.strip():
                 warnings.append(f"{path}: empty agent; skipped")
