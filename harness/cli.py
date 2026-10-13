@@ -31,6 +31,16 @@ from harness.workspace import Workspace
 __all__ = ["SYSTEM_PROMPT", "main"]
 
 
+def window_arg(value: str):
+    """--context-window: a number of tokens or auto (Lesson 59)."""
+    if value.strip().lower() == "auto":
+        return "auto"
+    try:
+        return int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{value!r} is neither a number of tokens nor auto") from None
+
+
 def parse_args(argv=None):
     p = argparse.ArgumentParser(description="Chat with a coding agent in your terminal.")
     # Defaults live in harness/config.py; a flag left as None means "not given" (Lesson 20).
@@ -41,8 +51,8 @@ def parse_args(argv=None):
                    help="a model (same provider) to try when the main one keeps failing")
     p.add_argument("--workspace", default="workspace", help="folder the agent works in")
     p.add_argument("--max-steps", type=int, default=None)
-    p.add_argument("--context-window", type=int, default=None, metavar="TOKENS",
-                   help="the model's window in tokens (Ollama's num_ctx; default 8192). Bigger costs memory and speed")
+    p.add_argument("--context-window", type=window_arg, default=None, metavar="TOKENS|auto",
+                   help="the model's window in tokens (Ollama's num_ctx), or auto (the default): the largest that fits your GPU")
     p.add_argument("--mode", default=None, choices=MODES,
                    help="permission mode: " + "; ".join(f"{m}: {h}" for m, h in MODE_HELP.items()))
     p.add_argument("--yes", action="store_true",
@@ -132,6 +142,7 @@ def announce(session: Session) -> None:
     """What to know before the first request: the journal read, the sandbox, a mode other than default, untrusted files.
     Shared by the terminal and the web page."""
     ui, settings = session.ui, session.settings
+    ui.info(f"context window: {session.window:,} tokens ({session.window_reason}) · /window changes it")      # Lesson 59
     banner = session.journal_banner()
     if banner:
         ui.info(banner)

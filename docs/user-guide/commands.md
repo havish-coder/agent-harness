@@ -32,6 +32,7 @@ send a ready-made request to the model.
 | `/mode [name]` | show the [permission modes](permissions.md), or switch to one |
 | `/trust`, `/untrust` | trust this folder, or stop: [untrusted content](untrusted-content.md) |
 | `/context` | where the conversation's tokens go, against the model's window ([details](context.md)) |
+| `/window [tokens\|auto]` | the context window's size and why; `/window 16384` (or `16k`) changes it for the session, `/window auto` sizes it for your GPU again ([details](context.md#change-it-while-you-work-window)) |
 | `/compact [what to keep in mind]` | replace the older conversation with a summary now, optionally telling the summary what matters ([details](context.md#summarising-the-conversation-compact)) |
 | `/prompt [full]` | the system prompt's sections and what each costs; `full` prints the text the model reads ([details](context.md#the-system-prompt)) |
 | `/audit [N\|verify]` | the [audit log](audit-and-limits.md): recent entries, or check the chain |

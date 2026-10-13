@@ -43,7 +43,7 @@ from harness.chats import Chat, ChatInfo, ChatStore, Replay, replay, title_from
 from harness.config import Settings, write_local_setting
 from harness.context.prompt import PROMPT_SHARE, Assembly, Section, assemble, environment_text
 from harness.context.tokens import ContextBudget, estimate_tokens
-from harness.context.windows import window_for
+from harness.context.windows import resolve_window
 from harness.filehistory import FileHistory, clean_name, listing, outcome_text, plan_text
 from harness.hooks import Hooks, from_entries
 from harness.journal import Journal, JournalFile, make_journal_tools
@@ -148,6 +148,8 @@ class Session:
             self.history = FileHistory(base, ws, on_problem=lambda text: ui.warn(f"warning: {text}"))
             if removed_chats:
                 self.history.sweep({i.id for i in self.store.infos()})
+        # the window before the provider: a local model's num_ctx is the window (Lesson 59: "auto" measures the GPU and the model)
+        self.window, self.window_reason = resolve_window(settings.provider, settings.model, settings.context_window, settings.base_url)
         self.provider = RetryingProvider(self.make_provider(settings.model), max_retries=settings.max_retries,
                                          fallback=self.make_provider(settings.fallback_model)
                                          if settings.fallback_model else None,
@@ -205,9 +207,7 @@ class Session:
         month = datetime.date.today().strftime("%Y-%m")
         self.audit_log = AuditLog(config.USER_DIR / "audit" / f"{month}.jsonl", self.session_id) if settings.audit_log else None
         self._audit_warned = False
-        window = window_for(settings.provider, self.provider.model, settings.context_window,
-                            settings.sources.get("context_window", "default") != "default")
-        self.context = ContextBudget(window, reserve=min(settings.max_output_tokens, window // 4))
+        self.context = ContextBudget(self.window, reserve=min(settings.max_output_tokens, self.window // 4))
         self.shell_name = detect_shell(settings.shell).name
         self.prompt = self.build_prompt()
         self.agent = Agent(self.provider, tools,
@@ -229,7 +229,7 @@ class Session:
     def make_provider(self, model: str | None):
         s = self.settings
         return make_provider(s.provider, model, s.base_url, temperature=s.temperature,
-                             think=True if s.think else None, context_window=s.context_window,
+                             think=True if s.think else None, context_window=self.window,
                              max_output_tokens=s.max_output_tokens)
 
     def account(self, kind, data) -> None:
@@ -1049,7 +1049,7 @@ class Session:
         cost = self.costs.cost()
         return {"provider": self.settings.provider, "model": self.provider.model,
                 "context_tokens": self.estimate_context(),
-                "context_window": self.context.window,
+                "context_window": self.context.window, "window_reason": self.window_reason,
                 "cost": None if cost is None else round(cost, 6), "style": self.style.name,
                 "mode": self.permissions.mode, "tasks_running": sum(t.running for t in self.tasks.tasks.values()) if self.tasks else 0,
                 "workspace": str(self.ws.root), "turns": sum(m.role == "user" for m in self.agent.messages)}
@@ -1087,6 +1087,22 @@ class Session:
                 self.ui.warn("warning: the status_line command failed or took longer than 2 s")
                 self._status_error_shown = True
             return None
+
+    def set_window(self, value) -> str:
+        """Change the context window while the chat goes on (Lesson 59): `value` is a number of tokens or "auto". The model server is asked
+        for the new size (Ollama reloads the model once), the budget and the system prompt follow. Returns why it is this size."""
+        s = self.settings
+        s.context_window, s.sources["context_window"] = value, "command"
+        self.window, self.window_reason = resolve_window(s.provider, self.provider.model, value, s.base_url)
+        self.provider.inner = self.make_provider(self.provider.model)
+        if self.provider.fallback is not None:
+            self.provider.fallback = self.make_provider(s.fallback_model)
+        self.context = self.agent.context = ContextBudget(self.window, reserve=min(s.max_output_tokens, self.window // 4),
+                                                          calibrator=self.context.calibrator)    # same model, same tokens
+        self.rebuild_prompt()                     # the prompt's share of the window changed
+        self.apply_tool_search()
+        self.audit("window", tokens=self.window, why=self.window_reason)
+        return self.window_reason
 
     def switch_model(self, model: str) -> None:
         """Keep the conversation, change the model (same provider)."""

@@ -45,7 +45,7 @@ class Settings:
     base_url: str | None = None
     fallback_model: str | None = None
     temperature: float | None = None
-    context_window: int = 8192          # Ollama's num_ctx
+    context_window: int | str = "auto"  # tokens, or "auto": sized from the GPU and the model (Lesson 59); a local model's num_ctx
     max_output_tokens: int = 4096       # per reply; stops a model stuck repeating itself
     max_steps: int = 20
     stream: bool = True
@@ -109,7 +109,7 @@ def layer_files(workspace: Path) -> list[tuple[str, Path]]:
 TYPES: dict[str, tuple] = {
     "provider": (str,), "model": (str, type(None)), "base_url": (str, type(None)),
     "fallback_model": (str, type(None)), "temperature": (int, float, type(None)),
-    "context_window": (int,), "max_output_tokens": (int,), "max_steps": (int,), "stream": (bool,), "think": (bool,),
+    "context_window": (int, str), "max_output_tokens": (int,), "max_steps": (int,), "stream": (bool,), "think": (bool,),
     "shell": (str, type(None)), "max_retries": (int,), "prices": (dict,),
     "output_style": (str,), "status_line": (str, type(None)), "additional_directories": (list,),
     "permission_mode": (str,), "permissions": (dict,), "shell_env_keep": (list,), "fence_untrusted": (bool,), "web_fetch": (bool,), "hooks": (dict,), "audit_log": (bool,), "sandbox": (str,), "sandbox_network": (bool,), "redact_secrets": (bool,),
@@ -177,8 +177,8 @@ def check_layer(data: dict, where: str) -> list[str]:
             check_rules(value, where)
         if key == "limits":
             check_limits(value, where)
-        if key == "context_window" and value < MIN_WINDOW:
-            raise ConfigError(f"{where}: 'context_window' must be at least {MIN_WINDOW:,}: the tool definitions and the system prompt alone "
+        if key == "context_window" and (value != "auto" if isinstance(value, str) else value < MIN_WINDOW):
+            raise ConfigError(f"{where}: 'context_window' must be \"auto\" or at least {MIN_WINDOW:,}: the tool definitions and the system prompt alone "
                               "take 2,000 to 3,500 tokens, and a quarter of the window is kept for the reply")
         if key == "tool_search" and value not in TOOL_SEARCH_MODES:
             raise ConfigError(f"{where}: 'tool_search' must be one of {', '.join(TOOL_SEARCH_MODES)}")
@@ -250,7 +250,9 @@ def env_layer(environ) -> dict:
             continue
         kinds = TYPES[name]
         try:
-            if bool in kinds:
+            if name == "context_window" and raw.strip().lower() == "auto":
+                out[name] = "auto"
+            elif bool in kinds:
                 out[name] = raw.strip().lower() in ("1", "true", "yes", "on")
             elif float in kinds:
                 out[name] = float(raw)

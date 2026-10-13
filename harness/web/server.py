@@ -474,7 +474,8 @@ class WebApp:
                 "providers": [{"name": p, "key": key_variable(p), "key_set": bool(key_variable(p) and os.environ.get(key_variable(p)))}
                               for p in PROVIDERS],
                 "models": ollama_models(s.settings.base_url) if s.settings.provider == "ollama" else [],
-                "styles": list(s.styles), "style": s.style.name, "context_window": s.context.window, "config": describe(s.settings)}
+                "styles": list(s.styles), "style": s.style.name, "context_window": s.context.window, "window_reason": s.window_reason, "window_setting": s.settings.context_window,
+                "config": describe(s.settings)}
 
     def stop(self) -> bool:
         if not self.busy:

@@ -8,6 +8,16 @@ is below 1.0, minor releases may contain breaking changes.
 
 ## [Unreleased]
 
+### Added
+- The context window is sized for your GPU (ADR 0058). `context_window` is `"auto"` unless you set a number: for a local Ollama model the
+  harness reads the GPU's free memory (`nvidia-smi`, or Apple silicon's shared memory) and the model's shape (Ollama's `/api/show`), and
+  picks the largest multiple of 8,192 that keeps the whole model on the GPU (at least 8,192, at most the model's limit or 131,072; an
+  8-bit KV cache counts when flash attention is on). For `qwen3:4b-instruct`: 8,192 on a 4 GB GPU, 32,768 on 8 GB, 65,536 on 12 GB. It
+  says what it chose and why at start, in `/context`, `/window` and Settings. A number is always used as it is.
+- `/window [TOKENS|16k|auto]` changes the window while you work (the model server, the budget, the prompt and tool search follow; a
+  smaller window than the conversation clears old results to fit), and Settings in the web UI has a **Context window** section.
+  `--context-window` and `HARNESS_CONTEXT_WINDOW` take `auto` too.
+
 ### Changed
 - The agent takes any task in any language (ADR 0057). Asked for a C++ trie, it had answered that the request was unrelated to the
   project, because the project's progress journal (a goal about a Python shop) was in its prompt. The role now opens with "a coding agent

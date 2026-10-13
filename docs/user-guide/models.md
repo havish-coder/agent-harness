@@ -55,6 +55,6 @@ faster. Nothing to configure; very short prompts (below a model-specific minimum
 
 ## Local models: Ollama native vs. compatible
 Prefer `ollama` over `ollama-openai`. The native API lets the agent set the context window
-(8,192 tokens, or [bigger](context.md#a-bigger-window)); through the compatible endpoint Ollama uses its default, **4,096 tokens** on this
+(sized for your GPU, or the size you set: [a bigger window](context.md#a-bigger-window)); through the compatible endpoint Ollama uses its default, **4,096 tokens** on this
 setup, and quietly drops the oldest part of longer conversations. Switching between the two
 also makes Ollama reload the model.

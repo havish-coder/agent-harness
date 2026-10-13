@@ -680,6 +680,16 @@ async function settingsDrawer(box) {
     if (r.error) system("warn", r.error);
   });
   box.appendChild(el("div", "hint", "The chat carries on with the new model. Background commands and MCP servers are restarted."));
+  box.appendChild(el("h3", "", "Context window"));                     // Lesson 59
+  box.appendChild(el("div", "hint", `${s.context_window.toLocaleString()} tokens: ${s.window_reason}`));
+  const size = el("input");
+  size.placeholder = "tokens, e.g. 16384, or auto";
+  size.value = s.window_setting === "auto" ? "auto" : s.context_window;
+  box.appendChild(el("div", "field")).appendChild(size);
+  const sizes = box.appendChild(el("div", "row-buttons"));
+  button(sizes, "Apply", "yes", () => { closeDrawer(); send("/window " + size.value.trim()); });
+  button(sizes, "Auto: fit my GPU", "option", () => { closeDrawer(); send("/window auto"); });
+  box.appendChild(el("div", "hint", "A bigger window holds more of the conversation and files, and costs GPU memory and speed. Ollama reloads the model at the new size."));
   box.appendChild(el("h3", "", "Output style"));
   const style = el("select");
   for (const name of s.styles) style.appendChild(new Option(name, name, false, name === s.style));

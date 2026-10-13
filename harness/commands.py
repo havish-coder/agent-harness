@@ -493,9 +493,30 @@ def _context(session, args):
         lines.append(f"the model server last reported reading {session.reported_tokens:,} tokens"
                      + (f" (our estimate is calibrated by {status.estimated / max(status.raw, 1):.2f}x)"
                         if session.context.calibrator.samples else ""))
+    lines.append(f"window: {session.window_reason} · /window changes it")
     lines.append({"ok": "plenty of room", "warn": "getting full: long file reads and command output are what fills it",
                   "critical": "nearly full: the next big result may not fit", "full": "does not fit: /reset to start a new chat"}[status.level])
     return "\n".join(lines)
+
+
+def _window(session, args):
+    """/window [TOKENS|auto]: show or change the context window while the chat goes on (Lesson 59)."""
+    from harness.config import MIN_WINDOW
+    from harness.context.hardware import gb, model_facts
+    word = args.strip().lower().replace(",", "").replace("_", "")
+    if not word:
+        lines = [f"context window: {session.window:,} tokens ({session.window_reason})"]
+        facts = model_facts(session.provider.model, session.settings.base_url) if session.settings.provider == "ollama" else None
+        if facts is not None:
+            lines.append(f"{facts.name}: up to {facts.max_window:,} tokens; {gb(facts.weights)} of weights + "
+                         f"{gb(facts.per_token() * 8192)} of cache per 8K (half that with OLLAMA_KV_CACHE_TYPE=q8_0)")
+        lines.append("/window 16384 sets a size, /window auto sizes it for your GPU (the context guide has the trade-offs)")
+        return "\n".join(lines)
+    value = "auto" if word == "auto" else int(word[:-1]) * 1024 if word[:-1].isdigit() and word.endswith("k") else int(word) if word.isdigit() else None
+    if value is None or (value != "auto" and value < MIN_WINDOW):
+        return f"usage: /window [TOKENS|auto]: a number of at least {MIN_WINDOW:,} (16384, or 16k), or auto"
+    why = session.set_window(value)
+    return f"context window: {session.window:,} tokens ({why}). Ollama reloads the model once at the new size."
 
 
 def _progress(session, args):
@@ -743,6 +764,7 @@ def builtin_commands() -> list[Command]:
         Command("trust", "trust this folder: its files are yours, not untrusted content", run=_trust_command(True)),
         Command("untrust", "stop trusting this folder", run=_trust_command(False)),
         Command("context", "where the conversation's tokens go, against the model's window", run=_context),
+        Command("window", "show or change the context window: a size, or auto for your GPU", run=_window, argument_hint="[tokens|auto]"),
         Command("memory", "the HARNESS.md notes the agent was given; `reload` reads them again", run=_memory, argument_hint="[reload]"),
         Command("remember", "add a line to this project's HARNESS.md (--user: for every project, --local: just yours)", run=_remember,
                 argument_hint="[--user|--local] TEXT"),

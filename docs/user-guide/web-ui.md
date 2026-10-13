@@ -66,7 +66,8 @@ The two buttons at the bottom of the rail open drawers:
 - **Settings**: **Connect your LLM** chooses the provider, the model (Ollama's models are listed) and, if you need one, another server
   address. The conversation carries on with the new model. API keys are never typed here: the drawer says whether the provider's variable
   (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY` ...) is set; set it in your environment or a `.env` file ([models](models.md)) and start the
-  server again. Connecting restarts background commands and MCP servers. Below: the output style, and every setting in effect with where
+  server again. Connecting restarts background commands and MCP servers. Below: the **context window** (its size and why; type a size
+  and **Apply**, or **Auto: fit my GPU**: [a bigger window](context.md#a-bigger-window)), the output style, and every setting in effect with where
   it came from (edit them in the settings files, [configuration](configuration.md)).
 - The **Journal** tab shows the project's [progress journal](journal.md): **Start** keeps one, **Update now** writes it, **Stop** stops
   reading and writing it (the file stays).

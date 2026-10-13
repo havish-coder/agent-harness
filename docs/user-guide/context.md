@@ -1,7 +1,8 @@
 # The context window
 
-A model reads a fixed amount of text at once, its **context window**: `qwen3:4b-instruct` on Ollama
-reads 8,192 tokens by default (`--context-window`, or the `context_window` setting: [a bigger window](#a-bigger-window)), Claude models 200,000. A token is
+A model reads a fixed amount of text at once, its **context window**. With a local Ollama model the harness picks the
+size that fits your GPU (8,192 tokens for `qwen3:4b-instruct` on a 4 GB GPU, 65,536 on a 12 GB one: [a bigger window](#a-bigger-window)),
+and `/window` changes it while you work; Claude models read 200,000. A token is
 a piece of a word: about 3 to 4 characters of English, but as little as 2.4 characters in test output and
 tables, and **each digit counts as one and a half tokens**.
 
@@ -44,29 +45,85 @@ need, use `grep` before `read_file`, and start a new chat (`/reset`) for a new t
 A bigger window costs memory and speed: see [a bigger window](#a-bigger-window) below.
 
 ## A bigger window
-8,192 tokens is the default because it fits a small local model on a small GPU: the system prompt and the tool
-definitions take 2,000 to 3,500 of it before you type anything, and a quarter is kept for the reply. If `/context`
-shows the window filling up after a few files, make it bigger.
+The system prompt and the tool definitions take 2,000 to 3,500 tokens before you type anything, and a quarter of the window
+is kept for the reply, so an 8,192-token window fills after a few files. A bigger one holds more, but every token of it costs
+memory in the model server whether the conversation uses it yet or not, and what doesn't fit on the GPU runs on the CPU,
+much more slowly. So the harness sizes it for your computer, and you can change it at any time.
 
-### 1. Change the size
+### Auto: the size that fits your GPU
+`context_window` is `auto` unless you set a number. At start the harness works out, for a local Ollama model:
+
+1. **What the model needs**: Ollama's `/api/show` gives its layers, its KV heads, the size of each and its own longest window;
+   `/api/tags` the size of its weights. For each token in the window the model keeps keys and values for every layer (the
+   *KV cache*): `2 × layers × KV heads × head size × bytes per number`. For `qwen3:4b-instruct` that is
+   2 × 36 × 8 × 128 × 2 = 147,456 bytes a token, 1.2 GB per 8K.
+2. **What the GPU has**: the free memory `nvidia-smi` reports, plus what Ollama's loaded models hold (Ollama unloads them to
+   make room). On a Mac with Apple silicon, two thirds of the memory (what the GPU may use of it).
+3. **The size**: the largest multiple of 8,192 where the weights, the cache and about 0.4 GB of working buffers fit, so the whole
+   model stays on the GPU (that is what keeps answers fast). Never less than 8,192, never more than the model's own limit or
+   131,072 (set a number to go higher).
+
+What it picks for `qwen3:4b-instruct` by the GPU's memory (if all of it is free; a desktop and other programs use some):
+
+| GPU memory | auto | auto with an 8-bit cache ([below](#make-room-for-it-in-memory-ollama)) |
+|---|---|---|
+| 4 GB | 8,192 | 16,384 |
+| 6 GB | 16,384 | 40,960 |
+| 8 GB | 32,768 | 73,728 |
+| 12 GB | 65,536 | 131,072 |
+| 16 GB | 90,112 | 131,072 |
+| 24 GB | 131,072 | 131,072 |
+
+The 4 GB row is checked against the laptop the measurements below were made on (an RTX 3050): weights 2.5 GB + cache 1.2 GB +
+buffers 0.4 GB is the 4.1 GB `ollama ps` reported at 8K. A bigger window doesn't fit beside the model there, so auto keeps
+8,192 and says why:
+
+```text
+context window: 8,192 tokens (auto: 8,192: a bigger window wouldn't fit beside qwen3:4b-instruct (2.3 GB) on your 4.0 GB GPU,
+so part of the model runs on the CPU) · /window changes it
+```
+
+When it can't measure, auto gives 8,192: no NVIDIA GPU or Apple silicon found, an Ollama server on another computer (its GPU
+can't be seen from here), LM Studio or another OpenAI-compatible server (they don't say how big the model is), a model Ollama
+doesn't describe. A cloud model's window is known from its name (Claude 200,000: [window sizes](#window-sizes)). The size and
+the reason are shown at start, by `/context`, `/window` and the web page's Settings.
+
+### Change it while you work: `/window`
+```text
+> /window
+context window: 8,192 tokens (auto: 8,192: a bigger window wouldn't fit ...)
+qwen3:4b-instruct: up to 262,144 tokens; 2.3 GB of weights + 1.1 GB of cache per 8K (half that with OLLAMA_KV_CACHE_TYPE=q8_0)
+/window 16384 sets a size, /window auto sizes it for your GPU (the context guide has the trade-offs)
+> /window 16k
+context window: 16,384 tokens (set to 16,384). Ollama reloads the model once at the new size.
+```
+
+`/window N` (or `16k`) sets a size of at least 4,096, `/window auto` measures again. The conversation carries on: the next
+model call asks Ollama for the new size (it reloads the model, a few seconds), and the harness plans with it from then on (the
+reply's share, the system prompt's share, [tool search](tool-search.md)). Making it smaller than the conversation already is
+works too: old results are cleared and the conversation summarised to fit, as when it fills ([below](#when-the-window-fills-clearing-old-results)).
+In the [web page](web-ui.md) the same is in Settings, under Context window: a size and **Apply**, or **Auto: fit my GPU**.
+`/window` lasts for the session; to keep a size, set it:
+
+### Set it for good
 Any of these, the most specific winning:
 
 | for | how |
 |---|---|
-| one run | `harness --context-window 16384` |
+| one run | `harness --context-window 16384` (or `auto`) |
 | every run | `"context_window": 16384` in `~/.harness/settings.json` (Windows: `C:\Users\<you>\.harness\settings.json`) |
 | one project | the same line in `<project>/.harness/settings.json` or `settings.local.json` |
 | one terminal | the environment variable `HARNESS_CONTEXT_WINDOW=16384` |
 
-Use a multiple of 1,024; the smallest the harness accepts is 4,096. With Ollama the harness asks for exactly that many
-tokens (Ollama's `num_ctx`), so the server and the harness agree; Ollama reloads the model the first time the size
-changes, which takes a few seconds. With a cloud model the window is known from the model's name (Claude 200,000), and
-the setting is only needed for a model the harness doesn't know.
+A number is always used as it is, even if it doesn't fit your GPU (the model then runs partly on the CPU: the tables below
+show what that costs). Use a multiple of 1,024; the smallest the harness accepts is 4,096. With Ollama the harness asks for
+exactly that many tokens (Ollama's `num_ctx`), so the server and the harness agree. With a cloud model the setting is only
+needed for a model the harness doesn't know.
 
 Check it took: `/context` says `of 16,384 tokens`, the status line says `/16.4k`, and `harness --show-config` shows
 where the value came from.
 
-### 2. Make room for it in memory (Ollama)
+### Make room for it in memory (Ollama)
 Every token in the window needs memory in the model server, whether the conversation uses it yet or not. Measured with
 `qwen3:4b-instruct` on a laptop with a 4 GB GPU (RTX 3050) and 16 GB of RAM:
 
@@ -107,11 +164,16 @@ To turn them on, set two environment variables for the Ollama server and restart
 
 Check: with a model loaded, `ollama ps` shows a smaller SIZE than before (here 3.6 GB instead of 4.1 GB at 8K).
 
-**Which size?** On a 4 GB GPU, 16,384 with both options. With more GPU memory, add about 0.7 GB per 8K of window (with
-the options) and keep the whole model on the GPU (`ollama ps` says `100% GPU`): that is what keeps answers fast. A model
+**Auto knows about them** when they are set where the harness can see them too (`setx` and `launchctl setenv` set them for
+every program you start afterwards): with `OLLAMA_FLASH_ATTENTION=1`, the cache counts the bytes `OLLAMA_KV_CACHE_TYPE` says
+(1 for `q8_0`, half for `q4_0`), so on a 4 GB GPU auto picks 16,384 instead of 8,192. Without flash attention Ollama ignores
+the cache type, and so does auto. Then check with `ollama ps` that it says `100% GPU`: that is what keeps answers fast. A model
 has its own limit too (`ollama show <model>` lists the context length; 262,144 for `qwen3:4b-instruct`).
 
-### 3. Or need less of it
+The harness prints sizes in GiB (2<sup>30</sup> bytes, as GPUs are sold), `ollama ps` in decimal GB: the same 1.21 billion bytes
+of cache per 8K are "1.1 GB" in one and "1.2 GB" in the other.
+
+### Or need less of it
 - **Fewer tools.** Each tool is described in every request. Turning off what you don't use saves its share:
   `"web_fetch": false`, `"subagents": false`, `"skills": false`, `"todo": false`, `"background_tasks": false`,
   `"auto_memory": "off"`. With all of these off, the start-up cost went from about 3,400 tokens to 1,800.
@@ -129,7 +191,8 @@ stops holding tools back once their definitions are under 15% of it, and clearin
 
 ## Window sizes
 For cloud models the harness knows the window by model name (Claude 200K, GPT-4o 128K, Gemini 1M, ...);
-a model it doesn't know is planned as 32,000 tokens, so it errs on the side of stopping early. The
+a model it doesn't know is planned as 32,000 tokens, so it errs on the side of stopping early. A local model's window is
+what the harness asks the server for: auto's size ([above](#auto-the-size-that-fits-your-gpu)) or yours. A number in the
 `context_window` setting overrides all of it.
 
 ## The system prompt

@@ -48,8 +48,21 @@ def test_the_window_can_be_set_three_ways_and_not_too_small(home, ws):
     assert load_settings(ws, environ={})[0].context_window == 16384
     settings, _ = load_settings(ws, flags={"context_window": 32768}, environ={"HARNESS_CONTEXT_WINDOW": "24576"})
     assert (settings.context_window, settings.sources["context_window"]) == (32768, "flag")
-    with pytest.raises(ConfigError, match="'context_window' must be at least 4,096"):
+    with pytest.raises(ConfigError, match="'context_window' must be \"auto\" or at least 4,096"):
         load_settings(ws, flags={"context_window": 2048}, environ={})
+
+
+def test_the_window_is_auto_unless_you_say_a_number(home, ws):
+    """Lesson 59: "auto" (the default) sizes the window for the GPU; a number always wins."""
+    from harness.cli import parse_args
+    assert load_settings(ws, environ={})[0].context_window == "auto"
+    assert load_settings(ws, environ={"HARNESS_CONTEXT_WINDOW": "Auto"})[0].context_window == "auto"
+    assert parse_args(["--context-window", "auto"]).context_window == "auto"
+    with pytest.raises(SystemExit):
+        parse_args(["--context-window", "big"])
+    write(home / "settings.json", {"context_window": "large"})
+    with pytest.raises(ConfigError, match="must be \"auto\" or at least"):
+        load_settings(ws, environ={})
 
 
 def test_unknown_keys_warn_with_a_suggestion(home, ws):
