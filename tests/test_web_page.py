@@ -84,3 +84,71 @@ def test_code_is_highlighted_and_still_escaped():
     assert '<span class="s">&quot;&lt;b&gt;&quot;</span>' in py and "<b>" not in py
     assert "&lt;x&gt;" in js and "</pre>" not in js
     only_our_tags(py + js)
+
+
+# --- the run graph's layout (Lesson 60) ----------------------------------------------------------------------------------
+
+GRAPH = Path(__file__).resolve().parents[1] / "harness" / "web" / "static" / "graph.js"
+SCENARIO = """
+const fs = require("fs"), vm = require("vm");
+const page = {}; vm.createContext(page);
+vm.runInContext(fs.readFileSync(process.argv[1], "utf8"), page);
+const L = page.makeLayout(), seen = [], names = ["read_file", "grep", "edit_file", "run_shell", "list_dir", "write_file", "glob"];
+const snap = () => [...L.nodes.values()].map((n) => [n.id, n.x, n.y]);
+const t0 = Date.now();
+for (let r = 0; r < Number(process.argv[2]); r++) {
+  L.add("r" + r, "request", "request number " + r, r ? "r" + (r - 1) : null);
+  if (r === 1) seen.push(snap());
+  for (let k = 0; k < 6; k++) L.add(`t${r}-${k}`, "tool", names[(r + k) % names.length], "r" + r);
+  if (r % 3 === 0) {
+    L.add(`d${r}`, "tool", "delegate", "r" + r);
+    L.add(`a${r}`, "agent", "explore", `d${r}`);
+    for (let k = 0; k < 4; k++) L.add(`s${r}-${k}`, "tool", names[k], `a${r}`);
+  }
+  L.add(`ans${r}`, "answer", "answer", "r" + r);
+}
+const ms = Date.now() - t0;
+const nodes = [...L.nodes.values()].map((n) => ({id: n.id, kind: n.kind, x: n.x, y: n.y, box: n.label ? n.label.box : null}));
+process.stdout.write(JSON.stringify({nodes, first: seen[0], bounds: L.bounds, ms}));
+"""
+R = {"request": 9, "agent": 7, "tool": 5, "answer": 4}
+
+
+def layout(requests: int) -> dict:
+    done = subprocess.run([NODE, "-e", SCENARIO, str(GRAPH), str(requests)], capture_output=True, text=True, encoding="utf-8", check=True)
+    return json.loads(done.stdout)
+
+
+def test_the_graph_layout_never_moves_a_node_and_never_overlaps_labels_or_nodes():
+    out = layout(20)
+    nodes = {n["id"]: n for n in out["nodes"]}
+    assert len(nodes) == 20 * 8 + 7 * 6                         # requests, 6 calls and an answer each; 7 delegations with 4 calls
+    for node_id, x, y in out["first"]:                          # where they were when the second request started: still there
+        assert (nodes[node_id]["x"], nodes[node_id]["y"]) == (x, y)
+    boxes = [n["box"] for n in out["nodes"] if n["box"]]
+    assert len(boxes) > len(nodes) * 0.6                        # most labels are shown
+    for i, a in enumerate(boxes):
+        for b in boxes[i + 1:]:
+            assert not (a["x0"] < b["x1"] and b["x0"] < a["x1"] and a["y0"] < b["y1"] and b["y0"] < a["y1"]), (a, b)
+    ns = list(nodes.values())
+    for i, a in enumerate(ns):
+        for b in ns[i + 1:]:
+            assert ((a["x"] - b["x"]) ** 2 + (a["y"] - b["y"]) ** 2) ** 0.5 >= R[a["kind"]] + R[b["kind"]], (a["id"], b["id"])
+    for n in ns:                                                # no dot covers another node's label (a sub-agent's calls did)
+        for other in boxes:
+            if other is not n["box"]:
+                r = R[n["kind"]]
+                assert not (n["x"] - r < other["x1"] and other["x0"] < n["x"] + r and n["y"] - r < other["y1"] and other["y0"] < n["y"] + r), n["id"]
+    B = out["bounds"]
+    assert all(B["x0"] <= n["x"] <= B["x1"] and B["y0"] <= n["y"] <= B["y1"] for n in ns)        # Fit's box holds everything
+
+
+def test_the_page_style_leaves_the_labels_anchors_to_the_layout():
+    """`.node text { text-anchor: middle }` in app.css beat the attribute graph.js sets, so labels pointing sideways were drawn centred on
+    their anchor, 12 units from where the layout had checked them (found in the browser, Lesson 60)."""
+    css = (GRAPH.parent / "app.css").read_text(encoding="utf-8")
+    assert "text-anchor" not in re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+
+
+def test_the_graph_layout_is_deterministic():
+    assert layout(5)["nodes"] == layout(5)["nodes"]

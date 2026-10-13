@@ -65,3 +65,4 @@ Copy [the template](template.md) to `NNNN-short-title.md` with the next number.
 | [0056](0056-the-harness-offers-a-plan-the-model-wrote-as-its-answer.md) | The harness offers a plan the model wrote as its answer, and accepting it carries the plan out | Accepted |
 | [0057](0057-the-agent-takes-any-task-in-any-language.md) | The agent takes any task in any language: the role says so first, and the prompt's last line hands over to the request | Accepted |
 | [0058](0058-the-context-window-fits-your-gpu-unless-you-say.md) | The context window is sized for your GPU unless you set it, and can change while you work | Accepted |
+| [0059](0059-the-run-graph-places-each-node-once.md) | The run graph places each node once, on rings around its request, and never moves it | Accepted |

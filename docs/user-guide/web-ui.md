@@ -46,9 +46,14 @@ updated if there is one, and background commands and MCP servers are stopped.
   keys are hidden, as in the agent's own results).
 - **File Explorer**: the workspace, as the agent's tools see it (`.git`, `node_modules` and the like left out). Files the
   agent changed in this session are marked **M**.
-- **Run Graph**: what the agent did. Each request is a magenta node, linked to the one before; its tool calls are cyan
-  nodes around it, a sub-agent is violet with its own calls, the answer is white. Running calls pulse, failed ones are red,
-  calls that didn't run are dashed, and a request you stopped fades. Click a tool node to see its result.
+- **Run Graph**: what the agent did. Each request is a magenta node on a line from left to right, linked to the one before;
+  its tool calls are cyan nodes on rings around it, a sub-agent is violet with its own calls around it, the answer is white.
+  Running calls pulse, failed ones are red, calls that didn't run are dashed, and a request you stopped fades. Click a tool
+  node to see its result. A node's place is decided when it appears and **never changes**, and a label that would cover
+  another label or a node isn't drawn (hover over the node for its name). **Follow** (the default) keeps the newest request
+  in view, at a size you can read; **Fit** shows the whole run (in a narrow panel, a long run is an overview of dots: hover
+  for names). The mouse wheel zooms where you point, dragging the background pans, and either one leaves Follow until you
+  click it again.
 - **System Status & Terminal Output**: the commands the agent ran and what they printed, the context size before each
   model call, and the harness's messages.
 - **Agent Control Center**: the model, the permission mode (changing it runs `/mode`), how full the context window is, the

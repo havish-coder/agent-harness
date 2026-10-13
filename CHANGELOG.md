@@ -19,6 +19,11 @@ is below 1.0, minor releases may contain breaking changes.
   `--context-window` and `HARNESS_CONTEXT_WINDOW` take `auto` too.
 
 ### Changed
+- The run graph is laid out once per node and never moves (ADR 0059). Requests sit on a timeline, their tool calls on rings of numbered
+  slots around them, a sub-agent's calls around the sub-agent; a label that would cover a label or a node isn't drawn (the tooltip keeps it).
+  **Follow** (the default) keeps the newest request in view at a readable size, **Fit** shows the whole run, the wheel zooms and dragging
+  pans. Measured in the browser on 10 requests (104 nodes): v0.8.0's force layout moved all 104 nodes even when idle and settled with
+  2.4-px labels; now 0 move, 0 labels overlap, and labels are 8.5 px.
 - The agent takes any task in any language (ADR 0057). Asked for a C++ trie, it had answered that the request was unrelated to the
   project, because the project's progress journal (a goal about a Python shop) was in its prompt. The role now opens with "a coding agent
   for any task in any programming language" and says the workspace is where it works, not a limit. The prompt ends with a hand-over line

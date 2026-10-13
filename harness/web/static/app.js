@@ -21,131 +21,9 @@ function append(box, node) {
 }
 const short = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 
-// --- the run graph: requests, their tool calls, sub-agents, answers; a small force layout in SVG --------------------------------
-const SVG = "http://www.w3.org/2000/svg";
-const MAX_NODES = 160;
-class Graph {
-  constructor(svg) {
-    this.svg = svg;
-    this.links = svg.appendChild(document.createElementNS(SVG, "g"));
-    this.dots = svg.appendChild(document.createElementNS(SVG, "g"));
-    this.nodes = [];
-    this.edges = [];
-    this.byId = new Map();
-    this.view = { x: -150, y: -110, w: 300, h: 220 };
-    this.heat = 0;
-  }
-  add(id, kind, label, parentId, title) {
-    const parent = parentId ? this.byId.get(parentId) : null;
-    const angle = Math.random() * Math.PI * 2;
-    const n = { id, kind, label, vx: 0, vy: 0, status: "ok",
-                x: (parent ? parent.x : 0) + Math.cos(angle) * 30, y: (parent ? parent.y : 0) + Math.sin(angle) * 30 };
-    n.g = document.createElementNS(SVG, "g");
-    const circle = document.createElementNS(SVG, "circle");
-    circle.setAttribute("r", { request: 9, agent: 7, tool: 5, answer: 4 }[kind]);
-    const caption = document.createElementNS(SVG, "text");
-    caption.setAttribute("y", kind === "request" ? 21 : 15);
-    caption.textContent = short(label, 16);
-    const tip = document.createElementNS(SVG, "title");
-    tip.textContent = title || label;
-    n.g.append(circle, caption, tip);
-    n.g.addEventListener("click", () => this.onClick && this.onClick(n));
-    this.dots.appendChild(n.g);
-    this.nodes.push(n);
-    this.byId.set(id, n);
-    if (parent) this.link(parent, n, kind === "request" ? "chain" : "");
-    this.setStatus(id, kind === "tool" || kind === "agent" ? "running" : "ok");
-    this.trim();
-    this.kick();
-    $("graph-count").textContent = this.nodes.length + " nodes";
-    return n;
-  }
-  link(a, b, cls) {
-    const line = document.createElementNS(SVG, "line");
-    if (cls) line.setAttribute("class", cls);
-    this.links.appendChild(line);
-    this.edges.push({ a, b, line });
-  }
-  setStatus(id, status) {
-    const n = this.byId.get(id);
-    if (!n) return;
-    n.status = status;
-    n.g.setAttribute("class", `node ${n.kind} ${status}${n.stale ? " stale" : ""}`);
-  }
-  stale(ids) {
-    for (const id of ids) { const n = this.byId.get(id); if (n) { n.stale = true; this.setStatus(id, n.status); } }
-  }
-  clear() {
-    this.nodes.forEach((n) => n.g.remove());
-    this.edges.forEach((e) => e.line.remove());
-    this.nodes = [];
-    this.edges = [];
-    this.byId.clear();
-    $("graph-count").textContent = "";
-  }
-  trim() {
-    while (this.nodes.length > MAX_NODES) {
-      const old = this.nodes.shift();
-      old.g.remove();
-      this.byId.delete(old.id);
-      this.edges = this.edges.filter((e) => (e.a === old || e.b === old ? (e.line.remove(), false) : true));
-    }
-  }
-  kick() {
-    this.heat = 1;
-    if (!this.running) { this.running = true; requestAnimationFrame(() => this.tick()); }
-  }
-  tick() {
-    const N = this.nodes;
-    for (let i = 0; i < N.length; i++) {
-      for (let j = i + 1; j < N.length; j++) {
-        const a = N[i], b = N[j];
-        let dx = a.x - b.x, dy = a.y - b.y;
-        const d2 = dx * dx + dy * dy + 0.01;
-        if (d2 > 40000) continue;
-        const f = 260 / d2;
-        dx *= f; dy *= f;
-        a.vx += dx; a.vy += dy; b.vx -= dx; b.vy -= dy;
-      }
-    }
-    for (const { a, b } of this.edges) {
-      const dx = b.x - a.x, dy = b.y - a.y, d = Math.sqrt(dx * dx + dy * dy) || 1;
-      const want = b.kind === "request" ? 95 : b.kind === "agent" ? 50 : 38;
-      const f = ((d - want) / d) * 0.04;
-      a.vx += dx * f; a.vy += dy * f; b.vx -= dx * f; b.vy -= dy * f;
-    }
-    for (const n of N) {
-      n.vx = (n.vx - n.x * 0.002) * 0.78;
-      n.vy = (n.vy - n.y * 0.002) * 0.78;
-      n.x += Math.max(-8, Math.min(8, n.vx));
-      n.y += Math.max(-8, Math.min(8, n.vy));
-    }
-    this.draw();
-    this.heat *= 0.988;
-    if (this.heat > 0.03) requestAnimationFrame(() => this.tick());
-    else this.running = false;
-  }
-  draw() {
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const n of this.nodes) {
-      n.g.setAttribute("transform", `translate(${n.x.toFixed(1)},${n.y.toFixed(1)})`);
-      x0 = Math.min(x0, n.x); y0 = Math.min(y0, n.y); x1 = Math.max(x1, n.x); y1 = Math.max(y1, n.y);
-    }
-    for (const { a, b, line } of this.edges) {
-      line.setAttribute("x1", a.x.toFixed(1)); line.setAttribute("y1", a.y.toFixed(1));
-      line.setAttribute("x2", b.x.toFixed(1)); line.setAttribute("y2", b.y.toFixed(1));
-    }
-    if (!this.nodes.length) return;
-    const box = this.svg.getBoundingClientRect(), ratio = box.width / Math.max(1, box.height);
-    let w = Math.max(360, x1 - x0 + 80), h = Math.max(260, y1 - y0 + 80);      // a few nodes stay small, in the middle
-    if (w / h > ratio) h = w / ratio; else w = h * ratio;
-    const v = this.view, ease = 0.15;                      // glide towards the box that fits everything
-    v.x += ((x0 + x1) / 2 - w / 2 - v.x) * ease; v.y += ((y0 + y1) / 2 - h / 2 - v.y) * ease;
-    v.w += (w - v.w) * ease; v.h += (h - v.h) * ease;
-    this.svg.setAttribute("viewBox", `${v.x.toFixed(1)} ${v.y.toFixed(1)} ${v.w.toFixed(1)} ${v.h.toFixed(1)}`);
-  }
-}
-const graph = new Graph($("graph"));
+// --- the run graph (graph.js, Lesson 60): fixed places, labels that don't overlap, Follow and Fit ---------------------------------------
+const graph = new Graph($("graph"), $("graph-panel"));
+document.querySelectorAll("[data-graph]").forEach((b) => b.addEventListener("click", () => graph.setMode(b.dataset.graph)));
 
 // --- what the page remembers ---------------------------------------------------------------------------------------------
 const calls = new Map();           // tool call id -> {box, name, args, node}
@@ -713,7 +591,7 @@ graph.onClick = (n) => {
 document.querySelectorAll("[data-toggle]").forEach((b) => b.addEventListener("click", () => {
   b.classList.toggle("on");
   $("app").classList.toggle("no-" + b.dataset.toggle, !b.classList.contains("on"));
-  graph.kick();
+  graph.draw();
 }));
 
 // --- sending ------------------------------------------------------------------------------------------------------------------

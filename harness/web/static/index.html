@@ -59,7 +59,7 @@
   </section>
 
   <section class="panel graph" id="graph-panel">
-    <h2>Run Graph <span class="h-note" id="graph-count"></span></h2>
+    <h2>Run Graph <span class="h-note" id="graph-count"></span><span class="graph-tools"><button type="button" class="mini on" data-graph="follow" title="Keep the newest request in view">Follow</button><button type="button" class="mini" data-graph="fit" title="Show everything">Fit</button></span></h2>
     <svg id="graph" class="graph-svg" role="img" aria-label="The agent's run: requests, tool calls and sub-agents"></svg>
     <div class="legend">
       <span><i class="dot request"></i>Request</span><span><i class="dot tool"></i>Tool call</span>
@@ -108,6 +108,7 @@
   </aside>
 </div>
 <script src="/static/markdown.js"></script>
+<script src="/static/graph.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>
