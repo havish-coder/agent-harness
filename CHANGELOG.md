@@ -8,6 +8,15 @@ is below 1.0, minor releases may contain breaking changes.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-13
+
+The release of what trying v0.8.0 turned up, and plugins. The agent takes any task in any language: asked for C++ it had answered that the
+request was "unrelated to the current project", and refused 9 of 18 requests like that; now none. Plan mode ends with your choice in every run (0 of 5 before),
+whether the model calls `exit_plan_mode` or writes the plan as its answer, and accepting carries the plan out. The context window is sized
+for your GPU and changes while you work (`/window`, or Settings). The run graph no longer moves or piles up labels. And plugins add
+commands, skills, agents and styles in one step, with options you set. 1,658 tests.
+Start with [getting started](docs/getting-started.md) or [plugins](docs/user-guide/plugins.md).
+
 ### Added
 - The context window is sized for your GPU (ADR 0058). `context_window` is `"auto"` unless you set a number: for a local Ollama model the
   harness reads the GPU's free memory (`nvidia-smi`, or Apple silicon's shared memory) and the model's shape (Ollama's `/api/show`), and
@@ -440,7 +449,8 @@ Start with [the security model](docs/security.md).
   the system prompt.
 - Terminal chat (`harness`) with tool-call display, `/reset`, `/bye` and per-turn token counts.
 
-[Unreleased]: https://github.com/havish-coder/agent-harness/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/havish-coder/agent-harness/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/havish-coder/agent-harness/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/havish-coder/agent-harness/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/havish-coder/agent-harness/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/havish-coder/agent-harness/compare/v0.5.0...v0.6.0

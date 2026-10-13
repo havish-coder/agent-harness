@@ -5,8 +5,9 @@ written from scratch in Python, without agent frameworks. It talks to a local mo
 [Ollama](https://ollama.com) or to a cloud API, inspects and edits files, runs commands, and
 explains every step it takes.
 
-> **Status: v0.8, pre-release.** The agent reads, searches and edits code, runs commands and
-> fetches web pages, and what it may do is decided by code, not by the model: a workspace
+> **Status: v0.9, pre-release.** The agent takes any coding task in any language: it reads,
+> searches and edits code, runs commands and fetches web pages, and what it may do is decided
+> by code, not by the model: a workspace
 > boundary, permission modes and rules, command analysis, untrusted-content handling, hooks,
 > secret redaction, an audit log and limits (and an OS sandbox on Linux and macOS). It keeps its
 > conversation inside the model's window, saves every chat, reads your project notes, remembers
@@ -15,7 +16,9 @@ explains every step it takes.
 > uses tools from MCP servers and works in a git worktree of its own. It streams its answers and
 > runs on Ollama, Claude or any OpenAI-compatible service, in a terminal app with Markdown
 > rendering, slash commands, output styles and typeset math, or in a web UI in your browser
-> with a live graph of its run, approvals with diffs, chats, projects and models.
+> with a live graph of its run, approvals with diffs, chats, projects and models. It sizes its
+> context window for your GPU, and plugins add commands, skills, agents and styles with options
+> you set.
 > See the [changelog](CHANGELOG.md) for what changed in each release.
 
 ![The agent fixing a bug: it reads the file, proposes a diff, runs the tests](docs/images/demo.svg)
@@ -79,6 +82,11 @@ plus [`httpx`](https://www.python-httpx.org/). Every design decision is written 
 | ✅ | A web UI (`harness --web`): the conversation streamed as Markdown, a run graph, files, terminal output, the todo list | v0.8 |
 | ✅ | Approvals with diffs, the agent's questions and plan review in the browser; chats, projects, models and the journal | v0.8 |
 | ✅ | Web UI security: 127.0.0.1 only, a key per start, origin and host checks, a strict Content-Security-Policy; an attack lab with 18 attacks | v0.8 |
+| ✅ | Any task in any language, whatever the project is about (C++, Rust, JavaScript, shell, prose) | v0.9 |
+| ✅ | Plan mode that ends with your choice: accept and implement, edit, revise, keep planning; also when the model writes the plan as its answer | v0.9 |
+| ✅ | The context window sized for your GPU (`auto`), and `/window` to change it while you work | v0.9 |
+| ✅ | A run graph that never moves and never piles up labels; Follow and Fit | v0.9 |
+| ✅ | Plugins: commands, skills, agents and styles in one step, with typed options (`/plugin`, and in the web UI) | v0.9 |
 
 ## Quickstart
 Requirements: Python 3.10+, [Ollama](https://ollama.com/download), about 3 GB of disk.
@@ -120,6 +128,7 @@ Then ask something like *"How many TODOs are in my notes?"*. Full walkthrough:
 | v0.6 ✅ | Context: token budgets, compaction, sessions, project and auto memory, journal, undo |
 | v0.7 ✅ | Workflows: todo list, plan mode, asking, sub-agents, background tasks, skills, tool search, MCP, worktrees |
 | v0.8 ✅ | Web UI: streaming, a run graph, approvals with diffs, chats, projects, models; attacked before release |
+| v0.9 ✅ | Fixes from trying it: any task and language, plan choices, the window for your GPU, a steady graph; plugins |
 | v1.0 | Evals, tracing, packaging, CI |
 
 ## Development

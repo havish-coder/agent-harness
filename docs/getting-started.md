@@ -47,6 +47,10 @@ agent> There are 3 TODOs in your notes.
 The lines starting with `→` are **tool calls**: the model asked the harness to run
 `read_file`, the harness ran it and sent the result back, and the model answered from it.
 
+The first line the harness printed says how big the model's **context window** is (how much it can read at once) and why: it
+picks the largest that fits your GPU, 8,192 tokens on a 4 GB card, more on a bigger one. `/window 16k` changes it while you work
+([the context window](user-guide/context.md#a-bigger-window)).
+
 ## 4. Let it fix a bug
 `workspace/project/` has a bug: the cart's subtotal ignores quantities. Ask:
 
@@ -74,7 +78,18 @@ In a folder you have trusted (`/trust`), the question also offers `[a]lways`, to
 session. In a folder you haven't, it doesn't once the agent has read something there: see
 [untrusted content](user-guide/untrusted-content.md).
 
-## 5. Point it at your own folder
+## 5. Ask for something new, or plan first
+The agent isn't limited to the files that are there. Any language, any task:
+
+```text
+you> Implement a Trie class in C++ (insert, search, startsWith) in trie.cpp.
+```
+
+For a bigger change, have it plan first: `/plan add a usage section to the README and a test for quantity 0`. It reads, then
+shows a plan and asks: **Accept and implement** (it starts at once), **Revise** (say what to change) or **Keep planning**. Nothing
+changes until you accept ([plan mode](user-guide/plan-mode.md)).
+
+## 6. Point it at your own folder
 ```bash
 harness --workspace C:\path\to\a\project
 ```
@@ -83,7 +98,7 @@ harness --workspace C:\path\to\a\project
 > changes something asks you first, showing the diff or the command. Commands you approve run with your
 > rights, so read them. If the project is yours, `/trust` it. See [SECURITY.md](../SECURITY.md).
 
-## 6. Or use it in your browser
+## 7. Or use it in your browser
 ```bash
 harness --web --workspace workspace
 ```
@@ -92,6 +107,17 @@ The same agent opens as a page in your browser: type requests at the bottom righ
 the run graph grow beside it and commands print below, and answer approvals with **Yes** or **No** under the diff. The
 server listens on this computer only and needs the key in the address it prints; Ctrl+C in its terminal stops it. See
 [the web UI](user-guide/web-ui.md).
+
+## 8. Add a plugin
+A plugin adds commands, skills, agents and styles in one step, with options you set. The repository has two:
+
+```text
+you> /plugin install examples/plugins/code-review
+you> /plugin config code-review language cpp
+you> /review trie.cpp
+```
+
+See [plugins](user-guide/plugins.md); in the web UI they are under Settings.
 
 ## Next steps
 - [User guide](user-guide/README.md): everything the terminal app and the web UI can do.
