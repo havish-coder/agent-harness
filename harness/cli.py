@@ -260,8 +260,11 @@ def main(argv=None):
             line = reader.read(default=watcher.take_typeahead(), toolbar=session.status_text()).strip()
         except (EOFError, KeyboardInterrupt):
             break
-        if line and not handle_line(session, watcher, commands, line):
-            break
+        try:
+            if line and not handle_line(session, watcher, commands, line):
+                break
+        except Exception as e:                   # a bug in one command mustn't end the session (the web server does the same)
+            ui.error(f"{type(e).__name__}: {e}")
 
     session.close()
     if session.costs.models:

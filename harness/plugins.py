@@ -14,9 +14,12 @@ the permissions as always. Plugins are installed for you, never by a project: a 
 Where names clash, yours win: a plugin never replaces a built-in or something in ~/.harness or the project.
 """
 import json
+import os
 import re
 import shutil
+import stat
 import subprocess
+import sys
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -128,6 +131,8 @@ def read_manifest(root: Path) -> Plugin:
         raise PluginError(f"no {MANIFEST} in {root}") from None
     except ValueError as e:
         raise PluginError(f"{MANIFEST} isn't valid JSON: {e}") from None
+    if not isinstance(data, dict) or not isinstance(data.get("options") or {}, dict):
+        raise PluginError(f"{MANIFEST} must be a JSON object, and its 'options' an object of name: {{type, ...}}")
     name = str(data.get("name", ""))
     if not NAME.match(name):
         raise PluginError(f"{MANIFEST}: 'name' must be a-z, 0-9 and '-', starting with a letter (got {name!r})")
@@ -135,6 +140,8 @@ def read_manifest(root: Path) -> Plugin:
     for key, spec in (data.get("options") or {}).items():
         if not PLACEHOLDER.fullmatch("{{" + str(key) + "}}") or not isinstance(spec, dict) or spec.get("type") not in TYPES:
             raise PluginError(f"{MANIFEST}: option {key!r} needs a name of a-z, 0-9, '-' and '_', and a type: {', '.join(TYPES)}")
+        if not isinstance(spec.get("choices") or [], list):
+            raise PluginError(f"{MANIFEST}: option {key!r} has 'choices' that isn't a list")
         o = Option(key, spec["type"], None, str(spec.get("description", "")), [str(c) for c in spec.get("choices") or []])
         if o.type == "choice" and not o.choices:
             raise PluginError(f"{MANIFEST}: option {key!r} is a choice with no 'choices'")
@@ -146,19 +153,29 @@ def read_manifest(root: Path) -> Plugin:
     return plugin
 
 
+def mine(state: dict, name: str) -> dict:
+    """A plugin's entry in plugins.json, made an object with an object of options if a hand edit left something else there."""
+    entry = state.get(name)
+    entry = state[name] = entry if isinstance(entry, dict) else {}
+    if not isinstance(entry.get("options", {}), dict):
+        entry["options"] = {}
+    return entry
+
+
 def installed(user_dir: Path) -> tuple[list[Plugin], list[str]]:
     """Every installed plugin with your state, and warnings for folders that aren't valid plugins."""
     plugins, warnings, state = [], [], read_state(user_dir)
     folder = home(user_dir)
-    for root in sorted(p for p in folder.iterdir() if p.is_dir()) if folder.is_dir() else []:
+    # ponytail: dot folders are install's staging copies (.NAME.new, .NAME.old), never plugins
+    for root in sorted(p for p in folder.iterdir() if p.is_dir() and not p.name.startswith(".")) if folder.is_dir() else []:
         try:
             p = read_manifest(root)
         except PluginError as e:
             warnings.append(f"plugin {root.name}: {e}; skipped")
             continue
-        mine = state.get(p.name, {})
-        p.enabled = mine.get("enabled", True) is not False
-        for key, raw in (mine.get("options") or {}).items():
+        entry = mine(state, p.name)
+        p.enabled = entry.get("enabled", True) is not False
+        for key, raw in entry.get("options", {}).items():
             if key in p.options:
                 try:
                     p.values[key] = check_option(p.options[key], raw)
@@ -191,13 +208,46 @@ def check_tree(root: Path) -> None:
         raise PluginError(f"too big for a text plugin ({files} files, {size:,} bytes; at most {MAX_FILES} and {MAX_BYTES:,})")
 
 
+def delete(path: Path) -> None:
+    """shutil.rmtree that also deletes read-only files: Windows refuses them, and copytree keeps a source folder's read-only bit."""
+    def again(func, p, _):
+        os.chmod(p, stat.S_IWRITE)
+        func(p)
+    shutil.rmtree(path, **({"onexc": again} if sys.version_info >= (3, 12) else {"onerror": again}))
+
+
+def place(root: Path, dest: Path) -> None:
+    """Copy `root` to `dest`, replacing what's there only once the copy is whole: a failure leaves the old version in place."""
+    new, old = dest.with_name(f".{dest.name}.new"), dest.with_name(f".{dest.name}.old")
+    try:
+        for leftover in (new, old):                     # from an install that was cut off
+            if leftover.exists():
+                delete(leftover)
+        shutil.copytree(root, new, ignore=shutil.ignore_patterns(".git", "__pycache__"))
+        if dest.exists():
+            dest.rename(old)
+        try:
+            new.rename(dest)
+        except OSError:
+            if old.exists():
+                old.rename(dest)
+            raise
+    except (OSError, shutil.Error) as e:
+        shutil.rmtree(new, ignore_errors=True)
+        raise PluginError(f"couldn't copy the plugin into {dest}: {e}") from None
+    shutil.rmtree(old, ignore_errors=True)              # ponytail: a leftover .old is hidden from installed() and cleared next time
+
+
 def install(source: str, user_dir: Path, force: bool = False) -> Plugin:
     """Copy a plugin folder, or clone a git repository (`git clone --depth 1`, without its .git), into ~/.harness/plugins/NAME."""
     with tempfile.TemporaryDirectory() as tmp:
         if is_git(source):
             root = Path(tmp) / "src"
+            # No prompts: a private or mistyped address fails at once instead of asking for a password nobody can type here.
+            quiet = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "GCM_INTERACTIVE": "never"}
             try:
-                done = subprocess.run(["git", "clone", "--depth", "1", "--", source, str(root)], capture_output=True, text=True, timeout=120)
+                done = subprocess.run(["git", "clone", "--depth", "1", "--", source, str(root)], capture_output=True, text=True,
+                                      timeout=120, stdin=subprocess.DEVNULL, env=quiet)
             except (OSError, subprocess.TimeoutExpired) as e:
                 raise PluginError(f"git clone failed: {e}") from None
             if done.returncode != 0:
@@ -206,16 +256,16 @@ def install(source: str, user_dir: Path, force: bool = False) -> Plugin:
             root = Path(source).expanduser()
             if not root.is_dir():
                 raise PluginError(f"{source} is neither a folder nor a git address")
+            if root.resolve().is_relative_to(home(user_dir).resolve()):
+                raise PluginError(f"{source} is already in {home(user_dir)}: install from the plugin's own folder or git address")
         plugin = read_manifest(root)
         check_tree(root)
         dest = home(user_dir) / plugin.name
-        if dest.exists():
-            if not force:
-                raise PluginError(f"{plugin.name} is already installed: /plugin install --force {source} replaces it (your options are kept)")
-            shutil.rmtree(dest)
-        shutil.copytree(root, dest, ignore=shutil.ignore_patterns(".git", "__pycache__"))
+        if dest.exists() and not force:
+            raise PluginError(f"{plugin.name} is already installed: /plugin install --force {source} replaces it (your options are kept)")
+        place(root, dest)
     state = read_state(user_dir)
-    state[plugin.name] = {"enabled": True, "options": state.get(plugin.name, {}).get("options", {})}
+    state[plugin.name] = {"enabled": True, "options": mine(state, plugin.name).get("options", {})}
     write_state(user_dir, state)
     return read_manifest(dest)
 
@@ -228,7 +278,11 @@ def find(name: str, user_dir: Path) -> Plugin:
 
 
 def remove(name: str, user_dir: Path) -> None:
-    shutil.rmtree(find(name, user_dir).root)
+    root = find(name, user_dir).root
+    try:
+        delete(root)
+    except OSError as e:
+        raise PluginError(f"couldn't delete {root}: {e}. Close anything using it and run /plugin remove {name} again") from None
     state = read_state(user_dir)
     state.pop(name, None)
     write_state(user_dir, state)
@@ -237,7 +291,7 @@ def remove(name: str, user_dir: Path) -> None:
 def set_enabled(name: str, user_dir: Path, on: bool) -> None:
     find(name, user_dir)
     state = read_state(user_dir)
-    state.setdefault(name, {})["enabled"] = on
+    mine(state, name)["enabled"] = on
     write_state(user_dir, state)
 
 
@@ -250,7 +304,7 @@ def set_option(name: str, key: str, raw: str, user_dir: Path) -> object:
                           "keep keys in environment variables")
     value = check_option(plugin.options[key], raw)
     state = read_state(user_dir)
-    state.setdefault(name, {}).setdefault("options", {})[key] = value
+    mine(state, name).setdefault("options", {})[key] = value
     write_state(user_dir, state)
     return value
 

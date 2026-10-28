@@ -161,6 +161,88 @@ def test_a_broken_plugin_folder_is_a_warning_not_a_crash(tmp_path):
     assert found == [] and "plugin junk: no plugin.json" in warnings[0]
 
 
+@pytest.mark.parametrize("manifest", [[], {"name": "ok", "options": ["a"]}, {"name": "ok", "options": {"x": {"type": "choice", "choices": "ab"}}}])
+def test_a_manifest_of_the_wrong_shape_is_a_warning_not_a_crash(tmp_path, manifest):
+    user = tmp_path / "user"
+    make_plugin(user / "plugins" / "odd", **{"commands/a.md": "a"})
+    (user / "plugins" / "odd" / "plugin.json").write_text(json.dumps(manifest), encoding="utf-8")
+    found, warnings = installed(user)
+    assert found == [] and warnings[0].startswith("plugin odd: plugin.json") and warnings[0].endswith("skipped")
+
+
+@pytest.mark.parametrize("entry", [True, [], {"options": ["dry"]}])
+def test_a_hand_edited_plugins_json_of_the_wrong_shape_is_read_as_empty(tmp_path, entry):
+    user = tmp_path / "user"
+    install(str(make_plugin(tmp_path / "src")), user)
+    (user / "plugins.json").write_text(json.dumps({"greeter": entry}), encoding="utf-8")
+    assert installed(user)[0][0].value("tone") == "warm" and plugins.folders(user, "commands")[0][1] == "plugin greeter"
+    set_option("greeter", "tone", "dry", user)
+    set_enabled("greeter", user, True)
+    assert installed(user)[0][0].value("tone") == "dry"
+
+
+def test_force_from_the_installed_folder_itself_is_refused_and_keeps_the_plugin(tmp_path):
+    user = tmp_path / "user"
+    p = install(str(make_plugin(tmp_path / "src")), user)
+    with pytest.raises(PluginError, match="already in"):
+        install(str(p.root), user, force=True)
+    assert (p.root / "commands" / "hello.md").is_file() and [q.name for q in installed(user)[0]] == ["greeter"]
+
+
+def test_a_force_install_whose_copy_fails_leaves_the_old_version(tmp_path, monkeypatch):
+    user = tmp_path / "user"
+    install(str(make_plugin(tmp_path / "src")), user)
+    newer = make_plugin(tmp_path / "newer", **{"commands/hello.md": "a newer hello"})
+
+    def broken(src, dst, **kw):
+        Path(dst, "commands").mkdir(parents=True)          # half a copy, then the disk fails
+        raise OSError("disk full")
+    monkeypatch.setattr(plugins.shutil, "copytree", broken)
+    with pytest.raises(PluginError, match="disk full"):
+        install(str(newer), user, force=True)
+    assert (user / "plugins" / "greeter" / "commands" / "hello.md").read_text(encoding="utf-8").startswith("---")
+    assert [p.name for p in (user / "plugins").iterdir()] == ["greeter"]
+
+
+def test_a_force_install_replaces_the_files_and_leaves_no_staging_folders(tmp_path):
+    user = tmp_path / "user"
+    install(str(make_plugin(tmp_path / "src")), user)
+    (user / "plugins" / ".greeter.old").mkdir()                       # left by an install that was cut off
+    install(str(make_plugin(tmp_path / "newer", **{"commands/hello.md": "a newer hello"})), user, force=True)
+    assert (user / "plugins" / "greeter" / "commands" / "hello.md").read_text(encoding="utf-8") == "a newer hello"
+    assert [p.name for p in (user / "plugins").iterdir()] == ["greeter"] and not installed(user)[1]
+
+
+def test_git_clone_never_waits_for_a_password(tmp_path, monkeypatch):
+    seen = {}
+
+    def clone(command, **kw):
+        seen.update(kw)
+        return subprocess.CompletedProcess(command, 128, "", "fatal: could not read Username: terminal prompts disabled\n")
+    monkeypatch.setattr(plugins.subprocess, "run", clone)
+    with pytest.raises(PluginError, match="terminal prompts disabled"):
+        install("https://example.com/private/greeter.git", tmp_path / "user")
+    assert seen["stdin"] == subprocess.DEVNULL and seen["env"]["GIT_TERMINAL_PROMPT"] == "0" and seen["env"]["GCM_INTERACTIVE"] == "never"
+
+
+def test_remove_deletes_read_only_files(tmp_path):
+    import stat
+    user = tmp_path / "user"
+    p = install(str(make_plugin(tmp_path / "src")), user)
+    os.chmod(p.root / "commands" / "hello.md", stat.S_IREAD)
+    plugins.remove("greeter", user)
+    assert not p.root.exists() and installed(user) == ([], [])
+
+
+def test_a_remove_that_fails_says_so_and_keeps_the_plugin_listed(tmp_path, monkeypatch):
+    user = tmp_path / "user"
+    install(str(make_plugin(tmp_path / "src")), user)
+    monkeypatch.setattr(plugins, "delete", lambda path: (_ for _ in ()).throw(PermissionError("in use")))
+    with pytest.raises(PluginError, match="in use.*run /plugin remove greeter again"):
+        plugins.remove("greeter", user)
+    assert "greeter" in json.loads((user / "plugins.json").read_text(encoding="utf-8"))
+
+
 # --- what the loaders read from plugins --------------------------------------------------------------------------------------
 
 def test_a_plugins_skills_agents_and_styles_load_with_your_values(tmp_path, monkeypatch):

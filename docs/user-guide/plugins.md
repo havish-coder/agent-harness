@@ -31,7 +31,7 @@ Plugins are yours, installed in your user folder: a project can't bring one, and
 | `/plugin` | the installed plugins: on or off, version, what each adds, and its options with your values |
 | `/plugin install PATH` | copy a plugin folder into `~/.harness/plugins/NAME` and turn it on |
 | `/plugin install URL` | the same from a git repository (`https://...`, `git@...`, or anything ending in `.git`): it is cloned with `git clone --depth 1`, without its history |
-| `/plugin install --force PATH\|URL` | replace an installed plugin of the same name (your option values are kept) |
+| `/plugin install --force PATH\|URL` | replace an installed plugin of the same name (your option values are kept). The new copy is made first and swapped in only once it is whole, so a copy that fails leaves the old version working |
 | `/plugin config NAME` | its options: each one's type, your value, the default and what it means |
 | `/plugin config NAME KEY VALUE` | set an option |
 | `/plugin enable NAME`, `/plugin disable NAME` | turn it on or off (off: nothing of it is loaded; your values are kept) |
@@ -81,4 +81,14 @@ To write your own, see [writing a plugin](../reference/writing-a-plugin.md).
   agent to do things you didn't ask for. Your permissions still apply to every step.
 - Installing copies plain files only. A plugin with a link in it (which could copy a file from elsewhere on your computer into a skill the
   agent reads) is refused, and so is one over 300 files or 2 MB.
-- `git clone` downloads from the address you give. Only install from people you trust.
+- `git clone` downloads from the address you give. Only install from people you trust. It never asks for a password: an address that needs
+  one (a private repository, or a typo GitHub answers with "sign in") fails at once with git's message.
+
+## When something is wrong
+- A `plugin.json` that isn't a valid manifest, or a hand-edited `~/.harness/plugins.json` of the wrong shape, never stops the harness:
+  the plugin is skipped with a warning (`plugin x: plugin.json must be a JSON object...; skipped`), or your values for it are read as
+  unset.
+- `/plugin remove` deletes read-only files too. If a file can't be deleted (another program has it open), it says so and keeps the plugin
+  listed: close the program and run it again.
+- Folders in `~/.harness/plugins` whose names start with `.` are the staging copies `--force` makes. They are never loaded, and the next
+  install clears any that were left behind.

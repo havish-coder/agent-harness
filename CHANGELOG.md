@@ -8,6 +8,19 @@ is below 1.0, minor releases may contain breaking changes.
 
 ## [Unreleased]
 
+### Fixed
+- A `plugin.json` or `~/.harness/plugins.json` that is valid JSON of the wrong shape (`[]`, a list for `options` or `choices`, an entry
+  that isn't an object) crashed the harness at start and broke Settings; now the plugin is skipped with a warning, or your values for it
+  read as unset.
+- `/plugin install --force` deleted the installed plugin before copying the new one: a copy that failed, or a source that was the
+  installed folder itself, lost the plugin and ended the session. The copy is now staged and swapped in once whole, and installing from
+  `~/.harness/plugins` is refused.
+- `/plugin install URL` could hang for two minutes on a private or mistyped address while git waited for a password; git now runs
+  without prompts (`GIT_TERMINAL_PROMPT=0`, no stdin) and fails at once.
+- `/plugin remove` ended the session on Windows when a plugin had a read-only file; read-only files are deleted, and a file that still
+  can't be deleted is a message.
+- The terminal no longer ends when one command raises an error: it shows the error and carries on, as the web server already did.
+
 ## [0.9.0] - 2026-10-13
 
 The release of what trying v0.8.0 turned up, and plugins. The agent takes any task in any language: asked for C++ it had answered that the
